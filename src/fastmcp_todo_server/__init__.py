@@ -29,11 +29,6 @@ MONGODB_URI = os.getenv("MONGODB_URI", "mongodb://localhost:27017")
 MONGODB_DB = os.getenv("MONGODB_DB", "swarmonomicon")
 MONGODB_COLLECTION = os.getenv("MONGODB_COLLECTION", "todos")
 
-# MQTT configuration
-MQTT_HOST = "3.134.3.199"
-MQTT_PORT = 3003
-MQTT_KEEPALIVE = 60
-
 class TodoServer:
     def __init__(self):
         logger.debug("Initializing TodoServer")
@@ -48,10 +43,7 @@ class TodoServer:
         # Initialize FastMCP server
         logger.debug("Creating FastMCP server instance")
         self.server = FastMCP(
-            "todo_server",
-            mqtt_host=MQTT_HOST,
-            mqtt_port=MQTT_PORT,
-            mqtt_keepalive=MQTT_KEEPALIVE
+            "todo_list",
         )
         logger.debug("FastMCP server instance created")
 
