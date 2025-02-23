@@ -164,6 +164,85 @@ class TodoServer:
                 logger.error(f"Error publishing MQTT message: {str(e)}", exc_info=True)
                 return json.dumps({"status": "error", "message": str(e)})
 
+        logger.debug("Registering delete_todo tool")
+        @self.server.tool("delete_todo")
+        async def delete_todo(todo_id: str, ctx: Context = None) -> str:
+            """Delete a todo by ID"""
+            logger.debug(f"delete_todo called with todo_id={todo_id}")
+            try:
+                result = self.collection.delete_one({"id": todo_id})
+                if result.deleted_count == 0:
+                    return json.dumps({"status": "error", "message": "Todo not found"})
+
+                if ctx is not None:
+                    try:
+                        ctx.info(f"Deleted todo {todo_id}")
+                    except ValueError:
+                        logger.debug("Context not available for logging")
+
+                return json.dumps({"status": "success"})
+            except Exception as e:
+                logger.error(f"Error deleting todo: {str(e)}", exc_info=True)
+                return json.dumps({"status": "error", "message": str(e)})
+
+        logger.debug("Registering get_todo tool")
+        @self.server.tool("get_todo")
+        async def get_todo(todo_id: str) -> str:
+            """Get a specific todo by ID"""
+            logger.debug(f"get_todo called with todo_id={todo_id}")
+            try:
+                todo = self.collection.find_one({"id": todo_id})
+                if todo is None:
+                    return json.dumps({"status": "error", "message": "Todo not found"})
+
+                return json.dumps({"status": "success", "todo": todo}, default=str)
+            except Exception as e:
+                logger.error(f"Error getting todo: {str(e)}", exc_info=True)
+                return json.dumps({"status": "error", "message": str(e)})
+
+        logger.debug("Registering mark_todo_complete tool")
+        @self.server.tool("mark_todo_complete")
+        async def mark_todo_complete(todo_id: str, ctx: Context = None) -> str:
+            """Mark a todo as completed"""
+            logger.debug(f"mark_todo_complete called with todo_id={todo_id}")
+            try:
+                result = self.collection.update_one(
+                    {"id": todo_id},
+                    {"$set": {"status": "completed", "completed_at": int(datetime.now(UTC).timestamp())}}
+                )
+                if result.modified_count == 0:
+                    return json.dumps({"status": "error", "message": "Todo not found"})
+
+                if ctx is not None:
+                    try:
+                        ctx.info(f"Marked todo {todo_id} as completed")
+                    except ValueError:
+                        logger.debug("Context not available for logging")
+
+                return json.dumps({"status": "success"})
+            except Exception as e:
+                logger.error(f"Error marking todo as completed: {str(e)}", exc_info=True)
+                return json.dumps({"status": "error", "message": str(e)})
+
+        logger.debug("Registering list_todos_by_status tool")
+        @self.server.tool("list_todos_by_status")
+        async def list_todos_by_status(status: str, limit: int = 100) -> str:
+            """List todos by their status"""
+            logger.debug(f"list_todos_by_status called with status={status}, limit={limit}")
+            try:
+                cursor = self.collection.find(
+                    {"status": status},
+                    limit=limit
+                )
+                results = list(cursor)
+
+                return json.dumps({
+                    "status": "success",
+                    "todos": results
+                }, default=str)
+            except Exception as e:
+                logger.error(f"Error listing todos by status: {str(e)}", exc_info=True)
+                return json.dumps({"status": "error", "message": str(e)})
 
     async def run_async(self):
         """Run the server asynchronously"""
