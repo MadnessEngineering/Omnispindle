@@ -52,7 +52,7 @@ class TodoServer:
         """Register all tools with the server"""
         logger.debug("Registering add_todo tool")
         @self.server.tool("add_todo")
-        async def add_todo(description: str, priority: str = "medium", target_agent: str = "user", ctx: Context = None) -> str:
+        async def add_todo(description: str, priority: str = "inital", target_agent: str = "user", ctx: Context = None) -> str:
             logger.debug(f"add_todo called with description={description}, priority={priority}, target_agent={target_agent}")
             try:
                 # Create todo document
@@ -60,7 +60,7 @@ class TodoServer:
                     "id": str(uuid.uuid4()),
                     "description": description,
                     "priority": priority,
-                    "source_agent": "mcp_server",
+                    "source_agent": "fastmcp",
                     "target_agent": target_agent,
                     "status": "pending",
                     "created_at": int(datetime.now(UTC).timestamp()),
@@ -109,6 +109,26 @@ class TodoServer:
                 }, default=str)
             except Exception as e:
                 logger.error(f"Error querying todos: {str(e)}", exc_info=True)
+                return json.dumps({"status": "error", "message": str(e)})
+
+        @self.server.tool("update_todo")
+        async def update_todo(todo_id: str, updates: dict, ctx: Context = None) -> str:
+            """Update an existing todo by ID"""
+            logger.debug(f"update_todo called with todo_id={todo_id}, updates={updates}")
+            try:
+                result = self.collection.update_one({"id": todo_id}, {"$set": updates})
+                if result.modified_count == 0:
+                    return json.dumps({"status": "error", "message": "Todo not found"})
+
+                if ctx is not None:
+                    try:
+                        ctx.info(f"Updated todo {todo_id}")
+                    except ValueError:
+                        logger.debug("Context not available for logging")
+
+                return json.dumps({"status": "success"})
+            except Exception as e:
+                logger.error(f"Error updating todo: {str(e)}", exc_info=True)
                 return json.dumps({"status": "error", "message": str(e)})
 
     async def run_async(self):
