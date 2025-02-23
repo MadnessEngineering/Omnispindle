@@ -9,6 +9,7 @@ import logging
 import asyncio
 import signal
 import sys
+import paho.mqtt.client as mqtt
 
 # Configure logging - set to DEBUG level for maximum visibility
 logging.basicConfig(
@@ -29,6 +30,11 @@ MONGODB_URI = os.getenv("MONGODB_URI", "mongodb://localhost:27017")
 MONGODB_DB = os.getenv("MONGODB_DB", "swarmonomicon")
 MONGODB_COLLECTION = os.getenv("MONGODB_COLLECTION", "todos")
 
+# MQTT configuration
+MQTT_HOST = "127.0.0.1"
+MQTT_PORT = 3003
+MQTT_KEEPALIVE = 60
+
 class TodoServer:
     def __init__(self):
         logger.debug("Initializing TodoServer")
@@ -41,7 +47,7 @@ class TodoServer:
 
 
         logger.debug("Creating FastMCP server instance")
-        self.server = FastMCP(name="todo_list")
+        self.server = FastMCP("todo_server")
         logger.debug("FastMCP server instance created")
 
         logger.debug("Registering tools")
@@ -130,6 +136,34 @@ class TodoServer:
             except Exception as e:
                 logger.error(f"Error updating todo: {str(e)}", exc_info=True)
                 return json.dumps({"status": "error", "message": str(e)})
+
+        @self.server.tool("mqtt_publish")
+        async def mqtt_publish(topic: str, message: str, ctx: Context = None) -> str:
+            """Publish a message to the specified MQTT topic"""
+            logger.debug(f"mqtt_publish called with topic={topic}, message={message}")
+            try:
+                mqtt_client = mqtt.Client()
+                mqtt_client.connect(MQTT_HOST, MQTT_PORT, MQTT_KEEPALIVE)
+
+                result = mqtt_client.publish(topic, message)
+                result.wait_for_publish()
+
+                mqtt_client.disconnect()
+
+                if result.is_published():
+                    if ctx is not None:
+                        try:
+                            ctx.info(f"Published message to topic {topic}")
+                        except ValueError:
+                            logger.debug("Context not available for logging")
+
+                    return json.dumps({"status": "success"})
+                else:
+                    return json.dumps({"status": "error", "message": "Message not published"})
+            except Exception as e:
+                logger.error(f"Error publishing MQTT message: {str(e)}", exc_info=True)
+                return json.dumps({"status": "error", "message": str(e)})
+
 
     async def run_async(self):
         """Run the server asynchronously"""
