@@ -33,21 +33,17 @@ class TodoServer:
     def __init__(self):
         logger.debug("Initializing TodoServer")
 
-        # Initialize MongoDB
         logger.debug(f"Connecting to MongoDB at {MONGODB_URI}")
         self.mongo_client = MongoClient(MONGODB_URI)
         self.db = self.mongo_client[MONGODB_DB]
         self.collection = self.db[MONGODB_COLLECTION]
         logger.debug("MongoDB connection established")
 
-        # Initialize FastMCP server
+
         logger.debug("Creating FastMCP server instance")
-        self.server = FastMCP(
-            "todo_list",
-        )
+        self.server = FastMCP(name="todo_list")
         logger.debug("FastMCP server instance created")
 
-        # Register tools
         logger.debug("Registering tools")
         self.register_tools()
         logger.debug("Tools registered")
@@ -119,7 +115,6 @@ class TodoServer:
         """Run the server asynchronously"""
         logger.info("Starting TodoServer")
         try:
-            # Run the FastMCP server
             logger.debug("Starting FastMCP server")
             await self.server.run_stdio_async()
         except Exception as e:
