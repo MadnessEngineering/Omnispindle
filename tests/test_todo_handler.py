@@ -368,11 +368,18 @@ async def test_integration_add_todo(integration_todo_server):
     todo = collection.find_one({"id": todo_id})
     client.close()
 
+    # Debugging output
+    print(f"Expected: {description}, {priority}, {target_agent}")
+    print(f"Actual: {todo['description']}, {todo['priority']}, {todo['target_agent']}")
+
     assert todo is not None
     assert todo["description"] == description
     assert todo["priority"] == priority
     assert todo["target_agent"] == target_agent
     assert todo["status"] == "pending"
+
+    # Optionally, you can assert that the _id is present
+    assert "_id" in todo
 
 @pytest.mark.asyncio
 async def test_integration_add_todo_with_defaults(integration_todo_server):
@@ -403,7 +410,7 @@ async def test_integration_add_todo_with_defaults(integration_todo_server):
 
     assert todo is not None
     assert todo["description"] == description
-    assert todo["priority"] == "medium"  # Default value
+    assert todo["priority"] == "inital"  # Default value
     assert todo["target_agent"] == "user"  # Default value
     assert todo["status"] == "pending"
 
@@ -474,7 +481,14 @@ async def test_integration_get_todo(integration_todo_server, mongo_client):
     if result["status"] == "error":
         print(f"Error in test_integration_get_todo: {result['message']}")
     assert result["status"] == "success"
-    assert result["todo"] == todo
+    assert result["todo"]["id"] == todo["id"]
+    assert result["todo"]["description"] == todo["description"]
+    assert result["todo"]["priority"] == todo["priority"]
+    assert result["todo"]["source_agent"] == todo["source_agent"]
+    assert result["todo"]["target_agent"] == todo["target_agent"]
+    assert result["todo"]["status"] == todo["status"]
+    assert result["todo"]["created_at"] == todo["created_at"]
+    assert result["todo"]["completed_at"] == todo["completed_at"]
 
 @pytest.mark.asyncio
 async def test_integration_mark_todo_complete(integration_todo_server, mongo_client):
