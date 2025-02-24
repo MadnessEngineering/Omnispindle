@@ -336,6 +336,149 @@ async def test_list_todos_by_status_no_results(todo_server):
     # Verify MongoDB interaction
     todo_server.collection.find.assert_called_once_with({"status": "completed"}, limit=100)
 
+# Unit Tests for Lessons Learned
+@pytest.mark.asyncio
+async def test_add_lesson_success(todo_server):
+    # Test data
+    language = "Python"
+    topic = "Testing"
+    lesson_learned = "Always write tests for your code."
+    tags = ["testing", "best practices"]
+
+    # Call handler through FastMCP
+    response = await todo_server.server.call_tool(
+        "add_lesson",
+        {
+            "language": language,
+            "topic": topic,
+            "lesson_learned": lesson_learned,
+            "tags": tags
+        }
+    )
+
+    # Parse response
+    result = json.loads(response[0].text)
+    assert result["status"] == "success"
+    assert "lesson_id" in result
+
+    # Verify MongoDB interaction
+    todo_server.lessons_collection.insert_one.assert_called_once()
+
+@pytest.mark.asyncio
+async def test_get_lesson_success(todo_server):
+    # Mock a lesson in the database
+    lesson_id = "lesson_id_1"
+    lesson = {
+        "id": lesson_id,
+        "language": "Python",
+        "topic": "Testing",
+        "lesson_learned": "Always write tests for your code.",
+        "tags": ["testing", "best practices"],
+        "created_at": 1234567890
+    }
+    todo_server.lessons_collection.find_one.return_value = lesson
+
+    # Call handler through FastMCP
+    response = await todo_server.server.call_tool(
+        "get_lesson",
+        {
+            "lesson_id": lesson_id
+        }
+    )
+
+    # Parse response
+    result = json.loads(response[0].text)
+    assert result["status"] == "success"
+    assert result["lesson"] == lesson
+
+    # Verify MongoDB interaction
+    todo_server.lessons_collection.find_one.assert_called_once_with({"id": lesson_id})
+
+@pytest.mark.asyncio
+async def test_update_lesson_success(todo_server):
+    # Mock a lesson in the database
+    lesson_id = "lesson_id_1"
+    todo_server.lessons_collection.update_one.return_value = MagicMock(modified_count=1)
+
+    # Call handler through FastMCP
+    response = await todo_server.server.call_tool(
+        "update_lesson",
+        {
+            "lesson_id": lesson_id,
+            "updates": {"lesson_learned": "Updated lesson learned."}
+        }
+    )
+
+    # Parse response
+    result = json.loads(response[0].text)
+    assert result["status"] == "success"
+
+    # Verify MongoDB interaction
+    todo_server.lessons_collection.update_one.assert_called_once_with(
+        {"id": lesson_id},
+        {"$set": {"lesson_learned": "Updated lesson learned."}}
+    )
+
+@pytest.mark.asyncio
+async def test_delete_lesson_success(todo_server):
+    # Mock a lesson in the database
+    lesson_id = "lesson_id_1"
+    todo_server.lessons_collection.delete_one.return_value = MagicMock(deleted_count=1)
+
+    # Call handler through FastMCP
+    response = await todo_server.server.call_tool(
+        "delete_lesson",
+        {
+            "lesson_id": lesson_id
+        }
+    )
+
+    # Parse response
+    result = json.loads(response[0].text)
+    assert result["status"] == "success"
+
+    # Verify MongoDB interaction
+    todo_server.lessons_collection.delete_one.assert_called_once_with({"id": lesson_id})
+
+@pytest.mark.asyncio
+async def test_list_lessons_success(todo_server):
+    # Mock lessons in the database
+    lessons = [
+        {
+            "id": "lesson_id_1",
+            "language": "Python",
+            "topic": "Testing",
+            "lesson_learned": "Always write tests for your code.",
+            "tags": ["testing", "best practices"],
+            "created_at": 1234567890
+        },
+        {
+            "id": "lesson_id_2",
+            "language": "JavaScript",
+            "topic": "Async Programming",
+            "lesson_learned": "Use promises for better readability.",
+            "tags": ["async", "promises"],
+            "created_at": 1234567891
+        }
+    ]
+    todo_server.lessons_collection.find.return_value = lessons
+
+    # Call handler through FastMCP
+    response = await todo_server.server.call_tool(
+        "list_lessons",
+        {
+            "limit": 100
+        }
+    )
+
+    # Parse response
+    result = json.loads(response[0].text)
+    assert result["status"] == "success"
+    assert result["lessons"] == lessons
+
+    # Verify MongoDB interaction
+    todo_server.lessons_collection.find.assert_called_once_with(limit=100)
+
 # Integration Tests
 @pytest.mark.asyncio
 async def test_integration_add_todo(integration_todo_server):
