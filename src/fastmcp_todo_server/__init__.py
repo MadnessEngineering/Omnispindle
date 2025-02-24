@@ -45,6 +45,8 @@ class TodoServer:
         self.collection = self.db[MONGODB_COLLECTION]
         logger.debug("MongoDB connection established")
 
+        # Lessons Learned configuration
+        self.lessons_collection = self.db["lessons_learned"]
 
         logger.debug("Creating FastMCP server instance")
         self.server = FastMCP("todo_server")
@@ -242,6 +244,94 @@ class TodoServer:
                 }, default=str)
             except Exception as e:
                 logger.error(f"Error listing todos by status: {str(e)}", exc_info=True)
+                return json.dumps({"status": "error", "message": str(e)})
+
+        logger.debug("Registering add_lesson tool")
+        @self.server.tool("add_lesson")
+        async def add_lesson(language: str, topic: str, lesson_learned: str, tags: list = None, ctx: Context = None) -> str:
+            """Add a lesson learned"""
+            logger.debug(f"add_lesson called with language={language}, topic={topic}, lesson_learned={lesson_learned}, tags={tags}")
+            try:
+                lesson = {
+                    "id": str(uuid.uuid4()),
+                    "language": language,
+                    "topic": topic,
+                    "lesson_learned": lesson_learned,
+                    "tags": tags or [],
+                    "created_at": int(datetime.now(UTC).timestamp())
+                }
+
+                # Insert into MongoDB
+                self.lessons_collection.insert_one(lesson)
+                logger.debug(f"Successfully inserted lesson: {lesson['id']}")
+
+                response = {"status": "success", "lesson_id": lesson["id"]}
+                logger.debug(f"Returning response: {response}")
+                return json.dumps(response)
+            except Exception as e:
+                logger.error(f"Error adding lesson: {str(e)}", exc_info=True)
+                return json.dumps({"status": "error", "message": str(e)})
+
+        logger.debug("Registering get_lesson tool")
+        @self.server.tool("get_lesson")
+        async def get_lesson(lesson_id: str) -> str:
+            """Get a specific lesson by ID"""
+            logger.debug(f"get_lesson called with lesson_id={lesson_id}")
+            try:
+                lesson = self.lessons_collection.find_one({"id": lesson_id})
+                if lesson is None:
+                    return json.dumps({"status": "error", "message": "Lesson not found"})
+
+                return json.dumps({"status": "success", "lesson": lesson}, default=str)
+            except Exception as e:
+                logger.error(f"Error getting lesson: {str(e)}", exc_info=True)
+                return json.dumps({"status": "error", "message": str(e)})
+
+        logger.debug("Registering update_lesson tool")
+        @self.server.tool("update_lesson")
+        async def update_lesson(lesson_id: str, updates: dict, ctx: Context = None) -> str:
+            """Update an existing lesson by ID"""
+            logger.debug(f"update_lesson called with lesson_id={lesson_id}, updates={updates}")
+            try:
+                result = self.lessons_collection.update_one({"id": lesson_id}, {"$set": updates})
+                if result.modified_count == 0:
+                    return json.dumps({"status": "error", "message": "Lesson not found"})
+
+                return json.dumps({"status": "success"})
+            except Exception as e:
+                logger.error(f"Error updating lesson: {str(e)}", exc_info=True)
+                return json.dumps({"status": "error", "message": str(e)})
+
+        logger.debug("Registering delete_lesson tool")
+        @self.server.tool("delete_lesson")
+        async def delete_lesson(lesson_id: str, ctx: Context = None) -> str:
+            """Delete a lesson by ID"""
+            logger.debug(f"delete_lesson called with lesson_id={lesson_id}")
+            try:
+                result = self.lessons_collection.delete_one({"id": lesson_id})
+                if result.deleted_count == 0:
+                    return json.dumps({"status": "error", "message": "Lesson not found"})
+
+                return json.dumps({"status": "success"})
+            except Exception as e:
+                logger.error(f"Error deleting lesson: {str(e)}", exc_info=True)
+                return json.dumps({"status": "error", "message": str(e)})
+
+        logger.debug("Registering list_lessons tool")
+        @self.server.tool("list_lessons")
+        async def list_lessons(limit: int = 100) -> str:
+            """List all lessons learned"""
+            logger.debug(f"list_lessons called with limit={limit}")
+            try:
+                cursor = self.lessons_collection.find(limit=limit)
+                results = list(cursor)
+
+                return json.dumps({
+                    "status": "success",
+                    "lessons": results
+                }, default=str)
+            except Exception as e:
+                logger.error(f"Error listing lessons: {str(e)}", exc_info=True)
                 return json.dumps({"status": "error", "message": str(e)})
 
     async def run_async(self):
