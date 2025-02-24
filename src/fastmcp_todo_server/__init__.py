@@ -349,11 +349,9 @@ class TodoServer:
         logger.info("Starting server synchronously")
         asyncio.run(self.run_async())
 
-def main():
-    logger.info("Starting FastMCP Todo Server")
-    server = TodoServer()
-    logger.info("Server initialized, starting run")
-    server.run()
 
-if __name__ == "__main__":
-    main()
+# if __name__ == "__main__":
+logger.info("Starting FastMCP Todo Server")
+server = TodoServer()
+logger.info("Server initialized, starting run")
+server.run()
