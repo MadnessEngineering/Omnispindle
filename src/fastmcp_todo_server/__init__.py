@@ -7,9 +7,7 @@ from dotenv import load_dotenv
 import json
 import logging
 import asyncio
-import signal
-import sys
-import paho.mqtt.client as mqtt
+from aiohttp import web
 
 # Configure logging - set to DEBUG level for maximum visibility
 logging.basicConfig(
@@ -35,6 +33,10 @@ MQTT_HOST = "127.0.0.1"
 MQTT_PORT = 3003
 MQTT_KEEPALIVE = 60
 
+# Cursor MCP configuration
+# CURSOR_MCP_URL = os.getenv("CURSOR_MCP_URL", "http://localhost:8000")
+# CURSOR_MCP_SSE_ENDPOINT = os.getenv("CURSOR_MCP_SSE_ENDPOINT", "/sse")
+
 class TodoServer:
     def __init__(self):
         logger.debug("Initializing TodoServer")
@@ -43,60 +45,51 @@ class TodoServer:
         self.mongo_client = MongoClient(MONGODB_URI)
         self.db = self.mongo_client[MONGODB_DB]
         self.collection = self.db[MONGODB_COLLECTION]
+        self.lessons_collection = self.db["lessons_learned"]
         logger.debug("MongoDB connection established")
 
-        # Lessons Learned configuration
-        self.lessons_collection = self.db["lessons_learned"]
-
         logger.debug("Creating FastMCP server instance")
-        self.server = FastMCP("todo_server")
+        self.server = FastMCP(
+            "todo_server",
+            description="A Todo management server with MongoDB backend",
+            version="1.0.0"
+        )
         logger.debug("FastMCP server instance created")
 
         logger.debug("Registering tools")
         self.register_tools()
         logger.debug("Tools registered")
 
+        logger.debug("Creating SSE endpoint")
+        self.create_sse_endpoint()
+        logger.debug("SSE endpoint created")
+
     def register_tools(self):
         """Register all tools with the server"""
         logger.debug("Registering add_todo tool")
-        @self.server.tool("add_todo")
-        async def add_todo(description: str, priority: str = "inital", target_agent: str = "user", ctx: Context = None) -> str:
+        @self.server.tool("add_todo", description="Add a new todo item")
+        async def add_todo(description: str, priority: str = "initial", target_agent: str = "user", ctx: Context = None) -> dict:
+            """Add a new todo item to the database"""
             logger.debug(f"add_todo called with description={description}, priority={priority}, target_agent={target_agent}")
             try:
-                # Create todo document
                 todo = {
                     "id": str(uuid.uuid4()),
                     "description": description,
                     "priority": priority,
-                    "source_agent": "fastmcp",
+                    "source_agent": ctx.agent_id if ctx else "system",
                     "target_agent": target_agent,
                     "status": "pending",
                     "created_at": int(datetime.now(UTC).timestamp()),
                     "completed_at": None
                 }
 
-                # Insert into MongoDB
                 self.collection.insert_one(todo)
                 logger.debug(f"Successfully inserted todo: {todo['id']}")
 
-                # Log with context if available
-                if ctx is not None:
-                    try:
-                        ctx.info(f"Added todo: {description}")
-                    except ValueError:
-                        logger.debug("Context not available for logging")
-
-                response = {"status": "success", "todo_id": todo["id"]}
-                logger.debug(f"Returning response: {response}")
-                return json.dumps(response)
+                return {"status": "success", "todo_id": todo["id"]}
             except Exception as e:
                 logger.error(f"Error adding todo: {str(e)}", exc_info=True)
-                if ctx is not None:
-                    try:
-                        ctx.error(f"Failed to add todo: {str(e)}")
-                    except ValueError:
-                        logger.debug("Context not available for error logging")
-                return json.dumps({"status": "error", "message": str(e)})
+                return {"status": "error", "message": str(e)}
 
         logger.debug("Registering query_todos tool")
         @self.server.tool("query_todos")
@@ -334,12 +327,43 @@ class TodoServer:
                 logger.error(f"Error listing lessons: {str(e)}", exc_info=True)
                 return json.dumps({"status": "error", "message": str(e)})
 
+    def create_sse_endpoint(self):
+        """Create an SSE endpoint to receive commands"""
+        async def sse_handler(request):
+            response = web.StreamResponse()
+            response.headers['Content-Type'] = 'text/event-stream'
+            response.headers['Cache-Control'] = 'no-cache'
+            response.headers['Connection'] = 'keep-alive'
+            await response.prepare(request)
+
+            try:
+                while True:
+                    # Keep the connection alive
+                    await response.write(b'data: ping\n\n')
+                    await asyncio.sleep(30)  # Send ping every 30 seconds
+            except ConnectionResetError:
+                logger.debug("Client disconnected")
+            except Exception as e:
+                logger.error(f"Error in SSE handler: {str(e)}", exc_info=True)
+            finally:
+                return response
+
+        self.app = web.Application()
+        self.app.router.add_route("GET", "/sse", sse_handler)
+
     async def run_async(self):
         """Run the server asynchronously"""
         logger.info("Starting TodoServer")
         try:
-            logger.debug("Starting FastMCP server")
-            await self.server.run_stdio_async()
+            logger.debug("Starting FastMCP server and SSE endpoint")
+            runner = web.AppRunner(self.app)
+            await runner.setup()
+            site = web.TCPSite(runner, 'localhost', 8080)
+
+            await asyncio.gather(
+                self.server.run_stdio_async(),
+                site.start()
+            )
         except Exception as e:
             logger.error(f"Error running server: {str(e)}", exc_info=True)
             raise
@@ -348,7 +372,6 @@ class TodoServer:
         """Run the server synchronously"""
         logger.info("Starting server synchronously")
         asyncio.run(self.run_async())
-
 
 # if __name__ == "__main__":
 logger.info("Starting FastMCP Todo Server")
