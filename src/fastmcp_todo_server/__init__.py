@@ -38,12 +38,8 @@ MQTT_KEEPALIVE = 60
 # CURSOR_MCP_URL = os.getenv("CURSOR_MCP_URL", "http://localhost:8000")
 # CURSOR_MCP_SSE_ENDPOINT = os.getenv("CURSOR_MCP_SSE_ENDPOINT", "/sse")
 
-# Create FastMCP instance at module level
-server = FastMCP(
-    "todo_server",
-    description="A Todo management server with MongoDB backend",
-    version="1.0.0"
-)
+# Import the server instance from our server module
+from server import server
 
 # Create MongoDB connection at module level
 mongo_client = MongoClient(MONGODB_URI)
@@ -51,7 +47,7 @@ db = mongo_client[MONGODB_DB]
 collection = db[MONGODB_COLLECTION]
 lessons_collection = db["lessons_learned"]
 
-# Register tools at module level
+# Register tools using the FastMCP decorator syntax
 @server.tool()
 async def add_todo(description: str, priority: str = "initial", target_agent: str = "user", ctx: Context = None) -> dict:
     """Add a new todo item to the database"""
@@ -61,7 +57,7 @@ async def add_todo(description: str, priority: str = "initial", target_agent: st
             "id": str(uuid.uuid4()),
             "description": description,
             "priority": priority,
-            "source_agent": ctx.agent_id if ctx else "system",
+            "source_agent": "mcp-server",
             "target_agent": target_agent,
             "status": "pending",
             "created_at": int(datetime.now(UTC).timestamp()),
@@ -302,44 +298,13 @@ async def list_lessons(limit: int = 100) -> str:
         logger.error(f"Error listing lessons: {str(e)}", exc_info=True)
         return json.dumps({"status": "error", "message": str(e)})
 
-# Create SSE application
-app = web.Application()
-
-async def sse_handler(request):
-    response = web.StreamResponse()
-    response.headers['Content-Type'] = 'text/event-stream'
-    response.headers['Cache-Control'] = 'no-cache'
-    response.headers['Connection'] = 'keep-alive'
-    await response.prepare(request)
-
-    try:
-        while True:
-            await response.write(b'data: ping\n\n')
-            await asyncio.sleep(30)
-    except ConnectionResetError:
-        logger.debug("Client disconnected")
-    except Exception as e:
-        logger.error(f"Error in SSE handler: {str(e)}", exc_info=True)
-    finally:
-        return response
-
-app.router.add_route("GET", "/sse", sse_handler)
-
 async def run_server():
-    """Run both FastMCP and SSE servers"""
-    runner = web.AppRunner(app)
-    await runner.setup()
-    site = web.TCPSite(runner, 'localhost', 8080)
+    """Run the FastMCP server"""
+    logger.info("Starting FastMCP server")
+    try:
+        await server.run_sse_async()  # Use run_stdio_async directly
+    except Exception as e:
+        logger.error(f"Error in server: {str(e)}", exc_info=True)
+        raise
 
-    await asyncio.gather(
-        server.run_stdio_async(),
-        site.start()
-    )
-
-def main():
-    """Main entry point"""
-    logger.info("Starting FastMCP Todo Server")
-    asyncio.run(run_server())
-
-if __name__ == "__main__":
-    main()
+# Remove all the SSE-related code
