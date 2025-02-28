@@ -25,6 +25,8 @@ from fastmcp_todo_server.tools import (
     update_lesson,
     delete_lesson,
     list_lessons,
+    search_todos,
+    search_lessons,
 )
 
 # Comment out all logging configuration
@@ -117,16 +119,26 @@ async def delete_lesson_tool(lesson_id: str, ctx: Context = None) -> str:
 async def list_lessons_tool(limit: int = 100) -> str:
     return await list_lessons(limit)
 
+@server.tool()
+async def search_todos_tool(query: str, fields: list = None, limit: int = 100) -> str:
+    """Search todos with text search capabilities"""
+    return await search_todos(query, fields, limit)
+
+@server.tool()
+async def search_lessons_tool(query: str, fields: list = None, limit: int = 100) -> str:
+    """Search lessons with text search capabilities"""
+    return await search_lessons(query, fields, limit)
+
 async def run_server():
     """Run the FastMCP server"""
     print("Starting FastMCP server")
     try:
         import sys
         import uvicorn
-        
+
         # Custom exception handler to silence specific SSE-related errors
         original_excepthook = sys.excepthook
-        
+
         def custom_excepthook(exctype, value, traceback):
             # Only silence the specific 'NoneType' object is not callable errors from Starlette
             if exctype is TypeError and "'NoneType' object is not callable" in str(value) and "starlette/routing.py" in str(traceback.tb_frame):
@@ -135,15 +147,15 @@ async def run_server():
                 return
             # For all other errors, use the original exception handler
             original_excepthook(exctype, value, traceback)
-        
+
         # Replace the default exception handler
         sys.excepthook = custom_excepthook
-        
+
         # Configure uvicorn to suppress specific access logs for /messages endpoint
         log_config = uvicorn.config.LOGGING_CONFIG
         if "formatters" in log_config:
             log_config["formatters"]["access"]["fmt"] = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-        
+
         await server.run_sse_async()  # Use run_sse_async directly
     except Exception as e:
         print(f"Error in server: {str(e)}")

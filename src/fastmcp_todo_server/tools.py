@@ -194,3 +194,67 @@ async def list_lessons(limit: int = 100) -> str:
         "status": "success",
         "lessons": results
     }, default=str)
+
+async def search_todos(query: str, fields: list = None, limit: int = 100) -> str:
+    """Search todos using text search on specified fields
+    
+    Args:
+        query: The text to search for
+        fields: List of fields to search in (defaults to ['description'])
+        limit: Maximum number of results to return
+    """
+    if not fields:
+        fields = ["description"]
+    
+    # Create a regex pattern for case-insensitive search
+    regex_pattern = {"$regex": query, "$options": "i"}
+    
+    # Build the query with OR conditions for each field
+    search_conditions = []
+    for field in fields:
+        search_conditions.append({field: regex_pattern})
+    
+    search_query = {"$or": search_conditions}
+    
+    # Execute the search
+    cursor = collection.find(search_query, limit=limit)
+    results = list(cursor)
+    
+    return json.dumps({
+        "status": "success", 
+        "count": len(results),
+        "query": query,
+        "todos": results
+    }, default=str)
+
+async def search_lessons(query: str, fields: list = None, limit: int = 100) -> str:
+    """Search lessons using text search on specified fields
+    
+    Args:
+        query: The text to search for
+        fields: List of fields to search in (defaults to ['topic', 'lesson_learned'])
+        limit: Maximum number of results to return
+    """
+    if not fields:
+        fields = ["topic", "lesson_learned"]
+    
+    # Create a regex pattern for case-insensitive search
+    regex_pattern = {"$regex": query, "$options": "i"}
+    
+    # Build the query with OR conditions for each field
+    search_conditions = []
+    for field in fields:
+        search_conditions.append({field: regex_pattern})
+    
+    search_query = {"$or": search_conditions}
+    
+    # Execute the search
+    cursor = lessons_collection.find(search_query, limit=limit)
+    results = list(cursor)
+    
+    return json.dumps({
+        "status": "success", 
+        "count": len(results),
+        "query": query,
+        "lessons": results
+    }, default=str)
