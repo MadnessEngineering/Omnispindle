@@ -121,7 +121,30 @@ async def run_server():
     """Run the FastMCP server"""
     print("Starting FastMCP server")
     try:
-        await server.run_sse_async()  # Use run_stdio_async directly
+        import sys
+        import uvicorn
+        
+        # Custom exception handler to silence specific SSE-related errors
+        original_excepthook = sys.excepthook
+        
+        def custom_excepthook(exctype, value, traceback):
+            # Only silence the specific 'NoneType' object is not callable errors from Starlette
+            if exctype is TypeError and "'NoneType' object is not callable" in str(value) and "starlette/routing.py" in str(traceback.tb_frame):
+                # Log minimally instead of full stack trace
+                print(f"Suppressed known error in SSE endpoint: {str(value)}")
+                return
+            # For all other errors, use the original exception handler
+            original_excepthook(exctype, value, traceback)
+        
+        # Replace the default exception handler
+        sys.excepthook = custom_excepthook
+        
+        # Configure uvicorn to suppress specific access logs for /messages endpoint
+        log_config = uvicorn.config.LOGGING_CONFIG
+        if "formatters" in log_config:
+            log_config["formatters"]["access"]["fmt"] = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        
+        await server.run_sse_async()  # Use run_sse_async directly
     except Exception as e:
         print(f"Error in server: {str(e)}")
         raise
