@@ -5,7 +5,7 @@ import uuid
 import os
 from dotenv import load_dotenv
 import json
-import logging
+# import logging
 import asyncio
 from aiohttp import web
 import paho.mqtt.client as mqtt

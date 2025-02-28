@@ -5,7 +5,7 @@ import uuid
 import os
 from dotenv import load_dotenv
 import json
-import logging
+# import logging
 import asyncio
 from aiohttp import web
 import paho.mqtt.client as mqtt
@@ -27,16 +27,16 @@ from fastmcp_todo_server.tools import (
     list_lessons,
 )
 
-# Configure logging - set to DEBUG level for maximum visibility
-logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
+# Comment out all logging configuration
+# logging.basicConfig(
+#     level=logging.DEBUG,
+#     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+# )
+# logger = logging.getLogger(__name__)
 
 # Also enable debug logging for FastMCP
-logging.getLogger('fastmcp').setLevel(logging.DEBUG)
-logging.getLogger('mcp').setLevel(logging.DEBUG)
+# logging.getLogger('fastmcp').setLevel(logging.DEBUG)
+# logging.getLogger('mcp').setLevel(logging.DEBUG)
 
 # Load environment variables
 load_dotenv()
@@ -119,9 +119,9 @@ async def list_lessons_tool(limit: int = 100) -> str:
 
 async def run_server():
     """Run the FastMCP server"""
-    logger.info("Starting FastMCP server")
+    print("Starting FastMCP server")
     try:
         await server.run_sse_async()  # Use run_stdio_async directly
     except Exception as e:
-        logger.error(f"Error in server: {str(e)}", exc_info=True)
+        print(f"Error in server: {str(e)}")
         raise
