@@ -121,6 +121,25 @@ async def deploy_nodered_flow_tool(flow_json: dict, node_red_url: str = os.geten
     import base64
     import json
 
+    # Set default Node-RED URL if not provided
+    if not node_red_url:
+        node_red_url = "http://localhost:9191"
+
+    # Handle flow_json input - convert from string if needed
+    if isinstance(flow_json, str):
+        try:
+            flow_json = json.loads(flow_json)
+        except json.JSONDecodeError as e:
+            return {"success": False, "error": f"Invalid JSON string: {str(e)}"}
+
+    # Validate flow_json is either a list or a dict
+    if not isinstance(flow_json, (list, dict)):
+        return {"success": False, "error": f"flow_json must be a list or dict, got {type(flow_json).__name__}"}
+
+    # If it's a single flow object, wrap it in a list
+    if isinstance(flow_json, dict):
+        flow_json = [flow_json]
+
     headers = {
         "Content-Type": "application/json"
     }
