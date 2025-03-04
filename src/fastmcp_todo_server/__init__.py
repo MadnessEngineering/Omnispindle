@@ -110,10 +110,7 @@ async def deploy_nodered_flow_tool(flow_json_name: str, ctx: Context = None) -> 
     Deploys a Node-RED flow to a Node-RED instance.
     
     Args:
-        flow_json: The flow configuration as a JSON string
-        node_red_url: URL of the Node-RED instance (default: http://localhost:1880)
-        username: Optional username for Node-RED authentication
-        password: Optional password for Node-RED authentication
+        flow_json_name: The name of the flow JSON file in the dashboard directory
         
     Returns:
         Result of the deployment operation
@@ -123,7 +120,6 @@ async def deploy_nodered_flow_tool(flow_json_name: str, ctx: Context = None) -> 
     import json
 
     # Set default Node-RED URL if not provided
-
     node_red_url = os.getenv("NR_URL", "http://localhost:9191")
 
     username = os.getenv("NR_USER", None)
@@ -137,24 +133,24 @@ async def deploy_nodered_flow_tool(flow_json_name: str, ctx: Context = None) -> 
     except subprocess.CalledProcessError as e:
         return {"success": False, "error": f"Git pull failed: {str(e)} {result}"}
 
-    flow_json_name = f"../../dashboard/{flow_json_name}"
-    flow_path = os.path.abspath(os.path.join(os.path.dirname(__file__), flow_json_name))
+    flow_json_path = f"../../dashboard/{flow_json_name}"
+    flow_path = os.path.abspath(os.path.join(os.path.dirname(__file__), flow_json_path))
     
     if not os.path.exists(flow_path):
         return {"success": False, "error": f"Flow file not found: {flow_json_name}, {result}"}
 
-    # Handle flow_json input - convert from string if needed
+    # Read the JSON content from the file
     try:
-        if isinstance(flow_json_name, str):
-            flow_data = json.loads(flow_json_name)
-        else:
-            flow_data = flow_json_name
+        with open(flow_path, 'r') as file:
+            flow_data = json.load(file)
     except json.JSONDecodeError as e:
-        return {"success": False, "error": f"Invalid JSON string: {str(e)}"}
+        return {"success": False, "error": f"Invalid JSON in file {flow_json_name}: {str(e)}"}
+    except Exception as e:
+        return {"success": False, "error": f"Error reading file {flow_json_name}: {str(e)}"}
 
     # Validate flow_data is either a list or a dict
     if not isinstance(flow_data, (list, dict)):
-        return {"success": False, "error": f"flow_json must be a list or dict, got {type(flow_data).__name__}"}
+        return {"success": False, "error": f"Flow JSON must be a list or dict, got {type(flow_data).__name__}"}
 
     # If it's a single flow object, wrap it in a list
     if isinstance(flow_data, dict):
