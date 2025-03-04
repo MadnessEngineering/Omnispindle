@@ -178,8 +178,13 @@ async def deploy_nodered_flow_tool(flow_json_name: str, ctx: Context = None) -> 
             async with session.get(f"{node_red_url}/auth/login", ssl=ssl_context) as login_response:
                 logger.debug(f"Login endpoint response status: {login_response.status}")
                 logger.debug(f"Login endpoint response headers: {login_response.headers}")
-                login_info = await login_response.json()
-                logger.debug(f"Login info: {login_info}")
+                try:
+                    login_info = await login_response.json()
+                    logger.debug(f"Login info: {login_info}")
+                except Exception as e:
+                    login_text = await login_response.text()
+                    logger.debug(f"Login response text: {login_text}")
+                    logger.debug(f"Login JSON parsing error: {e}")
 
             # If authentication is required, get a token
             if username and password:
@@ -187,22 +192,25 @@ async def deploy_nodered_flow_tool(flow_json_name: str, ctx: Context = None) -> 
                     "username": username,
                     "password": password
                 }
+                logger.debug(f"Token payload: {token_payload}")
+
                 async with session.post(f"{node_red_url}/auth/token", json=token_payload, ssl=ssl_context) as token_response:
                     logger.debug(f"Token request status: {token_response.status}")
                     logger.debug(f"Token request headers: {token_response.headers}")
 
-                    if token_response.status == 200:
-                        token_data = await token_response.json()
-                        access_token = token_data.get('access_token')
+                    # Log the full response text for debugging
+                    token_text = await token_response.text()
+                    logger.debug(f"Token response text: {token_text}")
 
-                        # Use the access token for subsequent requests
-                        headers = {
-                            "Content-Type": "application/json",
-                            "Authorization": f"Bearer {access_token}"
-                        }
-                    else:
-                        logger.error(f"Token request failed: {await token_response.text()}")
-                        return {"success": False, "error": "Failed to obtain authentication token"}
+                    # Try to parse the response as JSON
+                    try:
+                        token_data = json.loads(token_text)
+                        access_token = token_data.get('access_token')
+                    except json.JSONDecodeError:
+                        logger.error(f"Failed to parse token response: {token_text}")
+                        return {"success": False, "error": f"Failed to parse token response: {token_text}"}
+
+            # If authentication is not required, proceed without token
             else:
                 headers = {
                     "Content-Type": "application/json"
