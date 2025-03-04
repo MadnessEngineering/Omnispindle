@@ -189,12 +189,15 @@ async def deploy_nodered_flow_tool(flow_json_name: str, ctx: Context = None) -> 
             # If authentication is required, get a token
             if username and password:
                 token_payload = {
+                    "client_id": "node-red-admin",
+                    "grant_type": "password",
+                    "scope": "*",
                     "username": username,
                     "password": password
                 }
                 logger.debug(f"Token payload: {token_payload}")
 
-                async with session.post(f"{node_red_url}/auth/token", json=token_payload, ssl=ssl_context) as token_response:
+                async with session.post(f"{node_red_url}/auth/token", data=token_payload, ssl=ssl_context) as token_response:
                     logger.debug(f"Token request status: {token_response.status}")
                     logger.debug(f"Token request headers: {token_response.headers}")
 
@@ -206,6 +209,12 @@ async def deploy_nodered_flow_tool(flow_json_name: str, ctx: Context = None) -> 
                     try:
                         token_data = json.loads(token_text)
                         access_token = token_data.get('access_token')
+
+                        # Use the access token for subsequent requests
+                        headers = {
+                            "Content-Type": "application/json",
+                            "Authorization": f"Bearer {access_token}"
+                        }
                     except json.JSONDecodeError:
                         logger.error(f"Failed to parse token response: {token_text}")
                         return {"success": False, "error": f"Failed to parse token response: {token_text}"}
