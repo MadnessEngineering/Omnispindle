@@ -104,7 +104,7 @@ async def update_device_status_tool(agent_name: str, status: bool = True, ctx: C
 
 @server.tool()
 async def deploy_nodered_flow_tool(flow_json: dict, node_red_url: str = "http://localhost:1880",
-                                  username: str = None, password: str = None, ctx: Context = None) -> str:
+                                  username: str = os.getenv("NR_USER", None), password: str = os.getenv("NR_PASS", None), ctx: Context = None) -> str:
     """
     Deploys a Node-RED flow to a Node-RED instance.
     
