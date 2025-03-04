@@ -262,7 +262,7 @@ async def deploy_nodered_flow_tool(flow_json_name: str, ctx: Context = None) -> 
                     result = await deploy_response.text()
                     logger.debug(f"Deploy response body: {result}")
 
-                    if deploy_response.status not in (200, 201):
+                    if deploy_response.status not in (200, 201, 204):
                         return {"success": False, "error": f"HTTP {deploy_response.status}: {result}", "operation": operation}
 
                     return {
