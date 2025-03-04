@@ -81,7 +81,114 @@ async def update_todo_tool(todo_id: str, updates: dict, ctx: Context = None) -> 
 
 @server.tool()
 async def mqtt_publish_tool(topic: str, message: str, ctx: Context = None) -> str:
-    return await mqtt_publish(topic, message, ctx)
+    await server.publish(topic, message)
+    return {"topic": topic, "message": message}
+
+@server.tool()
+async def update_device_status_tool(agent_name: str, status: bool = True, ctx: Context = None) -> str:
+    """
+    Updates the status of a device in the MQTT Status Dashboard.
+    
+    Args:
+        agent_name: Name of the device to update
+        status: True for online (green), False for offline (red)
+        
+    Returns:
+        Result of the operation
+    """
+    topic = f"status/{agent_name}/alive"
+    message = "1" if status else "0"
+    await server.publish(topic, message)
+    status_text = "online" if status else "offline"
+    return {"device": agent_name, "status": status_text, "topic": topic}
+
+@server.tool()
+async def deploy_nodered_flow_tool(flow_json: dict, node_red_url: str = "http://localhost:1880",
+                                  username: str = None, password: str = None, ctx: Context = None) -> str:
+    """
+    Deploys a Node-RED flow to a Node-RED instance.
+    
+    Args:
+        flow_json: The flow configuration as a JSON object
+        node_red_url: URL of the Node-RED instance (default: http://localhost:1880)
+        username: Optional username for Node-RED authentication
+        password: Optional password for Node-RED authentication
+        
+    Returns:
+        Result of the deployment operation
+    """
+    import aiohttp
+    import base64
+    import json
+
+    headers = {
+        "Content-Type": "application/json"
+    }
+
+    # Add authentication if provided
+    if username and password:
+        auth_string = f"{username}:{password}"
+        encoded_auth = base64.b64encode(auth_string.encode()).decode()
+        headers["Authorization"] = f"Basic {encoded_auth}"
+
+    try:
+        # Determine if this is a new flow or an update to an existing one
+        flow_id = None
+        flow_label = None
+
+        # Find the tab/flow ID and label if available in the flow JSON
+        if isinstance(flow_json, list):
+            for node in flow_json:
+                if node.get("type") == "tab":
+                    flow_id = node.get("id")
+                    flow_label = node.get("label")
+                    break
+
+        async with aiohttp.ClientSession() as session:
+            # If we have an ID, check if the flow exists
+            if flow_id and flow_label:
+                async with session.get(f"{node_red_url}/flows") as response:
+                    if response.status == 200:
+                        existing_flows = await response.json()
+                        # Check if flow with this ID exists
+                        flow_exists = any(f.get("id") == flow_id and f.get("type") == "tab" for f in existing_flows)
+
+                        # If flow already exists, update it
+                        if flow_exists:
+                            operation = "update"
+                            endpoint = f"{node_red_url}/flow/{flow_id}"
+                            method = session.put
+                        else:
+                            operation = "create"
+                            endpoint = f"{node_red_url}/flows"
+                            method = session.post
+                    else:
+                        # If can't fetch flows, just try to create
+                        operation = "create"
+                        endpoint = f"{node_red_url}/flows"
+                        method = session.post
+            else:
+                # No ID found, just create as new flow
+                operation = "create"
+                endpoint = f"{node_red_url}/flows"
+                method = session.post
+
+            # Deploy the flow
+            async with method(endpoint, headers=headers, json=flow_json) as response:
+                result = await response.text()
+                if response.status not in (200, 201):
+                    return {"success": False, "error": f"HTTP {response.status}: {result}", "operation": operation}
+
+                return {
+                    "success": True,
+                    "operation": operation,
+                    "flow_id": flow_id,
+                    "flow_label": flow_label,
+                    "dashboard_url": f"{node_red_url}/ui"
+                }
+
+    except Exception as e:
+        return {"success": False, "error": str(e)}
 
 @server.tool()
 async def delete_todo_tool(todo_id: str, ctx: Context = None) -> str:
