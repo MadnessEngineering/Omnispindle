@@ -137,9 +137,13 @@ async def deploy_nodered_flow_tool(flow_json_name: str, ctx: Context = None) -> 
     dashboard_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../dashboard"))
     result = ""
     try:
-        result = subprocess.run(['git', 'pull'], cwd=dashboard_dir, check=True)
+        result = subprocess.run(['git', 'pull'], cwd=dashboard_dir, check=True, capture_output=True, text=True)
+        logger.debug(f"Git pull output: {result.stdout}")
     except subprocess.CalledProcessError as e:
-        return {"success": False, "error": f"Git pull failed: {str(e)} {result}"}
+        logger.warning(f"Git pull failed: {e}")
+        logger.warning(f"Git pull stderr: {e.stderr}")
+        # Continue with deployment even if git pull fails
+        # This allows deployment of local files without requiring a successful git pull
 
     flow_json_path = f"../../dashboard/{flow_json_name}"
     flow_path = os.path.abspath(os.path.join(os.path.dirname(__file__), flow_json_path))
