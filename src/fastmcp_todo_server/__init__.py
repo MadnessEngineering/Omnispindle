@@ -118,12 +118,20 @@ async def deploy_nodered_flow_tool(flow_json_name: str, ctx: Context = None) -> 
     import aiohttp
     import base64
     import json
+    import logging
+
+    # Set up logging
+    logging.basicConfig(level=logging.DEBUG)
+    logger = logging.getLogger(__name__)
 
     # Set default Node-RED URL if not provided
     node_red_url = os.getenv("NR_URL", "http://localhost:9191")
-
     username = os.getenv("NR_USER", None)
     password = os.getenv("NR_PASS", None)
+
+    logger.debug(f"Node-RED URL: {node_red_url}")
+    logger.debug(f"Username: {username}")
+    logger.debug(f"Password: {'*' * len(password) if password else 'None'}")
 
     # Add local git pull
     dashboard_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../dashboard"))
@@ -165,6 +173,7 @@ async def deploy_nodered_flow_tool(flow_json_name: str, ctx: Context = None) -> 
         auth_string = f"{username}:{password}"
         encoded_auth = base64.b64encode(auth_string.encode()).decode()
         headers["Authorization"] = f"Basic {encoded_auth}"
+        logger.debug(f"Authorization header: {headers['Authorization']}")
 
     try:
         # Determine if this is a new flow or an update to an existing one
@@ -182,7 +191,9 @@ async def deploy_nodered_flow_tool(flow_json_name: str, ctx: Context = None) -> 
         async with aiohttp.ClientSession() as session:
             # If we have an ID, check if the flow exists
             if flow_id and flow_label:
-                async with session.get(f"{node_red_url}/flows") as response:
+                async with session.get(f"{node_red_url}/flows", headers=headers) as response:
+                    logger.debug(f"Flows check response status: {response.status}")
+                    logger.debug(f"Flows check response headers: {response.headers}")
                     if response.status == 200:
                         existing_flows = await response.json()
                         # Check if flow with this ID exists
@@ -210,7 +221,11 @@ async def deploy_nodered_flow_tool(flow_json_name: str, ctx: Context = None) -> 
 
             # Deploy the flow
             async with method(endpoint, headers=headers, json=flow_data) as response:
+                logger.debug(f"Deploy response status: {response.status}")
+                logger.debug(f"Deploy response headers: {response.headers}")
                 result = await response.text()
+                logger.debug(f"Deploy response body: {result}")
+                
                 if response.status not in (200, 201):
                     return {"success": False, "error": f"HTTP {response.status}: {result}", "operation": operation}
 
@@ -223,6 +238,7 @@ async def deploy_nodered_flow_tool(flow_json_name: str, ctx: Context = None) -> 
                 }
 
     except Exception as e:
+        logger.exception("Deployment error")
         return {"success": False, "error": str(e)}
 
 @server.tool()
