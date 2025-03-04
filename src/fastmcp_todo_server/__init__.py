@@ -167,94 +167,98 @@ async def deploy_nodered_flow_tool(flow_json_name: str, ctx: Context = None) -> 
     if isinstance(flow_data, dict):
         flow_data = [flow_data]
 
-    headers = {
-        "Content-Type": "application/json"
-    }
+    # Create SSL context to handle potential SSL verification issues
+    ssl_context = ssl.create_default_context()
+    ssl_context.check_hostname = False
+    ssl_context.verify_mode = ssl.CERT_NONE
 
-    # Add authentication if provided
-    if username and password:
-        auth_string = f"{username}:{password}"
-        encoded_auth = base64.b64encode(auth_string.encode()).decode()
-        headers["Authorization"] = f"Basic {encoded_auth}"
-        logger.debug(f"Authorization header: {headers['Authorization']}")
+    async with aiohttp.ClientSession() as session:
+        # First, check authentication scheme
+        try:
+            async with session.get(f"{node_red_url}/auth/login", ssl=ssl_context) as login_response:
+                logger.debug(f"Login endpoint response status: {login_response.status}")
+                logger.debug(f"Login endpoint response headers: {login_response.headers}")
+                login_info = await login_response.json()
+                logger.debug(f"Login info: {login_info}")
 
-    try:
-        # Create SSL context to handle potential SSL verification issues
-        ssl_context = ssl.create_default_context()
-        ssl_context.check_hostname = False
-        ssl_context.verify_mode = ssl.CERT_NONE
+            # If authentication is required, get a token
+            if username and password:
+                token_payload = {
+                    "username": username,
+                    "password": password
+                }
+                async with session.post(f"{node_red_url}/auth/token", json=token_payload, ssl=ssl_context) as token_response:
+                    logger.debug(f"Token request status: {token_response.status}")
+                    logger.debug(f"Token request headers: {token_response.headers}")
 
-        # Determine if this is a new flow or an update to an existing one
-        flow_id = None
-        flow_label = None
+                    if token_response.status == 200:
+                        token_data = await token_response.json()
+                        access_token = token_data.get('access_token')
 
-        # Find the tab/flow ID and label if available in the flow JSON
-        if isinstance(flow_data, list):
-            for node in flow_data:
-                if node.get("type") == "tab":
-                    flow_id = node.get("id")
-                    flow_label = node.get("label")
-                    break
-
-        async with aiohttp.ClientSession() as session:
-            # Try to get flows with authentication
-            try:
-                async with session.get(f"{node_red_url}/flows", headers=headers, ssl=ssl_context) as response:
-                    logger.debug(f"Flows check response status: {response.status}")
-                    logger.debug(f"Flows check response headers: {response.headers}")
-
-                    # If authentication fails, try without authentication
-                    if response.status == 401:
-                        logger.warning("Authentication failed. Attempting without authentication.")
-                        headers.pop("Authorization", None)
-                        async with session.get(f"{node_red_url}/flows", ssl=ssl_context) as unauth_response:
-                            logger.debug(f"Unauthorized flows check response status: {unauth_response.status}")
-                            if unauth_response.status != 200:
-                                return {"success": False, "error": f"Cannot access flows. HTTP {unauth_response.status}"}
-                            existing_flows = await unauth_response.json()
-                    elif response.status == 200:
-                        existing_flows = await response.json()
-                    else:
-                        return {"success": False, "error": f"Cannot access flows. HTTP {response.status}"}
-
-                    # Check if flow with this ID exists
-                    flow_exists = any(f.get("id") == flow_id and f.get("type") == "tab" for f in existing_flows)
-
-                    # Determine operation and endpoint
-                    if flow_exists:
-                        operation = "update"
-                        endpoint = f"{node_red_url}/flow/{flow_id}"
-                        method = session.put
-                    else:
-                        operation = "create"
-                        endpoint = f"{node_red_url}/flows"
-                        method = session.post
-
-                    # Deploy the flow
-                    async with method(endpoint, headers=headers, json=flow_data, ssl=ssl_context) as response:
-                        logger.debug(f"Deploy response status: {response.status}")
-                        logger.debug(f"Deploy response headers: {response.headers}")
-                        result = await response.text()
-                        logger.debug(f"Deploy response body: {result}")
-
-                        if response.status not in (200, 201):
-                            return {"success": False, "error": f"HTTP {response.status}: {result}", "operation": operation}
-
-                        return {
-                            "success": True,
-                            "operation": operation,
-                            "flow_id": flow_id,
-                            "flow_label": flow_label,
-                            "dashboard_url": f"{node_red_url}/ui"
+                        # Use the access token for subsequent requests
+                        headers = {
+                            "Content-Type": "application/json",
+                            "Authorization": f"Bearer {access_token}"
                         }
+                    else:
+                        logger.error(f"Token request failed: {await token_response.text()}")
+                        return {"success": False, "error": "Failed to obtain authentication token"}
+            else:
+                headers = {
+                    "Content-Type": "application/json"
+                }
 
-            except aiohttp.ClientConnectorError as e:
-                logger.error(f"Connection error: {e}")
-                return {"success": False, "error": f"Connection error: {e}"}
+            # Get existing flows
+            async with session.get(f"{node_red_url}/flows", headers=headers, ssl=ssl_context) as response:
+                logger.debug(f"Flows check response status: {response.status}")
 
-    except Exception as e:
-        logger.exception("Deployment error")
-        return {"success": False, "error": str(e)}
+                if response.status == 200:
+                    existing_flows = await response.json()
+                else:
+                    return {"success": False, "error": f"Cannot access flows. HTTP {response.status}"}
+
+                # Determine flow ID and operation
+                flow_id = None
+                flow_label = None
+                for node in flow_data:
+                    if node.get("type") == "tab":
+                        flow_id = node.get("id")
+                        flow_label = node.get("label")
+                        break
+
+                # Check if flow exists
+                flow_exists = any(f.get("id") == flow_id and f.get("type") == "tab" for f in existing_flows)
+
+                # Determine operation and endpoint
+                if flow_exists:
+                    operation = "update"
+                    endpoint = f"{node_red_url}/flow/{flow_id}"
+                    method = session.put
+                else:
+                    operation = "create"
+                    endpoint = f"{node_red_url}/flows"
+                    method = session.post
+
+                # Deploy the flow
+                async with method(endpoint, headers=headers, json=flow_data, ssl=ssl_context) as deploy_response:
+                    logger.debug(f"Deploy response status: {deploy_response.status}")
+                    result = await deploy_response.text()
+                    logger.debug(f"Deploy response body: {result}")
+
+                    if deploy_response.status not in (200, 201):
+                        return {"success": False, "error": f"HTTP {deploy_response.status}: {result}", "operation": operation}
+
+                    return {
+                        "success": True,
+                        "operation": operation,
+                        "flow_id": flow_id,
+                        "flow_label": flow_label,
+                        "dashboard_url": f"{node_red_url}/ui"
+                    }
+
+        except Exception as e:
+            logger.exception("Deployment error")
+            return {"success": False, "error": str(e)}
 
 @server.tool()
 async def delete_todo_tool(todo_id: str, ctx: Context = None) -> str:
