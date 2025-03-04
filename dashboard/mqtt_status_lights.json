@@ -1,0 +1,106 @@
+[
+    {
+        "id": "mqtt-status-dashboard",
+        "type": "tab",
+        "label": "Device Status Dashboard",
+        "disabled": false,
+        "info": "Dashboard showing device status lights based on MQTT messages"
+    },
+    {
+        "id": "mqtt-status-in",
+        "type": "mqtt in",
+        "z": "mqtt-status-dashboard",
+        "name": "Device Status",
+        "topic": "status/+/alive",
+        "qos": "2",
+        "datatype": "auto",
+        "broker": "",
+        "nl": false,
+        "rap": true,
+        "rh": 0,
+        "x": 160,
+        "y": 120,
+        "wires": [
+            [
+                "mqtt-status-process"
+            ]
+        ]
+    },
+    {
+        "id": "mqtt-status-process",
+        "type": "function",
+        "z": "mqtt-status-dashboard",
+        "name": "Process Device Status",
+        "func": "// Extract device name from the topic\nconst topicParts = msg.topic.split('/');\nconst deviceName = topicParts[1];\n\n// Set up the payload for the UI element\nlet status = false;\n\n// Check if there's any message (presence indicates alive)\nif (msg.payload !== undefined && msg.payload !== null) {\n    // You can add more logic here to interpret specific messages\n    // For now, any message indicates the device is alive\n    status = true;\n}\n\n// Create an output message for the dashboard element\nreturn {\n    topic: deviceName,\n    payload: status,\n    deviceName: deviceName  // Add device name for the dashboard UI\n};",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 380,
+        "y": 120,
+        "wires": [
+            [
+                "mqtt-status-ui-controller"
+            ]
+        ]
+    },
+    {
+        "id": "mqtt-status-ui-controller",
+        "type": "function",
+        "z": "mqtt-status-dashboard",
+        "name": "UI Controller",
+        "func": "// Get the dynamic device name\nconst deviceName = msg.deviceName;\n\n// Store the status in the flow context for this device\nflow.set(`device_${deviceName}`, msg.payload);\n\n// Get current device statuses from flow context\nlet deviceStatuses = flow.get('deviceStatuses') || {};\n\n// Update the status for this device\ndeviceStatuses[deviceName] = msg.payload;\n\n// Save updated device statuses\nflow.set('deviceStatuses', deviceStatuses);\n\n// Create a message with all device statuses\nreturn { payload: deviceStatuses };\n",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "// Initialize the device statuses\nflow.set('deviceStatuses', {});\n",
+        "finalize": "",
+        "libs": [],
+        "x": 610,
+        "y": 120,
+        "wires": [
+            [
+                "mqtt-status-ui-template"
+            ]
+        ]
+    },
+    {
+        "id": "mqtt-status-ui-template",
+        "type": "ui_template",
+        "z": "mqtt-status-dashboard",
+        "group": "device_status_group",
+        "name": "Dynamic Status Panel",
+        "order": 0,
+        "width": "6",
+        "height": "6",
+        "format": "<div ng-init=\"init()\" id=\"device-status-panel\">\n  <h2>Device Status</h2>\n  <div class=\"device-list\">\n    <div class=\"device-status\" ng-repeat=\"(deviceName, isOnline) in deviceStatuses\">\n      <div class=\"status-light\" ng-class=\"{'online': isOnline, 'offline': !isOnline}\"></div>\n      <div class=\"device-name\">{{deviceName}}</div>\n    </div>\n  </div>\n  \n  <div class=\"large-status\" ng-repeat=\"(deviceName, isOnline) in deviceStatuses\" ng-if=\"isOnline\">\n    <div class=\"large-status-light online\"></div>\n    <div class=\"large-device-name\">{{deviceName}}</div>\n  </div>\n</div>\n\n<style>\n  #device-status-panel {\n    padding: 10px;\n    font-family: Arial, sans-serif;\n  }\n  \n  h2 {\n    margin-top: 0;\n    margin-bottom: 15px;\n    font-size: 24px;\n  }\n  \n  .device-list {\n    display: flex;\n    flex-direction: column;\n    gap: 10px;\n    margin-bottom: 20px;\n    border-bottom: 1px solid #ccc;\n    padding-bottom: 15px;\n  }\n  \n  .device-status {\n    display: flex;\n    align-items: center;\n    gap: 10px;\n  }\n  \n  .status-light {\n    width: 16px;\n    height: 16px;\n    border-radius: 50%;\n    box-shadow: 0 0 3px rgba(0,0,0,0.3);\n  }\n  \n  .large-status {\n    display: flex;\n    flex-direction: column;\n    align-items: center;\n    margin: 30px 0;\n  }\n  \n  .large-status-light {\n    width: 100px;\n    height: 100px;\n    border-radius: 50%;\n    margin-bottom: 10px;\n  }\n  \n  .online {\n    background-color: #00ff00;\n    box-shadow: 0 0 15px #00ff00;\n  }\n  \n  .offline {\n    background-color: #ff0000;\n  }\n  \n  .device-name {\n    font-weight: bold;\n  }\n  \n  .large-device-name {\n    font-size: 20px;\n    font-weight: bold;\n  }\n</style>\n\n<script>\n(function(scope) {\n  scope.init = function() {\n    scope.deviceStatuses = {};\n    \n    scope.$watch('msg.payload', function(payload) {\n      if (!payload) return;\n      \n      // Update all device statuses\n      scope.deviceStatuses = payload;\n    });\n  };\n})(scope);\n</script>",
+        "storeOutMessages": true,
+        "fwdInMessages": true,
+        "resendOnRefresh": true,
+        "templateScope": "local",
+        "className": "",
+        "x": 860,
+        "y": 120,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "device_status_group",
+        "type": "ui_group",
+        "name": "Device Status",
+        "tab": "device_status_tab",
+        "order": 1,
+        "disp": true,
+        "width": "8",
+        "collapse": false
+    },
+    {
+        "id": "device_status_tab",
+        "type": "ui_tab",
+        "name": "Device Status Dashboard",
+        "icon": "dashboard",
+        "disabled": false,
+        "hidden": false
+    }
+]
