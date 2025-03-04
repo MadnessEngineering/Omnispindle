@@ -104,13 +104,13 @@ async def update_device_status_tool(agent_name: str, status: bool = True, ctx: C
     return {"device": agent_name, "status": status_text, "topic": topic}
 
 @server.tool()
-async def deploy_nodered_flow_tool(flow_json, node_red_url: str = os.getenv("NR_URL", None),
+async def deploy_nodered_flow_tool(flow_json: str, node_red_url: str = os.getenv("NR_URL", None),
                                   username: str = os.getenv("NR_USER", None), password: str = os.getenv("NR_PASS", None), ctx: Context = None) -> str:
     """
     Deploys a Node-RED flow to a Node-RED instance.
     
     Args:
-        flow_json: The flow configuration as a JSON object, list of objects, or JSON string
+        flow_json: The flow configuration as a JSON string
         node_red_url: URL of the Node-RED instance (default: http://localhost:1880)
         username: Optional username for Node-RED authentication
         password: Optional password for Node-RED authentication
@@ -127,19 +127,21 @@ async def deploy_nodered_flow_tool(flow_json, node_red_url: str = os.getenv("NR_
         node_red_url = "http://localhost:9191"
 
     # Handle flow_json input - convert from string if needed
-    if isinstance(flow_json, str):
-        try:
-            flow_json = json.loads(flow_json)
-        except json.JSONDecodeError as e:
-            return {"success": False, "error": f"Invalid JSON string: {str(e)}"}
+    try:
+        if isinstance(flow_json, str):
+            flow_data = json.loads(flow_json)
+        else:
+            flow_data = flow_json
+    except json.JSONDecodeError as e:
+        return {"success": False, "error": f"Invalid JSON string: {str(e)}"}
 
-    # Validate flow_json is either a list or a dict
-    if not isinstance(flow_json, (list, dict)):
-        return {"success": False, "error": f"flow_json must be a list or dict, got {type(flow_json).__name__}"}
+    # Validate flow_data is either a list or a dict
+    if not isinstance(flow_data, (list, dict)):
+        return {"success": False, "error": f"flow_json must be a list or dict, got {type(flow_data).__name__}"}
 
     # If it's a single flow object, wrap it in a list
-    if isinstance(flow_json, dict):
-        flow_json = [flow_json]
+    if isinstance(flow_data, dict):
+        flow_data = [flow_data]
 
     headers = {
         "Content-Type": "application/json"
@@ -157,8 +159,8 @@ async def deploy_nodered_flow_tool(flow_json, node_red_url: str = os.getenv("NR_
         flow_label = None
 
         # Find the tab/flow ID and label if available in the flow JSON
-        if isinstance(flow_json, list):
-            for node in flow_json:
+        if isinstance(flow_data, list):
+            for node in flow_data:
                 if node.get("type") == "tab":
                     flow_id = node.get("id")
                     flow_label = node.get("label")
@@ -194,7 +196,7 @@ async def deploy_nodered_flow_tool(flow_json, node_red_url: str = os.getenv("NR_
                 method = session.post
 
             # Deploy the flow
-            async with method(endpoint, headers=headers, json=flow_json) as response:
+            async with method(endpoint, headers=headers, json=flow_data) as response:
                 result = await response.text()
                 if response.status not in (200, 201):
                     return {"success": False, "error": f"HTTP {response.status}: {result}", "operation": operation}
