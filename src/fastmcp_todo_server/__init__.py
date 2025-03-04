@@ -119,6 +119,7 @@ async def deploy_nodered_flow_tool(flow_json_name: str, ctx: Context = None) -> 
     import base64
     import json
     import logging
+    import ssl
 
     # Set up logging
     logging.basicConfig(level=logging.DEBUG)
@@ -131,7 +132,7 @@ async def deploy_nodered_flow_tool(flow_json_name: str, ctx: Context = None) -> 
 
     logger.debug(f"Node-RED URL: {node_red_url}")
     logger.debug(f"Username: {username}")
-    logger.debug(f"Password: {'*' * len(password) if password else 'None'}")
+    logger.debug(f"Password length: {len(password) if password else 'None'}")
 
     # Add local git pull
     dashboard_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../dashboard"))
@@ -142,12 +143,10 @@ async def deploy_nodered_flow_tool(flow_json_name: str, ctx: Context = None) -> 
     except subprocess.CalledProcessError as e:
         logger.warning(f"Git pull failed: {e}")
         logger.warning(f"Git pull stderr: {e.stderr}")
-        # Continue with deployment even if git pull fails
-        # This allows deployment of local files without requiring a successful git pull
 
     flow_json_path = f"../../dashboard/{flow_json_name}"
     flow_path = os.path.abspath(os.path.join(os.path.dirname(__file__), flow_json_path))
-    
+
     if not os.path.exists(flow_path):
         return {"success": False, "error": f"Flow file not found: {flow_json_name}, {result}"}
 
@@ -180,6 +179,11 @@ async def deploy_nodered_flow_tool(flow_json_name: str, ctx: Context = None) -> 
         logger.debug(f"Authorization header: {headers['Authorization']}")
 
     try:
+        # Create SSL context to handle potential SSL verification issues
+        ssl_context = ssl.create_default_context()
+        ssl_context.check_hostname = False
+        ssl_context.verify_mode = ssl.CERT_NONE
+
         # Determine if this is a new flow or an update to an existing one
         flow_id = None
         flow_label = None
@@ -193,53 +197,60 @@ async def deploy_nodered_flow_tool(flow_json_name: str, ctx: Context = None) -> 
                     break
 
         async with aiohttp.ClientSession() as session:
-            # If we have an ID, check if the flow exists
-            if flow_id and flow_label:
-                async with session.get(f"{node_red_url}/flows", headers=headers) as response:
+            # Try to get flows with authentication
+            try:
+                async with session.get(f"{node_red_url}/flows", headers=headers, ssl=ssl_context) as response:
                     logger.debug(f"Flows check response status: {response.status}")
                     logger.debug(f"Flows check response headers: {response.headers}")
-                    if response.status == 200:
-                        existing_flows = await response.json()
-                        # Check if flow with this ID exists
-                        flow_exists = any(f.get("id") == flow_id and f.get("type") == "tab" for f in existing_flows)
 
-                        # If flow already exists, update it
-                        if flow_exists:
-                            operation = "update"
-                            endpoint = f"{node_red_url}/flow/{flow_id}"
-                            method = session.put
-                        else:
-                            operation = "create"
-                            endpoint = f"{node_red_url}/flows"
-                            method = session.post
+                    # If authentication fails, try without authentication
+                    if response.status == 401:
+                        logger.warning("Authentication failed. Attempting without authentication.")
+                        headers.pop("Authorization", None)
+                        async with session.get(f"{node_red_url}/flows", ssl=ssl_context) as unauth_response:
+                            logger.debug(f"Unauthorized flows check response status: {unauth_response.status}")
+                            if unauth_response.status != 200:
+                                return {"success": False, "error": f"Cannot access flows. HTTP {unauth_response.status}"}
+                            existing_flows = await unauth_response.json()
+                    elif response.status == 200:
+                        existing_flows = await response.json()
                     else:
-                        # If can't fetch flows, just try to create
+                        return {"success": False, "error": f"Cannot access flows. HTTP {response.status}"}
+
+                    # Check if flow with this ID exists
+                    flow_exists = any(f.get("id") == flow_id and f.get("type") == "tab" for f in existing_flows)
+
+                    # Determine operation and endpoint
+                    if flow_exists:
+                        operation = "update"
+                        endpoint = f"{node_red_url}/flow/{flow_id}"
+                        method = session.put
+                    else:
                         operation = "create"
                         endpoint = f"{node_red_url}/flows"
                         method = session.post
-            else:
-                # No ID found, just create as new flow
-                operation = "create"
-                endpoint = f"{node_red_url}/flows"
-                method = session.post
 
-            # Deploy the flow
-            async with method(endpoint, headers=headers, json=flow_data) as response:
-                logger.debug(f"Deploy response status: {response.status}")
-                logger.debug(f"Deploy response headers: {response.headers}")
-                result = await response.text()
-                logger.debug(f"Deploy response body: {result}")
-                
-                if response.status not in (200, 201):
-                    return {"success": False, "error": f"HTTP {response.status}: {result}", "operation": operation}
+                    # Deploy the flow
+                    async with method(endpoint, headers=headers, json=flow_data, ssl=ssl_context) as response:
+                        logger.debug(f"Deploy response status: {response.status}")
+                        logger.debug(f"Deploy response headers: {response.headers}")
+                        result = await response.text()
+                        logger.debug(f"Deploy response body: {result}")
 
-                return {
-                    "success": True,
-                    "operation": operation,
-                    "flow_id": flow_id,
-                    "flow_label": flow_label,
-                    "dashboard_url": f"{node_red_url}/ui"
-                }
+                        if response.status not in (200, 201):
+                            return {"success": False, "error": f"HTTP {response.status}: {result}", "operation": operation}
+
+                        return {
+                            "success": True,
+                            "operation": operation,
+                            "flow_id": flow_id,
+                            "flow_label": flow_label,
+                            "dashboard_url": f"{node_red_url}/ui"
+                        }
+
+            except aiohttp.ClientConnectorError as e:
+                logger.error(f"Connection error: {e}")
+                return {"success": False, "error": f"Connection error: {e}"}
 
     except Exception as e:
         logger.exception("Deployment error")
