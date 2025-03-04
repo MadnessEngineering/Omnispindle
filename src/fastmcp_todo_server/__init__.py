@@ -104,126 +104,126 @@ async def update_device_status_tool(agent_name: str, status: bool = True, ctx: C
     status_text = "online" if status else "offline"
     return {"device": agent_name, "status": status_text, "topic": topic}
 
-@server.tool()
-async def deploy_nodered_flow_tool(flow_json_name: str, ctx: Context = None) -> str:
-    """
-    Deploys a Node-RED flow to a Node-RED instance.
+# @server.tool()
+# async def deploy_nodered_flow_tool(flow_json_name: str, ctx: Context = None) -> str:
+#     """
+#     Deploys a Node-RED flow to a Node-RED instance.
     
-    Args:
-        flow_json_name: The name of the flow JSON file in the dashboard directory
+#     Args:
+#         flow_json_name: The name of the flow JSON file in the dashboard directory
         
-    Returns:
-        Result of the deployment operation
-    """
-    import aiohttp
-    import base64
-    import json
+#     Returns:
+#         Result of the deployment operation
+#     """
+#     import aiohttp
+#     import base64
+#     import json
 
-    # Set default Node-RED URL if not provided
-    node_red_url = os.getenv("NR_URL", "http://localhost:9191")
+#     # Set default Node-RED URL if not provided
+#     node_red_url = os.getenv("NR_URL", "http://localhost:9191")
 
-    username = os.getenv("NR_USER", None)
-    password = os.getenv("NR_PASS", None)
+#     username = os.getenv("NR_USER", None)
+#     password = os.getenv("NR_PASS", None)
 
-    # Add local git pull
-    dashboard_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../dashboard"))
-    result = ""
-    try:
-        result = subprocess.run(['git', 'pull'], cwd=dashboard_dir, check=True)
-    except subprocess.CalledProcessError as e:
-        return {"success": False, "error": f"Git pull failed: {str(e)} {result}"}
+#     # Add local git pull
+#     dashboard_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../dashboard"))
+#     result = ""
+#     try:
+#         result = subprocess.run(['git', 'pull'], cwd=dashboard_dir, check=True)
+#     except subprocess.CalledProcessError as e:
+#         return {"success": False, "error": f"Git pull failed: {str(e)} {result}"}
 
-    flow_json_path = f"../../dashboard/{flow_json_name}"
-    flow_path = os.path.abspath(os.path.join(os.path.dirname(__file__), flow_json_path))
+#     flow_json_path = f"../../dashboard/{flow_json_name}"
+#     flow_path = os.path.abspath(os.path.join(os.path.dirname(__file__), flow_json_path))
     
-    if not os.path.exists(flow_path):
-        return {"success": False, "error": f"Flow file not found: {flow_json_name}, {result}"}
+#     if not os.path.exists(flow_path):
+#         return {"success": False, "error": f"Flow file not found: {flow_json_name}, {result}"}
 
-    # Read the JSON content from the file
-    try:
-        with open(flow_path, 'r') as file:
-            flow_data = json.load(file)
-    except json.JSONDecodeError as e:
-        return {"success": False, "error": f"Invalid JSON in file {flow_json_name}: {str(e)}"}
-    except Exception as e:
-        return {"success": False, "error": f"Error reading file {flow_json_name}: {str(e)}"}
+#     # Read the JSON content from the file
+#     try:
+#         with open(flow_path, 'r') as file:
+#             flow_data = json.load(file)
+#     except json.JSONDecodeError as e:
+#         return {"success": False, "error": f"Invalid JSON in file {flow_json_name}: {str(e)}"}
+#     except Exception as e:
+#         return {"success": False, "error": f"Error reading file {flow_json_name}: {str(e)}"}
 
-    # Validate flow_data is either a list or a dict
-    if not isinstance(flow_data, (list, dict)):
-        return {"success": False, "error": f"Flow JSON must be a list or dict, got {type(flow_data).__name__}"}
+#     # Validate flow_data is either a list or a dict
+#     if not isinstance(flow_data, (list, dict)):
+#         return {"success": False, "error": f"Flow JSON must be a list or dict, got {type(flow_data).__name__}"}
 
-    # If it's a single flow object, wrap it in a list
-    if isinstance(flow_data, dict):
-        flow_data = [flow_data]
+#     # If it's a single flow object, wrap it in a list
+#     if isinstance(flow_data, dict):
+#         flow_data = [flow_data]
 
-    headers = {
-        "Content-Type": "application/json"
-    }
+#     headers = {
+#         "Content-Type": "application/json"
+#     }
 
-    # Add authentication if provided
-    if username and password:
-        auth_string = f"{username}:{password}"
-        encoded_auth = base64.b64encode(auth_string.encode()).decode()
-        headers["Authorization"] = f"Basic {encoded_auth}"
+#     # Add authentication if provided
+#     if username and password:
+#         auth_string = f"{username}:{password}"
+#         encoded_auth = base64.b64encode(auth_string.encode()).decode()
+#         headers["Authorization"] = f"Basic {encoded_auth}"
 
-    try:
-        # Determine if this is a new flow or an update to an existing one
-        flow_id = None
-        flow_label = None
+#     try:
+#         # Determine if this is a new flow or an update to an existing one
+#         flow_id = None
+#         flow_label = None
 
-        # Find the tab/flow ID and label if available in the flow JSON
-        if isinstance(flow_data, list):
-            for node in flow_data:
-                if node.get("type") == "tab":
-                    flow_id = node.get("id")
-                    flow_label = node.get("label")
-                    break
+#         # Find the tab/flow ID and label if available in the flow JSON
+#         if isinstance(flow_data, list):
+#             for node in flow_data:
+#                 if node.get("type") == "tab":
+#                     flow_id = node.get("id")
+#                     flow_label = node.get("label")
+#                     break
 
-        async with aiohttp.ClientSession() as session:
-            # If we have an ID, check if the flow exists
-            if flow_id and flow_label:
-                async with session.get(f"{node_red_url}/flows") as response:
-                    if response.status == 200:
-                        existing_flows = await response.json()
-                        # Check if flow with this ID exists
-                        flow_exists = any(f.get("id") == flow_id and f.get("type") == "tab" for f in existing_flows)
+#         async with aiohttp.ClientSession() as session:
+#             # If we have an ID, check if the flow exists
+#             if flow_id and flow_label:
+#                 async with session.get(f"{node_red_url}/flows") as response:
+#                     if response.status == 200:
+#                         existing_flows = await response.json()
+#                         # Check if flow with this ID exists
+#                         flow_exists = any(f.get("id") == flow_id and f.get("type") == "tab" for f in existing_flows)
 
-                        # If flow already exists, update it
-                        if flow_exists:
-                            operation = "update"
-                            endpoint = f"{node_red_url}/flow/{flow_id}"
-                            method = session.put
-                        else:
-                            operation = "create"
-                            endpoint = f"{node_red_url}/flows"
-                            method = session.post
-                    else:
-                        # If can't fetch flows, just try to create
-                        operation = "create"
-                        endpoint = f"{node_red_url}/flows"
-                        method = session.post
-            else:
-                # No ID found, just create as new flow
-                operation = "create"
-                endpoint = f"{node_red_url}/flows"
-                method = session.post
+#                         # If flow already exists, update it
+#                         if flow_exists:
+#                             operation = "update"
+#                             endpoint = f"{node_red_url}/flow/{flow_id}"
+#                             method = session.put
+#                         else:
+#                             operation = "create"
+#                             endpoint = f"{node_red_url}/flows"
+#                             method = session.post
+#                     else:
+#                         # If can't fetch flows, just try to create
+#                         operation = "create"
+#                         endpoint = f"{node_red_url}/flows"
+#                         method = session.post
+#             else:
+#                 # No ID found, just create as new flow
+#                 operation = "create"
+#                 endpoint = f"{node_red_url}/flows"
+#                 method = session.post
 
-            # Deploy the flow
-            async with method(endpoint, headers=headers, json=flow_data) as response:
-                result = await response.text()
-                if response.status not in (200, 201):
-                    return {"success": False, "error": f"HTTP {response.status}: {result}", "operation": operation}
+#             # Deploy the flow
+#             async with method(endpoint, headers=headers, json=flow_data) as response:
+#                 result = await response.text()
+#                 if response.status not in (200, 201):
+#                     return {"success": False, "error": f"HTTP {response.status}: {result}", "operation": operation}
 
-                return {
-                    "success": True,
-                    "operation": operation,
-                    "flow_id": flow_id,
-                    "flow_label": flow_label,
-                    "dashboard_url": f"{node_red_url}/ui"
-                }
+#                 return {
+#                     "success": True,
+#                     "operation": operation,
+#                     "flow_id": flow_id,
+#                     "flow_label": flow_label,
+#                     "dashboard_url": f"{node_red_url}/ui"
+#                 }
 
-    except Exception as e:
-        return {"success": False, "error": str(e)}
+#     except Exception as e:
+#         return {"success": False, "error": str(e)}
 
 @server.tool()
 async def delete_todo_tool(todo_id: str, ctx: Context = None) -> str:
