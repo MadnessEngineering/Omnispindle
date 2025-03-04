@@ -10,6 +10,7 @@ import asyncio
 from aiohttp import web
 import paho.mqtt.client as mqtt
 from typing import Union
+import subprocess
 
 # Import the tool functions from the tools module
 from fastmcp_todo_server.tools import (
@@ -104,8 +105,7 @@ async def update_device_status_tool(agent_name: str, status: bool = True, ctx: C
     return {"device": agent_name, "status": status_text, "topic": topic}
 
 @server.tool()
-async def deploy_nodered_flow_tool(flow_json: str, node_red_url: str = os.getenv("NR_URL", None),
-                                  username: str = os.getenv("NR_USER", None), password: str = os.getenv("NR_PASS", None), ctx: Context = None) -> str:
+async def deploy_nodered_flow_tool(flow_json_name: str, ctx: Context = None) -> str:
     """
     Deploys a Node-RED flow to a Node-RED instance.
     
@@ -123,15 +123,32 @@ async def deploy_nodered_flow_tool(flow_json: str, node_red_url: str = os.getenv
     import json
 
     # Set default Node-RED URL if not provided
-    if not node_red_url:
-        node_red_url = "http://localhost:9191"
+
+    node_red_url = os.getenv("NR_URL", "http://localhost:9191")
+
+    username = os.getenv("NR_USER", None)
+    password = os.getenv("NR_PASS", None)
+
+    # Add local git pull
+    dashboard_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../dashboard"))
+    result = ""
+    try:
+        result = subprocess.run(['git', 'pull'], cwd=dashboard_dir, check=True)
+    except subprocess.CalledProcessError as e:
+        return {"success": False, "error": f"Git pull failed: {str(e)} {result}"}
+
+    flow_json_name = f"../../dashboard/{flow_json_name}"
+    flow_path = os.path.abspath(os.path.join(os.path.dirname(__file__), flow_json_name))
+    
+    if not os.path.exists(flow_path):
+        return {"success": False, "error": f"Flow file not found: {flow_json_name}, {result}"}
 
     # Handle flow_json input - convert from string if needed
     try:
-        if isinstance(flow_json, str):
-            flow_data = json.loads(flow_json)
+        if isinstance(flow_json_name, str):
+            flow_data = json.loads(flow_json_name)
         else:
-            flow_data = flow_json
+            flow_data = flow_json_name
     except json.JSONDecodeError as e:
         return {"success": False, "error": f"Invalid JSON string: {str(e)}"}
 
