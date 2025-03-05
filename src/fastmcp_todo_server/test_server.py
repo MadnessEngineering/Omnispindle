@@ -70,7 +70,7 @@ def test_todo_list(test_client):
         "/todos/",
         json={"title": "Test todo", "completed": False}
     )
-    
+
     response = test_client.get("/todos/")
     assert response.status_code == 200
     data = response.json()
@@ -85,7 +85,7 @@ def test_todo_update(test_client):
         json={"title": "Test todo", "completed": False}
     )
     todo_id = create_response.json()["id"]
-    
+
     # Update the todo
     response = test_client.put(
         f"/todos/{todo_id}",
@@ -104,11 +104,11 @@ def test_todo_delete(test_client):
         json={"title": "Test todo", "completed": False}
     )
     todo_id = create_response.json()["id"]
-    
+
     # Delete the todo
     response = test_client.delete(f"/todos/{todo_id}")
     assert response.status_code == 200
-    
+
     # Verify it's deleted
     get_response = test_client.get(f"/todos/{todo_id}")
     assert get_response.status_code == 404
