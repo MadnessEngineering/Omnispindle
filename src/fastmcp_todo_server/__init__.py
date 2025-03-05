@@ -21,9 +21,9 @@ import ssl
 from fastmcp import FastMCP, Context
 
 # Import the tool functions from the tools module
-from .tools import add_todo, query_todos, update_todo, mqtt_publish, delete_todo, get_todo, mark_todo_complete
-from .tools import list_todos_by_status, add_lesson, get_lesson, update_lesson, delete_lesson, list_lessons, search_todos
-from .tools import search_lessons
+from fastmcp_todo_server.tools import add_todo, query_todos, update_todo, mqtt_publish, delete_todo, get_todo, mark_todo_complete
+from fastmcp_todo_server.tools import list_todos_by_status, add_lesson, get_lesson, update_lesson, delete_lesson, list_lessons, search_todos
+from fastmcp_todo_server.tools import search_lessons
 
 # Load environment variables
 load_dotenv()
