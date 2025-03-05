@@ -1,71 +1,51 @@
-from fastmcp import FastMCP, Context
-from pymongo import MongoClient
-from datetime import datetime, UTC
-import uuid
-import os
-from dotenv import load_dotenv
-import json
-# import logging
 import asyncio
+import json
+import sys
+import os
+import logging
+import uuid
+import requests
+from pathlib import Path
+from datetime import datetime, timezone, UTC
+from typing import Optional, List, Dict, Any
+import uvicorn
+import aiohttp
+from pymongo import MongoClient
+from dotenv import load_dotenv
 from aiohttp import web
 import paho.mqtt.client as mqtt
-from typing import Union
 import subprocess
 import ssl
-import aiohttp
-import logging
+
+# Import FastMCP
+from fastmcp import FastMCP, Context
 
 # Import the tool functions from the tools module
-from fastmcp_todo_server.tools import (
-    add_todo,
-    query_todos,
-    update_todo,
-    mqtt_publish,
-    delete_todo,
-    get_todo,
-    mark_todo_complete,
-    list_todos_by_status,
-    add_lesson,
-    get_lesson,
-    update_lesson,
-    delete_lesson,
-    list_lessons,
-    search_todos,
-    search_lessons,
-    # Remove this since it doesn't exist in the installed package
-    # deploy_nodered_flow,
-)
-
-# Comment out all logging configuration
-# logging.basicConfig(
-#     level=logging.DEBUG,
-#     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-# )
-# logger = logging.getLogger(__name__)
-
-# Also enable debug logging for FastMCP
-# logging.getLogger('fastmcp').setLevel(logging.DEBUG)
-# logging.getLogger('mcp').setLevel(logging.DEBUG)
+from .tools import add_todo, query_todos, update_todo, mqtt_publish, delete_todo, get_todo, mark_todo_complete
+from .tools import list_todos_by_status, add_lesson, get_lesson, update_lesson, delete_lesson, list_lessons, search_todos
+from .tools import search_lessons
 
 # Load environment variables
 load_dotenv()
 
 # MongoDB configuration
 MONGODB_URI = os.getenv("MONGODB_URI", "mongodb://localhost:27017")
-MONGODB_DB = os.getenv("MONGODB_DB", "swarmonomicon")
+MONGODB_DB = os.getenv("MONGODB_DB", "todo_app")
 MONGODB_COLLECTION = os.getenv("MONGODB_COLLECTION", "todos")
 
 # MQTT configuration
-MQTT_HOST = "3.134.3.199"
-MQTT_PORT = 3003
+MQTT_HOST = os.getenv("MQTT_HOST", "localhost")
+MQTT_PORT = int(os.getenv("MQTT_PORT", 1883))
 MQTT_KEEPALIVE = 60
 
-# Cursor MCP configuration
-# CURSOR_MCP_URL = os.getenv("CURSOR_MCP_URL", "http://localhost:8000")
-# CURSOR_MCP_SSE_ENDPOINT = os.getenv("CURSOR_MCP_SSE_ENDPOINT", "/sse")
-
-# Import the server instance from our server module
-from fastmcp_todo_server.server import server
+# Initialize server from fastmcp
+server = None
+try:
+    # Check if server is imported from elsewhere
+    from .server import server
+except ImportError:
+    # If not, create a new server instance
+    server = FastMCP("todo-server", server_type="sse")
 
 # Create MongoDB connection at module level
 mongo_client = MongoClient(MONGODB_URI)
@@ -73,27 +53,47 @@ db = mongo_client[MONGODB_DB]
 collection = db[MONGODB_COLLECTION]
 lessons_collection = db["lessons_learned"]
 
-# Register tools using the FastMCP decorator syntax
-@server.tool()
+# Modify tool registration to prevent duplicates
+def register_tool_once(tool_func):
+    """
+    Decorator to register a tool only if it hasn't been registered before
+    """
+    try:
+        # Check if the tool is already registered
+        if not hasattr(server, '_registered_tools'):
+            server._registered_tools = set()
+
+        # If tool is not already registered, register it
+        if tool_func.__name__ not in server._registered_tools:
+            server.tool()(tool_func)
+            server._registered_tools.add(tool_func.__name__)
+
+        return tool_func
+    except Exception as e:
+        print(f"Error registering tool {tool_func.__name__}: {e}")
+        return tool_func
+
+# Replace @server.tool() decorators with @register_tool_once
+@register_tool_once
 async def add_todo_tool(description: str, priority: str = "initial", target_agent: str = "user", ctx: Context = None) -> str:
     result = await add_todo(description, priority, target_agent, ctx)
     return json.dumps(result)
 
-@server.tool()
+@register_tool_once
 async def query_todos_tool(filter: dict = None, projection: dict = None, limit: int = 100) -> str:
     result = await query_todos(filter, projection, limit)
     return json.dumps(result, default=str)
 
-@server.tool()
+@register_tool_once
 async def update_todo_tool(todo_id: str, updates: dict, ctx: Context = None) -> str:
     return await update_todo(todo_id, updates, ctx)
 
-@server.tool()
+@register_tool_once
 async def mqtt_publish_tool(topic: str, message: str, ctx: Context = None) -> str:
     await server.publish(topic, message)
     return json.dumps({"topic": topic, "message": message})
 
-@server.tool()
+@register_tool_once
 async def update_device_status_tool(agent_name: str, status: bool = True, ctx: Context = None) -> str:
     """
     Updates the status of a device in the MQTT Status Dashboard.
@@ -112,7 +112,7 @@ async def update_device_status_tool(agent_name: str, status: bool = True, ctx: C
     return json.dumps({"device": agent_name, "status": status_text, "topic": topic})
 
 # Define deploy_nodered_flow_tool directly in __init__.py
-@server.tool()
+@register_tool_once
 async def deploy_nodered_flow_tool(flow_json_name: str, ctx: Context = None) -> str:
     """
     Deploys a Node-RED flow to a Node-RED instance.
@@ -126,7 +126,7 @@ async def deploy_nodered_flow_tool(flow_json_name: str, ctx: Context = None) -> 
     try:
         # Set up logging
         logger = logging.getLogger(__name__)
-        
+
         # Set default Node-RED URL if not provided
         node_red_url = os.getenv("NR_URL", "http://localhost:9191")
         username = os.getenv("NR_USER", None)
@@ -284,48 +284,48 @@ async def deploy_nodered_flow_tool(flow_json_name: str, ctx: Context = None) -> 
         logging.exception("Unhandled exception in deploy_nodered_flow_tool")
         return json.dumps({"success": False, "error": f"Unhandled exception: {str(e)}"})
 
-@server.tool()
+@register_tool_once
 async def delete_todo_tool(todo_id: str, ctx: Context = None) -> str:
     return await delete_todo(todo_id, ctx)
 
-@server.tool()
+@register_tool_once
 async def get_todo_tool(todo_id: str) -> str:
     return await get_todo(todo_id)
 
-@server.tool()
+@register_tool_once
 async def mark_todo_complete_tool(todo_id: str, ctx: Context = None) -> str:
     return await mark_todo_complete(todo_id, ctx)
 
-@server.tool()
+@register_tool_once
 async def list_todos_by_status_tool(status: str, limit: int = 100) -> str:
     return await list_todos_by_status(status, limit)
 
-@server.tool()
+@register_tool_once
 async def add_lesson_tool(language: str, topic: str, lesson_learned: str, tags: list = None, ctx: Context = None) -> str:
     return await add_lesson(language, topic, lesson_learned, tags, ctx)
 
-@server.tool()
+@register_tool_once
 async def get_lesson_tool(lesson_id: str) -> str:
     return await get_lesson(lesson_id)
 
-@server.tool()
+@register_tool_once
 async def update_lesson_tool(lesson_id: str, updates: dict, ctx: Context = None) -> str:
     return await update_lesson(lesson_id, updates, ctx)
 
-@server.tool()
+@register_tool_once
 async def delete_lesson_tool(lesson_id: str, ctx: Context = None) -> str:
     return await delete_lesson(lesson_id, ctx)
 
-@server.tool()
+@register_tool_once
 async def list_lessons_tool(limit: int = 100) -> str:
     return await list_lessons(limit)
 
-@server.tool()
+@register_tool_once
 async def search_todos_tool(query: str, fields: list = None, limit: int = 100) -> str:
     """Search todos with text search capabilities"""
     return await search_todos(query, fields, limit)
 
-@server.tool()
+@register_tool_once
 async def search_lessons_tool(query: str, fields: list = None, limit: int = 100) -> str:
     """Search lessons with text search capabilities"""
     return await search_lessons(query, fields, limit)
@@ -334,9 +334,6 @@ async def run_server():
     """Run the FastMCP server"""
     print("Starting FastMCP server")
     try:
-        import sys
-        import uvicorn
-
         # Custom exception handler to silence specific SSE-related errors
         original_excepthook = sys.excepthook
 
@@ -357,9 +354,12 @@ async def run_server():
         if "formatters" in log_config:
             log_config["formatters"]["access"]["fmt"] = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 
-        # Enable debug logging for the server
-        server.enable_debug_logging()
-        
+        # Configure logging instead
+        logging.basicConfig(
+            level=logging.DEBUG,
+            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        )
+
         # Run the server
         await server.run_sse_async()  # Use run_sse_async directly
     except Exception as e:
