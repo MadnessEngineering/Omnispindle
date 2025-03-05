@@ -130,11 +130,114 @@
         ]
     },
     {
+        "id": "mqtt-message-log-in",
+        "type": "mqtt in",
+        "z": "mqtt-status-dashboard",
+        "name": "All MQTT Messages",
+        "topic": "#",
+        "qos": "2",
+        "datatype": "auto",
+        "broker": "",
+        "nl": false,
+        "rap": true,
+        "rh": 0,
+        "x": 170,
+        "y": 280,
+        "wires": [
+            [
+                "mqtt-message-log-processor"
+            ]
+        ]
+    },
+    {
+        "id": "mqtt-message-log-processor",
+        "type": "function",
+        "z": "mqtt-status-dashboard",
+        "name": "Format Message Log",
+        "func": "// Get current message log from flow context (or initialize if not exists)\nlet messageLog = flow.get('messageLog') || [];\n\n// Format the incoming message\nconst timestamp = new Date().toISOString();\nconst topic = msg.topic;\n\n// Format the payload based on type\nlet payload;\nif (typeof msg.payload === 'object') {\n    try {\n        payload = JSON.stringify(msg.payload);\n    } catch (e) {\n        payload = '[Object]';\n    }\n} else {\n    payload = String(msg.payload);\n}\n\n// Create a formatted log entry\nconst logEntry = {\n    timestamp: timestamp,\n    topic: topic,\n    payload: payload\n};\n\n// Add to the beginning of the log array (newest first)\nmessageLog.unshift(logEntry);\n\n// Limit log size to prevent memory issues (keep last 100 messages)\nif (messageLog.length > 100) {\n    messageLog = messageLog.slice(0, 100);\n}\n\n// Store updated log\nflow.set('messageLog', messageLog);\n\n// Return the entire log for the UI\nreturn { payload: messageLog };\n",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "// Initialize empty message log\nflow.set('messageLog', []);\n",
+        "finalize": "",
+        "libs": [],
+        "x": 430,
+        "y": 280,
+        "wires": [
+            [
+                "mqtt-message-log-ui-template"
+            ]
+        ]
+    },
+    {
+        "id": "mqtt-message-log-ui-template",
+        "type": "ui_template",
+        "z": "mqtt-status-dashboard",
+        "group": "mqtt_log_group",
+        "name": "MQTT Message Log",
+        "order": 0,
+        "width": "12",
+        "height": "12",
+        "format": "<div ng-init=\"init()\" id=\"mqtt-log-panel\">\n  <h2>MQTT Message Log</h2>\n  \n  <div class=\"log-controls\">\n    <input type=\"text\" ng-model=\"filterText\" placeholder=\"Filter by topic...\" />\n    <button ng-click=\"clearLog()\">Clear Log</button>\n  </div>\n  \n  <div class=\"mqtt-log-container\">\n    <table class=\"mqtt-log-table\">\n      <thead>\n        <tr>\n          <th>Time</th>\n          <th>Topic</th>\n          <th>Payload</th>\n        </tr>\n      </thead>\n      <tbody>\n        <tr ng-repeat=\"entry in messageLog | filter: topicFilter\" class=\"log-entry\">\n          <td class=\"timestamp\">{{formatTime(entry.timestamp)}}</td>\n          <td class=\"topic\">{{entry.topic}}</td>\n          <td class=\"payload\">{{entry.payload}}</td>\n        </tr>\n      </tbody>\n    </table>\n  </div>\n</div>\n\n<style>\n  #mqtt-log-panel {\n    padding: 20px;\n    font-family: Arial, sans-serif;\n  }\n  \n  h2 {\n    margin-top: 0;\n    margin-bottom: 20px;\n    font-size: 28px;\n  }\n  \n  .log-controls {\n    display: flex;\n    margin-bottom: 15px;\n    gap: 10px;\n  }\n  \n  .log-controls input {\n    flex-grow: 1;\n    padding: 8px;\n    border: 1px solid #ccc;\n    border-radius: 4px;\n  }\n  \n  .log-controls button {\n    padding: 8px 15px;\n    background-color: #f2f2f2;\n    border: 1px solid #ccc;\n    border-radius: 4px;\n    cursor: pointer;\n  }\n  \n  .log-controls button:hover {\n    background-color: #e6e6e6;\n  }\n  \n  .mqtt-log-container {\n    height: 300px;\n    overflow-y: auto;\n    border: 1px solid #ccc;\n    border-radius: 4px;\n    background-color: #f9f9f9;\n  }\n  \n  .mqtt-log-table {\n    width: 100%;\n    border-collapse: collapse;\n  }\n  \n  .mqtt-log-table th {\n    position: sticky;\n    top: 0;\n    background-color: #e0e0e0;\n    padding: 10px;\n    text-align: left;\n    font-weight: bold;\n    border-bottom: 2px solid #ccc;\n  }\n  \n  .mqtt-log-table td {\n    padding: 8px;\n    border-bottom: 1px solid #ddd;\n    word-break: break-word;\n  }\n  \n  .log-entry:hover {\n    background-color: #f0f0f0;\n  }\n  \n  .timestamp {\n    width: 180px;\n    white-space: nowrap;\n  }\n  \n  .topic {\n    width: 30%;\n  }\n  \n  .payload {\n    width: 40%;\n  }\n</style>\n\n<script>\n(function(scope) {\n  scope.init = function() {\n    scope.messageLog = [];\n    scope.filterText = '';\n    \n    scope.topicFilter = function(item) {\n      if (!scope.filterText) return true;\n      return item.topic.toLowerCase().includes(scope.filterText.toLowerCase());\n    };\n    \n    scope.formatTime = function(timestamp) {\n      // Format ISO timestamp to more readable format\n      const date = new Date(timestamp);\n      return date.toLocaleTimeString() + '.' + date.getMilliseconds().toString().padStart(3, '0');\n    };\n    \n    scope.clearLog = function() {\n      scope.messageLog = [];\n      // Use $injector to get the $http service\n      const $http = this.$injector.get('$http');\n      // Send a message to Node-RED to clear the log\n      $http.post('ui/mqtt-message-log-ui-template/clearLog', {});\n    };\n    \n    scope.$watch('msg.payload', function(payload) {\n      if (!payload) return;\n      scope.messageLog = payload;\n    });\n  };\n})(scope);\n</script>",
+        "storeOutMessages": true,
+        "fwdInMessages": true,
+        "resendOnRefresh": true,
+        "templateScope": "local",
+        "className": "",
+        "x": 680,
+        "y": 280,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "mqtt-message-log-clear",
+        "type": "ui_ui_control",
+        "z": "mqtt-status-dashboard",
+        "name": "Handle Clear Log",
+        "events": "mqtt-message-log-ui-template:clearLog",
+        "x": 430,
+        "y": 340,
+        "wires": [
+            [
+                "mqtt-message-log-clear-function"
+            ]
+        ]
+    },
+    {
+        "id": "mqtt-message-log-clear-function",
+        "type": "function",
+        "z": "mqtt-status-dashboard",
+        "name": "Clear Message Log",
+        "func": "// Clear the message log in flow context\nflow.set('messageLog', []);\n\n// Return empty array to update the UI\nreturn { payload: [] };\n",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 670,
+        "y": 340,
+        "wires": [
+            [
+                "mqtt-message-log-ui-template"
+            ]
+        ]
+    },
+    {
         "id": "device_status_group",
         "type": "ui_group",
         "name": "Device Status",
         "tab": "device_status_tab",
         "order": 1,
+        "disp": true,
+        "width": "12",
+        "collapse": false
+    },
+    {
+        "id": "mqtt_log_group",
+        "type": "ui_group",
+        "name": "MQTT Message Log",
+        "tab": "device_status_tab",
+        "order": 2,
         "disp": true,
         "width": "12",
         "collapse": false
