@@ -1,8 +1,9 @@
 import asyncio
 # import logging
 from server import server
-from __init__ import run_server
+from __init__ import run_server, MOSQUITTO_PUB_AVAILABLE
 import sys
+import subprocess
 
 # logger = logging.getLogger(__name__)
 
@@ -10,6 +11,14 @@ def main():
     """Main entry point"""
     # logger.info("Starting Todo Server")
     print("Starting Todo Server")
+
+    # Print a warning if mosquitto_pub is not available
+    if not MOSQUITTO_PUB_AVAILABLE:
+        print("WARNING: mosquitto_pub command not found. MQTT status publishing will be disabled.")
+        print("  To enable MQTT status publishing, install the Mosquitto clients package:")
+        print("  Ubuntu/Debian: sudo apt install mosquitto-clients")
+        print("  macOS: brew install mosquitto")
+        print("  Windows: Download from https://mosquitto.org/download/")
 
     try:
         asyncio.run(run_server())

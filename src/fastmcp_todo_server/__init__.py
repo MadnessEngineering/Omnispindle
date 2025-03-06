@@ -6,6 +6,7 @@ import logging
 import uuid
 import requests
 import signal
+import shutil
 from pathlib import Path
 from datetime import datetime, timezone, UTC
 from typing import Optional, List, Dict, Any
@@ -36,7 +37,7 @@ MONGODB_COLLECTION = os.getenv("MONGODB_COLLECTION", "todos")
 
 # MQTT configuration
 MQTT_HOST = os.getenv("MQTT_HOST", "localhost")
-MQTT_PORT = int(os.getenv("MQTT_PORT", 1883))
+MQTT_PORT = int(os.getenv("MQTT_PORT", 3003))
 MQTT_KEEPALIVE = 60
 
 # Initialize server from fastmcp
@@ -53,6 +54,33 @@ mongo_client = MongoClient(MONGODB_URI)
 db = mongo_client[MONGODB_DB]
 collection = db[MONGODB_COLLECTION]
 lessons_collection = db["lessons_learned"]
+
+# Check if mosquitto_pub is available
+MOSQUITTO_PUB_AVAILABLE = shutil.which("mosquitto_pub") is not None
+
+def publish_mqtt_status(topic, message, retain=False):
+    """
+    Publish MQTT message using mosquitto_pub command line tool
+    Falls back to logging if mosquitto_pub is not available
+    
+    Args:
+        topic: MQTT topic to publish to
+        message: Message to publish (will be converted to string)
+        retain: Whether to set the retain flag
+    """
+    if not MOSQUITTO_PUB_AVAILABLE:
+        print(f"MQTT publishing not available - would publish {message} to {topic} (retain={retain})")
+        return False
+        
+    try:
+        cmd = ["mosquitto_pub", "-h", MQTT_HOST, "-p", str(MQTT_PORT), "-t", topic, "-m", str(message)]
+        if retain:
+            cmd.append("-r")
+        subprocess.run(cmd, check=True)
+        return True
+    except subprocess.SubprocessError as e:
+        print(f"Failed to publish MQTT message: {str(e)}")
+        return False
 
 # Modify tool registration to prevent duplicates
 def register_tool_once(tool_func):
@@ -335,31 +363,20 @@ async def run_server():
     """Run the FastMCP server"""
     print("Starting FastMCP server")
     try:
-        # Publish server online status using MQTT
+        # Get hostname for status topic
         hostname = os.getenv("HOSTNAME", os.uname().nodename)
         topic = f"status/{hostname}/alive"
         
-        # Create MQTT client for status updates
-        mqtt_client = mqtt.Client()
-        mqtt_client.connect(MQTT_HOST, MQTT_PORT, MQTT_KEEPALIVE)
-        
-        # Publish server online message (1) - not retained
-        mqtt_client.publish(topic, "1")
+        # Publish online status message (1) via command line
+        publish_mqtt_status(topic, "1")
         print(f"Published online status to {topic}")
-        
-        # Set up retained offline message (0) to be published on exit or crash
-        mqtt_client.will_set(topic, "0", qos=1, retain=True)
         
         # Set up signal handlers for graceful shutdown
         def signal_handler(sig, frame):
             print(f"Received signal {sig}, shutting down gracefully...")
-            # Publish offline status with retain flag
-            try:
-                mqtt_client.publish(topic, "0", retain=True)
-                mqtt_client.disconnect()
-                print(f"Published offline status to {topic} (retained)")
-            except Exception as ex:
-                print(f"Failed to publish offline status: {str(ex)}")
+            # Publish offline status with retain flag via command line
+            publish_mqtt_status(topic, "0", retain=True)
+            print(f"Published offline status to {topic} (retained)")
             # Exit gracefully
             sys.exit(0)
             
@@ -401,17 +418,8 @@ async def run_server():
         try:
             hostname = os.getenv("HOSTNAME", os.uname().nodename)
             topic = f"status/{hostname}/alive"
-            mqtt_client = mqtt.Client()
-            mqtt_client.connect(MQTT_HOST, MQTT_PORT, MQTT_KEEPALIVE)
-            mqtt_client.publish(topic, "0", retain=True)
-            mqtt_client.disconnect()
+            publish_mqtt_status(topic, "0", retain=True)
             print(f"Published offline status to {topic} (retained)")
         except Exception as ex:
             print(f"Failed to publish offline status: {str(ex)}")
         raise
-    finally:
-        # Disconnect MQTT client
-        try:
-            mqtt_client.disconnect()
-        except:
-            pass
