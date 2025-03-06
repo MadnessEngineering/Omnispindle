@@ -2,6 +2,7 @@ import asyncio
 # import logging
 from server import server
 from __init__ import run_server
+import sys
 
 # logger = logging.getLogger(__name__)
 
@@ -13,10 +14,11 @@ def main():
     try:
         asyncio.run(run_server())
     except KeyboardInterrupt:
+        # KeyboardInterrupt will now be handled by the signal handler in run_server
         print("Shutting down server")
     except Exception as e:
         print(f"Error running server: {str(e)}")
-        raise
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()

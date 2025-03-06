@@ -5,6 +5,7 @@ import os
 import logging
 import uuid
 import requests
+import signal
 from pathlib import Path
 from datetime import datetime, timezone, UTC
 from typing import Optional, List, Dict, Any
@@ -334,6 +335,38 @@ async def run_server():
     """Run the FastMCP server"""
     print("Starting FastMCP server")
     try:
+        # Publish server online status using MQTT
+        hostname = os.getenv("HOSTNAME", os.uname().nodename)
+        topic = f"status/{hostname}/alive"
+        
+        # Create MQTT client for status updates
+        mqtt_client = mqtt.Client()
+        mqtt_client.connect(MQTT_HOST, MQTT_PORT, MQTT_KEEPALIVE)
+        
+        # Publish server online message (1) - not retained
+        mqtt_client.publish(topic, "1")
+        print(f"Published online status to {topic}")
+        
+        # Set up retained offline message (0) to be published on exit or crash
+        mqtt_client.will_set(topic, "0", qos=1, retain=True)
+        
+        # Set up signal handlers for graceful shutdown
+        def signal_handler(sig, frame):
+            print(f"Received signal {sig}, shutting down gracefully...")
+            # Publish offline status with retain flag
+            try:
+                mqtt_client.publish(topic, "0", retain=True)
+                mqtt_client.disconnect()
+                print(f"Published offline status to {topic} (retained)")
+            except Exception as ex:
+                print(f"Failed to publish offline status: {str(ex)}")
+            # Exit gracefully
+            sys.exit(0)
+            
+        # Register signal handlers
+        signal.signal(signal.SIGINT, signal_handler)
+        signal.signal(signal.SIGTERM, signal_handler)
+        
         # Custom exception handler to silence specific SSE-related errors
         original_excepthook = sys.excepthook
 
@@ -364,4 +397,21 @@ async def run_server():
         await server.run_sse_async()  # Use run_sse_async directly
     except Exception as e:
         print(f"Error in server: {str(e)}")
+        # Publish offline status with retain flag in case of error
+        try:
+            hostname = os.getenv("HOSTNAME", os.uname().nodename)
+            topic = f"status/{hostname}/alive"
+            mqtt_client = mqtt.Client()
+            mqtt_client.connect(MQTT_HOST, MQTT_PORT, MQTT_KEEPALIVE)
+            mqtt_client.publish(topic, "0", retain=True)
+            mqtt_client.disconnect()
+            print(f"Published offline status to {topic} (retained)")
+        except Exception as ex:
+            print(f"Failed to publish offline status: {str(ex)}")
         raise
+    finally:
+        # Disconnect MQTT client
+        try:
+            mqtt_client.disconnect()
+        except:
+            pass
