@@ -1,0 +1,194 @@
+[
+    {
+        "id": "gateway-stats-dashboard",
+        "type": "tab",
+        "label": "Gateway Statistics Dashboard",
+        "disabled": false,
+        "info": "Dashboard showing statistics for various gateways including element counts and reading rates"
+    },
+    {
+        "id": "gateway-stats-in",
+        "type": "mqtt in",
+        "z": "gateway-stats-dashboard",
+        "name": "Gateway Data",
+        "topic": "gateway/+/data",
+        "qos": "2",
+        "datatype": "json",
+        "broker": "",
+        "nl": false,
+        "rap": true,
+        "rh": 0,
+        "x": 160,
+        "y": 120,
+        "wires": [
+            [
+                "gateway-stats-process"
+            ]
+        ]
+    },
+    {
+        "id": "gateway-stats-process",
+        "type": "function",
+        "z": "gateway-stats-dashboard",
+        "name": "Process Gateway Stats",
+        "func": "// Extract gateway name from the topic\nconst topicParts = msg.topic.split('/');\nconst gatewayName = topicParts[1];\n\n// Get current gateway stats from flow context\nlet gatewayStats = flow.get('gatewayStats') || {};\nlet readingCounts = flow.get('readingCounts') || {};\n\n// Initialize this gateway's stats if not already present\nif (!gatewayStats[gatewayName]) {\n    gatewayStats[gatewayName] = {\n        elements: 0,\n        lastUpdate: 0,\n        hourlyReadings: 0,\n        dailyReadings: 0\n    };\n}\n\n// Initialize reading counts if not present\nif (!readingCounts[gatewayName]) {\n    readingCounts[gatewayName] = {\n        timestamps: [], // Array to store timestamps of readings for 15-min calculation\n        hourly: Array(24).fill(0), // 24 hours\n        daily: Array(7).fill(0),   // 7 days of the week\n        hourlyIndex: new Date().getHours(),\n        dailyIndex: new Date().getDay()\n    };\n}\n\n// Handle data payload\nif (msg.payload) {\n    try {\n        // Count elements in the payload (assuming payload is either array or has elements property)\n        let elementCount = 0;\n        \n        if (Array.isArray(msg.payload)) {\n            elementCount = msg.payload.length;\n        } else if (msg.payload.elements && Array.isArray(msg.payload.elements)) {\n            elementCount = msg.payload.elements.length;\n        } else if (typeof msg.payload === 'object') {\n            // Count properties if it's an object but doesn't have expected structure\n            elementCount = Object.keys(msg.payload).length;\n        }\n        \n        // Update gateway stats\n        gatewayStats[gatewayName].elements = elementCount;\n        gatewayStats[gatewayName].lastUpdate = Date.now();\n        \n        // Update readings count\n        const now = Date.now();\n        const timestamps = readingCounts[gatewayName].timestamps;\n        \n        // Add current timestamp\n        timestamps.push(now);\n        \n        // Remove timestamps older than 15 minutes\n        const fifteenMinutesAgo = now - (15 * 60 * 1000);\n        while (timestamps.length > 0 && timestamps[0] < fifteenMinutesAgo) {\n            timestamps.shift();\n        }\n        \n        // Check if we need to rotate hourly/daily counters\n        const currentHour = new Date().getHours();\n        const currentDay = new Date().getDay();\n        \n        if (currentHour !== readingCounts[gatewayName].hourlyIndex) {\n            // We've moved to a new hour, rotate the index\n            readingCounts[gatewayName].hourlyIndex = currentHour;\n            readingCounts[gatewayName].hourly[currentHour] = 0;\n        }\n        \n        if (currentDay !== readingCounts[gatewayName].dailyIndex) {\n            // We've moved to a new day, rotate the index\n            readingCounts[gatewayName].dailyIndex = currentDay;\n            readingCounts[gatewayName].daily[currentDay] = 0;\n        }\n        \n        // Increment counters\n        readingCounts[gatewayName].hourly[currentHour]++;\n        readingCounts[gatewayName].daily[currentDay]++;\n        \n        // Update total counts\n        gatewayStats[gatewayName].hourlyReadings = readingCounts[gatewayName].hourly.reduce((a, b) => a + b, 0);\n        gatewayStats[gatewayName].dailyReadings = readingCounts[gatewayName].daily.reduce((a, b) => a + b, 0);\n    } catch (e) {\n        node.error(`Error processing gateway data for ${gatewayName}: ${e.message}`);\n    }\n}\n\n// Save updated stats\nflow.set('gatewayStats', gatewayStats);\nflow.set('readingCounts', readingCounts);\n\n// Create a complete stats object for the UI\nconst uiStats = {};\n\nObject.keys(gatewayStats).forEach(gateway => {\n    uiStats[gateway] = {\n        ...gatewayStats[gateway],\n        recentReadings: readingCounts[gateway] ? readingCounts[gateway].timestamps.length : 0,\n        hourlyData: readingCounts[gateway] ? readingCounts[gateway].hourly : [],\n        dailyData: readingCounts[gateway] ? readingCounts[gateway].daily : []\n    };\n});\n\nreturn { payload: uiStats };\n",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "// Initialize data structures\nflow.set('gatewayStats', {});\nflow.set('readingCounts', {});\n",
+        "finalize": "",
+        "libs": [],
+        "x": 380,
+        "y": 120,
+        "wires": [
+            [
+                "gateway-stats-ui-controller"
+            ]
+        ]
+    },
+    {
+        "id": "gateway-stats-ui-controller",
+        "type": "function",
+        "z": "gateway-stats-dashboard",
+        "name": "UI Controller",
+        "func": "// Forward stats to different UI components\nreturn [\n    { payload: msg.payload },  // Overview panel\n    { payload: msg.payload }   // Charts panel\n];\n",
+        "outputs": 2,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 610,
+        "y": 120,
+        "wires": [
+            [
+                "gateway-stats-overview"
+            ],
+            [
+                "gateway-stats-charts"
+            ]
+        ]
+    },
+    {
+        "id": "gateway-stats-overview",
+        "type": "ui_template",
+        "z": "gateway-stats-dashboard",
+        "group": "gateway_stats_group",
+        "name": "Gateway Stats Overview",
+        "order": 1,
+        "width": "12",
+        "height": "8",
+        "format": "<div ng-init=\"init()\" id=\"gateway-stats-overview\">\n  <h2>Gateway Statistics Overview</h2>\n  \n  <div class=\"stats-container\" ng-if=\"Object.keys(gatewayStats).length === 0\">\n    <p class=\"no-data\">Waiting for gateway data...</p>\n  </div>\n  \n  <div class=\"stats-container\" ng-if=\"Object.keys(gatewayStats).length > 0\">\n    <div class=\"gateway-card\" ng-repeat=\"(gatewayName, stats) in gatewayStats\">\n      <div class=\"gateway-header\">\n        <h3>{{gatewayName}}</h3>\n        <span class=\"last-update\">Last update: {{formatTime(stats.lastUpdate)}}</span>\n      </div>\n      \n      <div class=\"stat-grid\">\n        <div class=\"stat-box\">\n          <div class=\"stat-value\">{{stats.elements}}</div>\n          <div class=\"stat-label\">Elements</div>\n        </div>\n        \n        <div class=\"stat-box\">\n          <div class=\"stat-value\">{{stats.recentReadings}}</div>\n          <div class=\"stat-label\">Readings (15 min)</div>\n        </div>\n        \n        <div class=\"stat-box\">\n          <div class=\"stat-value\">{{stats.hourlyReadings}}</div>\n          <div class=\"stat-label\">Readings (24h)</div>\n        </div>\n        \n        <div class=\"stat-box\">\n          <div class=\"stat-value\">{{stats.dailyReadings}}</div>\n          <div class=\"stat-label\">Readings (7d)</div>\n        </div>\n      </div>\n    </div>\n  </div>\n</div>\n\n<style>\n  #gateway-stats-overview {\n    padding: 20px;\n    font-family: Arial, sans-serif;\n  }\n  \n  h2 {\n    margin-top: 0;\n    margin-bottom: 20px;\n    font-size: 28px;\n    color: #333;\n  }\n  \n  .stats-container {\n    display: flex;\n    flex-wrap: wrap;\n    gap: 20px;\n  }\n  \n  .no-data {\n    font-size: 18px;\n    color: #666;\n    font-style: italic;\n    padding: 30px 0;\n    text-align: center;\n    width: 100%;\n  }\n  \n  .gateway-card {\n    background-color: #f8f9fa;\n    border-radius: 8px;\n    box-shadow: 0 2px 10px rgba(0,0,0,0.1);\n    padding: 20px;\n    width: calc(50% - 20px);\n    min-width: 300px;\n    flex-grow: 1;\n  }\n  \n  .gateway-header {\n    display: flex;\n    justify-content: space-between;\n    align-items: center;\n    margin-bottom: 15px;\n    border-bottom: 1px solid #eee;\n    padding-bottom: 10px;\n  }\n  \n  .gateway-header h3 {\n    margin: 0;\n    font-size: 20px;\n    color: #2c3e50;\n  }\n  \n  .last-update {\n    font-size: 12px;\n    color: #7f8c8d;\n  }\n  \n  .stat-grid {\n    display: grid;\n    grid-template-columns: repeat(2, 1fr);\n    gap: 15px;\n  }\n  \n  .stat-box {\n    background-color: #fff;\n    border-radius: 6px;\n    padding: 15px;\n    text-align: center;\n    box-shadow: 0 1px 3px rgba(0,0,0,0.05);\n  }\n  \n  .stat-value {\n    font-size: 24px;\n    font-weight: bold;\n    color: #3498db;\n    margin-bottom: 5px;\n  }\n  \n  .stat-label {\n    font-size: 14px;\n    color: #7f8c8d;\n  }\n  \n  @media (max-width: 768px) {\n    .gateway-card {\n      width: 100%;\n    }\n  }\n</style>\n\n<script>\n(function(scope) {\n  scope.init = function() {\n    scope.gatewayStats = {};\n    \n    scope.formatTime = function(timestamp) {\n      if (!timestamp) return 'Never';\n      \n      const date = new Date(timestamp);\n      return date.toLocaleTimeString();\n    };\n    \n    scope.$watch('msg.payload', function(payload) {\n      if (!payload) return;\n      scope.gatewayStats = payload;\n    });\n  };\n})(scope);\n</script>",
+        "storeOutMessages": true,
+        "fwdInMessages": true,
+        "resendOnRefresh": true,
+        "templateScope": "local",
+        "className": "",
+        "x": 860,
+        "y": 80,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "gateway-stats-charts",
+        "type": "ui_template",
+        "z": "gateway-stats-dashboard",
+        "group": "gateway_charts_group",
+        "name": "Gateway Stats Charts",
+        "order": 1,
+        "width": "12",
+        "height": "10",
+        "format": "<div ng-init=\"init()\" id=\"gateway-stats-charts\">\n  <h2>Gateway Statistics Charts</h2>\n  \n  <div class=\"chart-controls\" ng-if=\"Object.keys(gatewayStats).length > 0\">\n    <select ng-model=\"selectedGateway\" ng-change=\"updateCharts()\">\n      <option value=\"\">Select a gateway...</option>\n      <option ng-repeat=\"(gatewayName, stats) in gatewayStats\" value=\"{{gatewayName}}\">{{gatewayName}}</option>\n    </select>\n  </div>\n  \n  <div class=\"no-data\" ng-if=\"Object.keys(gatewayStats).length === 0\">\n    <p>No gateway data available for charts</p>\n  </div>\n  \n  <div class=\"chart-container\" ng-if=\"selectedGateway && gatewayStats[selectedGateway]\">\n    <div class=\"chart-box\">\n      <h3>Hourly Readings</h3>\n      <canvas id=\"hourlyChart\" width=\"400\" height=\"200\"></canvas>\n    </div>\n    \n    <div class=\"chart-box\">\n      <h3>Daily Readings</h3>\n      <canvas id=\"dailyChart\" width=\"400\" height=\"200\"></canvas>\n    </div>\n  </div>\n  \n  <div class=\"chart-container\" ng-if=\"!selectedGateway && Object.keys(gatewayStats).length > 0\">\n    <p class=\"select-gateway\">Select a gateway to view charts</p>\n  </div>\n</div>\n\n<style>\n  #gateway-stats-charts {\n    padding: 20px;\n    font-family: Arial, sans-serif;\n  }\n  \n  h2 {\n    margin-top: 0;\n    margin-bottom: 20px;\n    font-size: 28px;\n    color: #333;\n  }\n  \n  h3 {\n    margin-top: 0;\n    color: #2c3e50;\n    font-size: 18px;\n  }\n  \n  .chart-controls {\n    margin-bottom: 20px;\n  }\n  \n  .chart-controls select {\n    padding: 8px 12px;\n    border-radius: 4px;\n    border: 1px solid #ddd;\n    font-size: 16px;\n    min-width: 200px;\n  }\n  \n  .chart-container {\n    display: flex;\n    flex-wrap: wrap;\n    gap: 20px;\n  }\n  \n  .chart-box {\n    background-color: #fff;\n    border-radius: 8px;\n    box-shadow: 0 2px 10px rgba(0,0,0,0.1);\n    padding: 20px;\n    width: calc(50% - 20px);\n    min-width: 300px;\n    flex-grow: 1;\n  }\n  \n  .no-data, .select-gateway {\n    font-size: 18px;\n    color: #666;\n    font-style: italic;\n    padding: 30px 0;\n    text-align: center;\n    width: 100%;\n  }\n  \n  @media (max-width: 768px) {\n    .chart-box {\n      width: 100%;\n    }\n  }\n</style>\n\n<script>\n(function(scope) {\n  let hourlyChart = null;\n  let dailyChart = null;\n  \n  scope.init = function() {\n    scope.gatewayStats = {};\n    scope.selectedGateway = '';\n    \n    scope.updateCharts = function() {\n      if (!scope.selectedGateway || !scope.gatewayStats[scope.selectedGateway]) return;\n      \n      const stats = scope.gatewayStats[scope.selectedGateway];\n      const hourlyData = stats.hourlyData || Array(24).fill(0);\n      const dailyData = stats.dailyData || Array(7).fill(0);\n      \n      // Wait for DOM to be ready\n      setTimeout(() => {\n        // Create hourly chart\n        if (hourlyChart) hourlyChart.destroy();\n        const hourlyCtx = document.getElementById('hourlyChart').getContext('2d');\n        hourlyChart = new Chart(hourlyCtx, {\n          type: 'bar',\n          data: {\n            labels: Array.from({length: 24}, (_, i) => `${i}:00`),\n            datasets: [{\n              label: 'Readings per Hour',\n              data: hourlyData,\n              backgroundColor: 'rgba(54, 162, 235, 0.5)',\n              borderColor: 'rgba(54, 162, 235, 1)',\n              borderWidth: 1\n            }]\n          },\n          options: {\n            responsive: true,\n            scales: {\n              y: {\n                beginAtZero: true\n              }\n            }\n          }\n        });\n        \n        // Create daily chart\n        if (dailyChart) dailyChart.destroy();\n        const dailyCtx = document.getElementById('dailyChart').getContext('2d');\n        const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];\n        \n        dailyChart = new Chart(dailyCtx, {\n          type: 'bar',\n          data: {\n            labels: dayNames,\n            datasets: [{\n              label: 'Readings per Day',\n              data: dailyData,\n              backgroundColor: 'rgba(75, 192, 192, 0.5)',\n              borderColor: 'rgba(75, 192, 192, 1)',\n              borderWidth: 1\n            }]\n          },\n          options: {\n            responsive: true,\n            scales: {\n              y: {\n                beginAtZero: true\n              }\n            }\n          }\n        });\n      }, 100);\n    };\n    \n    scope.$watch('msg.payload', function(payload) {\n      if (!payload) return;\n      scope.gatewayStats = payload;\n      \n      // If no gateway is selected but we have data, select the first one\n      if (!scope.selectedGateway && Object.keys(scope.gatewayStats).length > 0) {\n        scope.selectedGateway = Object.keys(scope.gatewayStats)[0];\n      }\n      \n      if (scope.selectedGateway) {\n        scope.updateCharts();\n      }\n    });\n  };\n})(scope);\n</script>\n<script src=\"https://cdn.jsdelivr.net/npm/chart.js\"></script>",
+        "storeOutMessages": true,
+        "fwdInMessages": true,
+        "resendOnRefresh": true,
+        "templateScope": "local",
+        "className": "",
+        "x": 860,
+        "y": 160,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "trigger-stats-refresh",
+        "type": "inject",
+        "z": "gateway-stats-dashboard",
+        "name": "Refresh Stats (Every 1 min)",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "60",
+        "crontab": "",
+        "once": true,
+        "onceDelay": "5",
+        "topic": "",
+        "payload": "",
+        "payloadType": "date",
+        "x": 190,
+        "y": 200,
+        "wires": [
+            [
+                "gateway-stats-process"
+            ]
+        ]
+    },
+    {
+        "id": "gateway-data-simulator",
+        "type": "inject",
+        "z": "gateway-stats-dashboard",
+        "name": "Test Data Simulator",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "10",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "gateway/simulator/data",
+        "payload": "{\"elements\":[{\"id\":1},{\"id\":2},{\"id\":3},{\"id\":4}]}",
+        "payloadType": "json",
+        "x": 180,
+        "y": 280,
+        "wires": [
+            [
+                "gateway-stats-process"
+            ]
+        ]
+    },
+    {
+        "id": "gateway_stats_group",
+        "type": "ui_group",
+        "name": "Gateway Overview",
+        "tab": "gateway_stats_tab",
+        "order": 1,
+        "disp": true,
+        "width": "12",
+        "collapse": false
+    },
+    {
+        "id": "gateway_charts_group",
+        "type": "ui_group",
+        "name": "Gateway Charts",
+        "tab": "gateway_stats_tab",
+        "order": 2,
+        "disp": true,
+        "width": "12",
+        "collapse": false
+    },
+    {
+        "id": "gateway_stats_tab",
+        "type": "ui_tab",
+        "name": "Gateway Statistics",
+        "icon": "dashboard",
+        "disabled": false,
+        "hidden": false
+    }
+] 
