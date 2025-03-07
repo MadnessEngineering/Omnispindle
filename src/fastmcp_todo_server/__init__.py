@@ -37,17 +37,17 @@ MONGODB_COLLECTION = os.getenv("MONGODB_COLLECTION", "todos")
 
 # MQTT configuration
 MQTT_HOST = os.getenv("MQTT_HOST", "localhost")
-MQTT_PORT = int(os.getenv("MQTT_PORT", 3003))
+MQTT_PORT = int(os.getenv("MQTT_PORT", 1883))
 MQTT_KEEPALIVE = 60
 
 # Initialize server from fastmcp
-server = None
-try:
-    # Check if server is imported from elsewhere
-    from .server import server
-except ImportError:
+# server = None
+# try:
+#     # Check if server is imported from elsewhere
+#     from .server import server
+# except ImportError:
     # If not, create a new server instance
-    server = FastMCP("todo-server", server_type="sse")
+server = FastMCP("todo-server", server_type="sse")
 
 # Create MongoDB connection at module level
 mongo_client = MongoClient(MONGODB_URI)
@@ -71,7 +71,7 @@ def publish_mqtt_status(topic, message, retain=False):
     if not MOSQUITTO_PUB_AVAILABLE:
         print(f"MQTT publishing not available - would publish {message} to {topic} (retain={retain})")
         return False
-        
+
     try:
         cmd = ["mosquitto_pub", "-h", MQTT_HOST, "-p", str(MQTT_PORT), "-t", topic, "-m", str(message)]
         if retain:
@@ -364,13 +364,13 @@ async def run_server():
     print("Starting FastMCP server")
     try:
         # Get hostname for status topic
-        hostname = os.getenv("HOSTNAME", os.uname().nodename)
-        topic = f"status/{hostname}/alive"
-        
+        hostname = os.getenv("DeNa", os.uname().nodename)
+        topic = f"status/{hostname}-mcp/alive"
+
         # Publish online status message (1) via command line
         publish_mqtt_status(topic, "1")
         print(f"Published online status to {topic}")
-        
+
         # Set up signal handlers for graceful shutdown
         def signal_handler(sig, frame):
             print(f"Received signal {sig}, shutting down gracefully...")
@@ -379,11 +379,11 @@ async def run_server():
             print(f"Published offline status to {topic} (retained)")
             # Exit gracefully
             sys.exit(0)
-            
+
         # Register signal handlers
         signal.signal(signal.SIGINT, signal_handler)
         signal.signal(signal.SIGTERM, signal_handler)
-        
+
         # Custom exception handler to silence specific SSE-related errors
         original_excepthook = sys.excepthook
 
