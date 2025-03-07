@@ -5,12 +5,18 @@ import shutil
 import signal
 import subprocess
 import sys
+from typing import Any
+from typing import Any
+from typing import Coroutine
+from typing import Coroutine
 
 import uvicorn
 from dotenv import load_dotenv
+# Import FastMCP
 from fastmcp import Context
 from fastmcp import FastMCP
 from fastmcp_todo_server.tools import add_lesson
+# Import the tool functions from the tools module
 from fastmcp_todo_server.tools import add_todo
 from fastmcp_todo_server.tools import delete_lesson
 from fastmcp_todo_server.tools import delete_todo
@@ -28,22 +34,29 @@ from fastmcp_todo_server.tools import update_lesson
 from fastmcp_todo_server.tools import update_todo
 from pymongo import MongoClient
 
+# Import the Omnispindle class from the server module
+from fastmcp_todo_server.server import server
+
+# Load environment variables
 load_dotenv()
-server = FastMCP("todo-server", server_type="sse")
 
 # MongoDB configuration
 MONGODB_URI = os.getenv("MONGODB_URI", "mongodb://localhost:27017")
 MONGODB_DB = os.getenv("MONGODB_DB", "todo_app")
 MONGODB_COLLECTION = os.getenv("MONGODB_COLLECTION", "todos")
-mongo_client = MongoClient(MONGODB_URI)
-db = mongo_client[MONGODB_DB]
-collection = db[MONGODB_COLLECTION]
-lessons_collection = db["lessons_learned"]
 
 # MQTT configuration
 MQTT_HOST = os.getenv("MQTT_HOST", "localhost")
 MQTT_PORT = int(os.getenv("MQTT_PORT", 1883))
 MQTT_KEEPALIVE = 60
+
+# Create MongoDB connection at module level
+mongo_client = MongoClient(MONGODB_URI)
+db = mongo_client[MONGODB_DB]
+collection = db[MONGODB_COLLECTION]
+lessons_collection = db["lessons_learned"]
+
+# Check if mosquitto_pub is available
 MOSQUITTO_PUB_AVAILABLE = shutil.which("mosquitto_pub") is not None
 
 
@@ -72,25 +85,23 @@ def publish_mqtt_status(topic, message, retain=False):
         return False
 
 
+# Modify tool registration to prevent duplicates
 def register_tool_once(tool_func):
-    """Decorator to register a tool only if it hasn't been registered before"""
+    """
+    Decorator to register a tool only if it hasn't been registered before
+    """
     try:
-        if not hasattr(server, '_registered_tools'):
-            server._registered_tools = set()
-
-        if tool_func.__name__ not in server._registered_tools:
-            server.tool()(tool_func)
-            server._registered_tools.add(tool_func.__name__)
-
-        return tool_func
+        # Use the server's register_tool method which handles duplicates
+        return server.register_tool(tool_func)
     except Exception as e:
-        print(f"Error registering tool {tool_func.__name__}: {e}")
+        print(f"Failed to register tool {tool_func.__name__}: {str(e)}")
         return tool_func
 
 
 @register_tool_once
 async def add_todo_tool(description: str, priority: str = "initial", target_agent: str = "user", ctx: Context = None) -> str:
-    return await add_todo(description, priority, target_agent, ctx)
+    result = await add_todo(description, priority, target_agent, ctx)
+    return json.dumps(result)
 
 
 @register_tool_once
@@ -112,7 +123,6 @@ async def mqtt_publish_tool(topic: str, message: str, ctx: Context = None) -> st
 @register_tool_once
 async def deploy_nodered_flow_tool(flow_json_name: str) -> str:
     return await deploy_nodered_flow(flow_json_name)
-
 
 @register_tool_once
 async def delete_todo_tool(todo_id: str, ctx: Context = None) -> str:
@@ -173,63 +183,5 @@ async def search_lessons_tool(query: str, fields: list = None, limit: int = 100)
 
 async def run_server():
     """Run the FastMCP server"""
-    print("Starting FastMCP server")
-    try:
-        hostname = os.getenv("DeNa", os.uname().nodename)
-        topic = f"status/{hostname}-mcp/alive"
-
-        # Publish online status message (1) via command line
-        publish_mqtt_status(topic, "1")
-        print(f"Published online status to {topic}")
-
-        # Set up signal handlers for graceful shutdown
-        def signal_handler(sig, frame):
-            print(f"Received signal {sig}, shutting down gracefully...")
-            publish_mqtt_status(topic, "0", retain=True)
-            print(f"Published offline status to {topic} (retained)")
-            # Exit gracefully
-            sys.exit(0)
-
-        # Register signal handlers
-        signal.signal(signal.SIGINT, signal_handler)
-        signal.signal(signal.SIGTERM, signal_handler)
-
-        # Custom exception handler to silence specific SSE-related errors
-        original_excepthook = sys.excepthook
-
-        def custom_excepthook(exctype, value, traceback):
-            # Handle NoneType errors from Starlette more broadly
-            if exctype is TypeError and "'NoneType' object is not callable" in str(value):
-                # Log minimally instead of full stack trace
-                print(f"Suppressed NoneType error: {str(value)}")
-                return
-            # For all other errors, use the original exception handler
-            original_excepthook(exctype, value, traceback)
-
-        # Replace the default exception handler
-        sys.excepthook = custom_excepthook
-
-        # Configure uvicorn to suppress specific access logs for /messages endpoint
-        log_config = uvicorn.config.LOGGING_CONFIG
-        if "formatters" in log_config:
-            log_config["formatters"]["access"]["fmt"] = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-
-        # Configure logging instead
-        logging.basicConfig(
-            level=logging.DEBUG,
-            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-        )
-
-        # Run the server
-        await server.run_sse_async()  # Use run_sse_async directly
-    except Exception as e:
-        print(f"Error in server: {str(e)}")
-        # Publish offline status with retain flag in case of error
-        try:
-            hostname = os.getenv("HOSTNAME", os.uname().nodename)
-            topic = f"status/{hostname}/alive"
-            publish_mqtt_status(topic, "0", retain=True)
-            print(f"Published offline status to {topic} (retained)")
-        except Exception as ex:
-            print(f"Failed to publish offline status: {str(ex)}")
-        raise
+    # Register all the tools with the server
+    await server.run_server(publish_mqtt_status)
