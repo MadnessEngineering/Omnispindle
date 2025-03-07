@@ -325,7 +325,7 @@ async def deploy_nodered_flow(flow_json_name: str) -> str:
         logger.debug(f"Password length: {len(password) if password else 'None'}")
 
         # Add local git pull
-        dashboard_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../dashboard"))
+        dashboard_dir = os.path.abspath(os.path.dirname(__file__))
         result = ""
         try:
             result = subprocess.run(['git', 'pull'], cwd=dashboard_dir, check=True, capture_output=True, text=True)
@@ -434,15 +434,7 @@ async def deploy_nodered_flow(flow_json_name: str) -> str:
                             flow_label = node.get("label")
                             break
 
-                    # Check if flow exists
-                    # flow_exists = any(f.get("id") == flow_id and f.get("type") == "tab" for f in existing_flows)
-
-                    # Determine operation and endpoint
-                    # if flow_exists:
-                    #     operation = "update"
-                    #     endpoint = f"{node_red_url}/flow/{flow_id}"
-                    #     method = session.put
-                    # else:
+                    # Create a new flow everytime because of update import errors in Node-RED
                     operation = "create"
                     endpoint = f"{node_red_url}/flows"
                     method = session.post
@@ -460,9 +452,7 @@ async def deploy_nodered_flow(flow_json_name: str) -> str:
                         return json.dumps({
                             "success": True,
                             "operation": operation,
-                            "flow_id": flow_id,
-                            "flow_label": flow_label,
-                            "dashboard_url": f"{node_red_url}/ui"
+                            "result": result[0:50],
                         })
 
             except Exception as e:
@@ -472,3 +462,6 @@ async def deploy_nodered_flow(flow_json_name: str) -> str:
         # Catch-all exception handler
         logging.exception("Unhandled exception in deploy_nodered_flow_tool")
         return json.dumps({"success": False, "error": f"Unhandled exception: {str(e)}"})
+
+if __name__ == "__main__":
+    deploy_nodered_flow("fastmcp-todo-server.json")
