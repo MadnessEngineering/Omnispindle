@@ -119,7 +119,7 @@ async def update_todo_tool(todo_id: str, updates: dict, ctx: Context = None) -> 
 
 @register_tool_once
 async def mqtt_publish_tool(topic: str, message: str, ctx: Context = None) -> str:
-    await server.publish(topic, message)
+    await mqtt_publish(topic, message, ctx)
     return json.dumps({"topic": topic, "message": message})
 
 @register_tool_once
