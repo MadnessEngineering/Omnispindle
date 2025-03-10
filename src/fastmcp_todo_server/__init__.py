@@ -1,20 +1,13 @@
 import json
-import logging
 import os
 import shutil
-import signal
 import subprocess
-import sys
-from typing import Any
-from typing import Any
-from typing import Coroutine
-from typing import Coroutine
 
-import uvicorn
 from dotenv import load_dotenv
 # Import FastMCP
 from fastmcp import Context
-from fastmcp import FastMCP
+# Import the Omnispindle class from the server module
+from fastmcp_todo_server.server import server
 from fastmcp_todo_server.tools import add_lesson
 # Import the tool functions from the tools module
 from fastmcp_todo_server.tools import add_todo
@@ -33,9 +26,6 @@ from fastmcp_todo_server.tools import search_todos
 from fastmcp_todo_server.tools import update_lesson
 from fastmcp_todo_server.tools import update_todo
 from pymongo import MongoClient
-
-# Import the Omnispindle class from the server module
-from fastmcp_todo_server.server import server
 
 # Load environment variables
 load_dotenv()
@@ -56,7 +46,6 @@ db = mongo_client[MONGODB_DB]
 collection = db[MONGODB_COLLECTION]
 lessons_collection = db["lessons_learned"]
 
-# Check if mosquitto_pub is available
 MOSQUITTO_PUB_AVAILABLE = shutil.which("mosquitto_pub") is not None
 
 
@@ -123,6 +112,7 @@ async def mqtt_publish_tool(topic: str, message: str, ctx: Context = None) -> st
 @register_tool_once
 async def deploy_nodered_flow_tool(flow_json_name: str) -> str:
     return await deploy_nodered_flow(flow_json_name)
+
 
 @register_tool_once
 async def delete_todo_tool(todo_id: str, ctx: Context = None) -> str:

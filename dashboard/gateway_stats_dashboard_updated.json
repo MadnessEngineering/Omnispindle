@@ -1,0 +1,192 @@
+[
+    {
+        "id": "gateway-stats-dashboard",
+        "type": "tab",
+        "label": "Gateway Statistics Dashboard",
+        "disabled": false,
+        "info": "Dashboard showing statistics for various gateways including element counts and reading rates by sensor type"
+    },
+    {
+        "id": "gateway-stats-in",
+        "type": "mqtt in",
+        "z": "gateway-stats-dashboard",
+        "name": "Gateway Stats Data",
+        "topic": "projects/em-beta/subscriptions/gateway-stats",
+        "qos": "2",
+        "datatype": "json",
+        "broker": "",
+        "nl": false,
+        "rap": true,
+        "rh": 0,
+        "x": 170,
+        "y": 120,
+        "wires": [
+            [
+                "gateway-stats-process"
+            ]
+        ]
+    },
+    {
+        "id": "gateway-stats-process",
+        "type": "function",
+        "z": "gateway-stats-dashboard",
+        "name": "Process Gateway Stats",
+        "func": "// Process data from MongoDB collector\nconst now = Date.now();\n\n// Initialize stats storage in flow context if not exists\nlet gatewayStats = flow.get('gatewayStats') || {};\nlet sensorTypeStats = flow.get('sensorTypeStats') || {};\n\n// Check if we have valid data\nif (msg.payload) {\n    try {\n        // The payload should already be a JSON object with gateway IDs as keys\n        const data = msg.payload;\n        \n        // Store the data in flow context\n        // Process each gateway\n        Object.keys(data).forEach(key => {\n            // Skip the global sensorTypes entry\n            if (key === 'sensorTypes') {\n                // Store global sensor type stats\n                sensorTypeStats = data.sensorTypes;\n                return;\n            }\n            \n            // This is a gateway entry\n            const gateway = key;\n            const stats = data[gateway];\n            \n            // Store the gateway stats\n            gatewayStats[gateway] = {\n                ...stats,\n                // Ensure lastUpdate is a number\n                lastUpdate: stats.lastUpdate || now\n            };\n        });\n        \n        // Save to flow context\n        flow.set('gatewayStats', gatewayStats);\n        flow.set('sensorTypeStats', sensorTypeStats);\n        \n        // Add a bit of metadata for the UI\n        const metaStats = {\n            totalGateways: Object.keys(gatewayStats).length,\n            totalSensorTypes: Object.keys(sensorTypeStats).length,\n            lastUpdate: now\n        };\n        \n        // Create a complete stats object for the UI\n        const uiStats = {\n            ...gatewayStats,\n            sensorTypes: sensorTypeStats,\n            meta: metaStats\n        };\n        \n        return { payload: uiStats };\n    } catch (e) {\n        node.error(`Error processing gateway stats: ${e.message}`);\n        // Return the existing stats as fallback\n        return { \n            payload: {\n                ...gatewayStats,\n                sensorTypes: sensorTypeStats,\n                meta: {\n                    totalGateways: Object.keys(gatewayStats).length,\n                    totalSensorTypes: Object.keys(sensorTypeStats).length,\n                    lastUpdate: now,\n                    error: e.message\n                }\n            } \n        };\n    }\n} else {\n    // No data in the message, return the current stats\n    return { \n        payload: {\n            ...gatewayStats,\n            sensorTypes: sensorTypeStats,\n            meta: {\n                totalGateways: Object.keys(gatewayStats).length,\n                totalSensorTypes: Object.keys(sensorTypeStats).length,\n                lastUpdate: flow.get('lastUpdate') || now\n            }\n        } \n    };\n}",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "// Initialize data structures\nflow.set('gatewayStats', {});\nflow.set('sensorTypeStats', {});\nflow.set('lastUpdate', Date.now());\n",
+        "finalize": "",
+        "libs": [],
+        "x": 380,
+        "y": 120,
+        "wires": [
+            [
+                "gateway-stats-ui-controller"
+            ]
+        ]
+    },
+    {
+        "id": "gateway-stats-ui-controller",
+        "type": "function",
+        "z": "gateway-stats-dashboard",
+        "name": "UI Controller",
+        "func": "// Forward stats to different UI components\nreturn [\n    { payload: msg.payload },  // Overview panel\n    { payload: msg.payload }   // Charts panel\n];\n",
+        "outputs": 2,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 610,
+        "y": 120,
+        "wires": [
+            [
+                "gateway-stats-overview"
+            ],
+            [
+                "gateway-stats-charts"
+            ]
+        ]
+    },
+    {
+        "id": "gateway-stats-overview",
+        "type": "ui_template",
+        "z": "gateway-stats-dashboard",
+        "group": "gateway_stats_group",
+        "name": "Gateway Stats Overview",
+        "order": 1,
+        "width": "12",
+        "height": "8",
+        "format": "<div ng-init=\"init()\" id=\"gateway-stats-overview\">\n  <h2>Gateway Statistics Overview</h2>\n  \n  <div class=\"meta-stats\" ng-if=\"metaStats\">\n    <div class=\"meta-item\">\n      <span class=\"meta-label\">Gateways:</span>\n      <span class=\"meta-value\">{{metaStats.totalGateways}}</span>\n    </div>\n    <div class=\"meta-item\">\n      <span class=\"meta-label\">Sensor Types:</span>\n      <span class=\"meta-value\">{{metaStats.totalSensorTypes}}</span>\n    </div>\n    <div class=\"meta-item\">\n      <span class=\"meta-label\">Last Update:</span>\n      <span class=\"meta-value\">{{formatTime(metaStats.lastUpdate)}}</span>\n    </div>\n  </div>\n  \n  <div class=\"stats-container\" ng-if=\"Object.keys(gatewayStats).length === 0 || (Object.keys(gatewayStats).length === 1 && gatewayStats.sensorTypes)\">\n    <p class=\"no-data\">Waiting for gateway data...</p>\n  </div>\n  \n  <div class=\"stats-container\" ng-if=\"Object.keys(gatewayStats).length > 0\">\n    <div class=\"gateway-card\" ng-repeat=\"(gatewayName, stats) in gatewayStats\" ng-if=\"gatewayName !== 'sensorTypes' && gatewayName !== 'meta'\">\n      <div class=\"gateway-header\">\n        <h3>{{formatGatewayName(gatewayName)}}</h3>\n        <span class=\"last-update\">Last update: {{formatTime(stats.lastUpdate)}}</span>\n      </div>\n      \n      <div class=\"stat-grid\">\n        <div class=\"stat-box\">\n          <div class=\"stat-value\">{{stats.elements}}</div>\n          <div class=\"stat-label\">Elements</div>\n        </div>\n        \n        <div class=\"stat-box\">\n          <div class=\"stat-value\">{{stats.recentReadings}}</div>\n          <div class=\"stat-label\">Readings (15 min)</div>\n        </div>\n        \n        <div class=\"stat-box\">\n          <div class=\"stat-value\">{{stats.hourlyReadings}}</div>\n          <div class=\"stat-label\">Readings (24h)</div>\n        </div>\n        \n        <div class=\"stat-box\">\n          <div class=\"stat-value\">{{stats.dailyReadings}}</div>\n          <div class=\"stat-label\">Readings (7d)</div>\n        </div>\n      </div>\n      \n      <div class=\"sensor-types\" ng-if=\"stats.sensorTypes && Object.keys(stats.sensorTypes).length > 0\">\n        <h4>Sensor Types</h4>\n        <div class=\"sensor-type-grid\">\n          <div class=\"sensor-type-box\" ng-repeat=\"(sensorType, count) in stats.sensorTypes\">\n            <div class=\"sensor-type-label\">{{sensorType}}</div>\n            <div class=\"sensor-type-count\">{{count}}</div>\n          </div>\n        </div>\n      </div>\n    </div>\n  </div>\n  \n  <!-- Sensor Type Summary -->\n  <div class=\"sensor-type-summary\" ng-if=\"sensorTypeStats && Object.keys(sensorTypeStats).length > 0\">\n    <h3>All Sensor Types</h3>\n    <div class=\"sensor-type-list\">\n      <div class=\"sensor-type-item\" ng-repeat=\"(sensorType, data) in sensorTypeStats\">\n        <span class=\"sensor-type-name\">{{sensorType}}</span>\n        <span class=\"sensor-type-total\">{{data.count | number}} readings</span>\n        <span class=\"sensor-type-update\">Last update: {{formatTime(data.lastUpdate)}}</span>\n      </div>\n    </div>\n  </div>\n</div>\n\n<style>\n  #gateway-stats-overview {\n    padding: 20px;\n    font-family: Arial, sans-serif;\n  }\n  \n  h2, h3, h4 {\n    margin-top: 0;\n    margin-bottom: 20px;\n    color: #333;\n  }\n  \n  h2 {\n    font-size: 28px;\n  }\n  \n  h3 {\n    font-size: 22px;\n  }\n  \n  h4 {\n    font-size: 18px;\n    margin: 15px 0 10px 0;\n    color: #2c3e50;\n  }\n  \n  .meta-stats {\n    display: flex;\n    gap: 20px;\n    background-color: #f5f7fa;\n    padding: 15px;\n    border-radius: 8px;\n    margin-bottom: 20px;\n    box-shadow: 0 1px 3px rgba(0,0,0,0.1);\n  }\n  \n  .meta-item {\n    display: flex;\n    flex-direction: column;\n  }\n  \n  .meta-label {\n    font-size: 12px;\n    color: #7f8c8d;\n  }\n  \n  .meta-value {\n    font-size: 16px;\n    font-weight: bold;\n    color: #2c3e50;\n  }\n  \n  .stats-container {\n    display: flex;\n    flex-wrap: wrap;\n    gap: 20px;\n  }\n  \n  .no-data {\n    font-size: 18px;\n    color: #666;\n    font-style: italic;\n    padding: 30px 0;\n    text-align: center;\n    width: 100%;\n  }\n  \n  .gateway-card {\n    background-color: #f8f9fa;\n    border-radius: 8px;\n    box-shadow: 0 2px 10px rgba(0,0,0,0.1);\n    padding: 20px;\n    width: calc(50% - 20px);\n    min-width: 300px;\n    flex-grow: 1;\n  }\n  \n  .gateway-header {\n    display: flex;\n    justify-content: space-between;\n    align-items: center;\n    margin-bottom: 15px;\n    border-bottom: 1px solid #eee;\n    padding-bottom: 10px;\n  }\n  \n  .gateway-header h3 {\n    margin: 0;\n    font-size: 20px;\n    color: #2c3e50;\n    word-break: break-all;\n  }\n  \n  .last-update {\n    font-size: 12px;\n    color: #7f8c8d;\n    white-space: nowrap;\n    margin-left: 10px;\n  }\n  \n  .stat-grid {\n    display: grid;\n    grid-template-columns: repeat(2, 1fr);\n    gap: 15px;\n  }\n  \n  .stat-box {\n    background-color: #fff;\n    border-radius: 6px;\n    padding: 15px;\n    text-align: center;\n    box-shadow: 0 1px 3px rgba(0,0,0,0.05);\n  }\n  \n  .stat-value {\n    font-size: 24px;\n    font-weight: bold;\n    color: #3498db;\n    margin-bottom: 5px;\n  }\n  \n  .stat-label {\n    font-size: 14px;\n    color: #7f8c8d;\n  }\n  \n  /* Sensor Types Styling */\n  .sensor-types {\n    margin-top: 20px;\n    border-top: 1px solid #eee;\n    padding-top: 15px;\n  }\n  \n  .sensor-type-grid {\n    display: flex;\n    flex-wrap: wrap;\n    gap: 10px;\n  }\n  \n  .sensor-type-box {\n    background-color: #e8f4f8;\n    border-radius: 4px;\n    padding: 8px 12px;\n    display: flex;\n    flex-direction: column;\n    align-items: center;\n  }\n  \n  .sensor-type-label {\n    font-weight: bold;\n    color: #2980b9;\n    font-size: 14px;\n  }\n  \n  .sensor-type-count {\n    font-size: 16px;\n  }\n  \n  /* Sensor Type Summary */\n  .sensor-type-summary {\n    margin-top: 30px;\n    background-color: #f0f7fa;\n    border-radius: 8px;\n    padding: 20px;\n    box-shadow: 0 2px 10px rgba(0,0,0,0.05);\n  }\n  \n  .sensor-type-list {\n    display: flex;\n    flex-wrap: wrap;\n    gap: 15px;\n  }\n  \n  .sensor-type-item {\n    background-color: #fff;\n    border-radius: 6px;\n    padding: 12px 15px;\n    display: flex;\n    flex-direction: column;\n    min-width: 200px;\n    box-shadow: 0 1px 3px rgba(0,0,0,0.05);\n  }\n  \n  .sensor-type-name {\n    font-weight: bold;\n    font-size: 16px;\n    color: #2980b9;\n  }\n  \n  .sensor-type-total {\n    font-size: 18px;\n    margin: 5px 0;\n  }\n  \n  .sensor-type-update {\n    font-size: 12px;\n    color: #7f8c8d;\n  }\n  \n  @media (max-width: 768px) {\n    .gateway-card {\n      width: 100%;\n    }\n  }\n</style>\n\n<script>\n(function(scope) {\n  scope.init = function() {\n    scope.gatewayStats = {};\n    scope.sensorTypeStats = {};\n    scope.metaStats = null;\n    \n    scope.formatTime = function(timestamp) {\n      if (!timestamp) return 'Never';\n      \n      const date = new Date(timestamp);\n      return date.toLocaleTimeString() + ' ' + date.toLocaleDateString();\n    };\n    \n    scope.formatGatewayName = function(name) {\n      if (!name) return 'Unknown';\n      \n      // Truncate long gateway names for better display\n      if (name.length > 16) {\n        return name.substring(0, 8) + '...' + name.substring(name.length - 8);\n      }\n      return name;\n    };\n    \n    scope.$watch('msg.payload', function(payload) {\n      if (!payload) return;\n      \n      // Extract gateway stats (filter out special keys)\n      const gatewayEntries = Object.entries(payload).filter(\n        ([key]) => key !== 'sensorTypes' && key !== 'meta'\n      );\n      scope.gatewayStats = Object.fromEntries(gatewayEntries);\n      \n      // Extract sensor type stats\n      scope.sensorTypeStats = payload.sensorTypes || {};\n      \n      // Extract metadata\n      scope.metaStats = payload.meta || null;\n    });\n  };\n})(scope);\n</script>",
+        "storeOutMessages": true,
+        "fwdInMessages": true,
+        "resendOnRefresh": true,
+        "templateScope": "local",
+        "className": "",
+        "x": 860,
+        "y": 80,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "gateway-stats-charts",
+        "type": "ui_template",
+        "z": "gateway-stats-dashboard",
+        "group": "gateway_charts_group",
+        "name": "Gateway Stats Charts",
+        "order": 1,
+        "width": "12",
+        "height": "10",
+        "format": "<div ng-init=\"init()\" id=\"gateway-stats-charts\">\n  <h2>Gateway Statistics Charts</h2>\n  \n  <div class=\"chart-controls\" ng-if=\"Object.keys(gatewayStats).length > 0\">\n    <select ng-model=\"selectedGateway\" ng-change=\"updateCharts()\">\n      <option value=\"\">All Gateways</option>\n      <option ng-repeat=\"(gatewayName, stats) in gatewayStats\" value=\"{{gatewayName}}\" ng-if=\"gatewayName !== 'sensorTypes' && gatewayName !== 'meta'\">{{formatGatewayName(gatewayName)}}</option>\n    </select>\n    \n    <select ng-model=\"chartType\" ng-change=\"updateCharts()\">\n      <option value=\"readings\">Readings</option>\n      <option value=\"sensorTypes\">Sensor Types</option>\n    </select>\n  </div>\n  \n  <div class=\"no-data\" ng-if=\"Object.keys(gatewayStats).length === 0 || (Object.keys(gatewayStats).length === 1 && (gatewayStats.sensorTypes || gatewayStats.meta))\">\n    <p>No gateway data available for charts</p>\n  </div>\n  \n  <!-- Readings Charts -->\n  <div class=\"chart-container\" ng-if=\"selectedGateway && gatewayStats[selectedGateway] && chartType === 'readings'\">\n    <div class=\"chart-box\">\n      <h3>Hourly Readings</h3>\n      <canvas id=\"hourlyChart\" width=\"400\" height=\"200\"></canvas>\n    </div>\n    \n    <div class=\"chart-box\">\n      <h3>Daily Readings</h3>\n      <canvas id=\"dailyChart\" width=\"400\" height=\"200\"></canvas>\n    </div>\n  </div>\n  \n  <!-- Sensor Types Chart -->\n  <div class=\"chart-container\" ng-if=\"selectedGateway && gatewayStats[selectedGateway] && chartType === 'sensorTypes'\">\n    <div class=\"chart-box wide\">\n      <h3>Sensor Type Distribution</h3>\n      <canvas id=\"sensorTypeChart\" width=\"400\" height=\"300\"></canvas>\n    </div>\n  </div>\n  \n  <!-- Global Sensor Types Chart -->\n  <div class=\"chart-container\" ng-if=\"!selectedGateway && sensorTypeStats && Object.keys(sensorTypeStats).length > 0\">\n    <div class=\"chart-box wide\">\n      <h3>All Sensor Types</h3>\n      <canvas id=\"globalSensorTypeChart\" width=\"400\" height=\"300\"></canvas>\n    </div>\n  </div>\n  \n  <div class=\"chart-container\" ng-if=\"selectedGateway && Object.keys(gatewayStats).length > 0 && !gatewayStats[selectedGateway]\">\n    <p class=\"select-gateway\">Gateway not found. Please select a different gateway.</p>\n  </div>\n</div>\n\n<style>\n  #gateway-stats-charts {\n    padding: 20px;\n    font-family: Arial, sans-serif;\n  }\n  \n  h2 {\n    margin-top: 0;\n    margin-bottom: 20px;\n    font-size: 28px;\n    color: #333;\n  }\n  \n  h3 {\n    margin-top: 0;\n    color: #2c3e50;\n    font-size: 18px;\n  }\n  \n  .chart-controls {\n    margin-bottom: 20px;\n    display: flex;\n    gap: 15px;\n  }\n  \n  .chart-controls select {\n    padding: 8px 12px;\n    border-radius: 4px;\n    border: 1px solid #ddd;\n    font-size: 16px;\n    min-width: 200px;\n  }\n  \n  .chart-container {\n    display: flex;\n    flex-wrap: wrap;\n    gap: 20px;\n  }\n  \n  .chart-box {\n    background-color: #fff;\n    border-radius: 8px;\n    box-shadow: 0 2px 10px rgba(0,0,0,0.1);\n    padding: 20px;\n    width: calc(50% - 20px);\n    min-width: 300px;\n    flex-grow: 1;\n  }\n  \n  .chart-box.wide {\n    width: 100%;\n  }\n  \n  .no-data, .select-gateway {\n    font-size: 18px;\n    color: #666;\n    font-style: italic;\n    padding: 30px 0;\n    text-align: center;\n    width: 100%;\n  }\n  \n  @media (max-width: 768px) {\n    .chart-box {\n      width: 100%;\n    }\n    \n    .chart-controls {\n      flex-direction: column;\n    }\n  }\n</style>\n\n<script>\n(function(scope) {\n  let hourlyChart = null;\n  let dailyChart = null;\n  let sensorTypeChart = null;\n  let globalSensorTypeChart = null;\n  \n  scope.init = function() {\n    scope.gatewayStats = {};\n    scope.sensorTypeStats = {};\n    scope.selectedGateway = '';\n    scope.chartType = 'readings';\n    \n    scope.formatGatewayName = function(name) {\n      if (!name) return 'Unknown';\n      \n      // Truncate long gateway names for better display\n      if (name.length > 16) {\n        return name.substring(0, 8) + '...' + name.substring(name.length - 8);\n      }\n      return name;\n    };\n    \n    scope.updateCharts = function() {\n      if (scope.selectedGateway && scope.gatewayStats[scope.selectedGateway]) {\n        const stats = scope.gatewayStats[scope.selectedGateway];\n        \n        if (scope.chartType === 'readings') {\n          // Readings charts\n          const hourlyData = stats.hourlyData || Array(24).fill(0);\n          const dailyData = stats.dailyData || Array(7).fill(0);\n          \n          // Wait for DOM to be ready\n          setTimeout(() => {\n            // Create hourly chart\n            if (hourlyChart) hourlyChart.destroy();\n            const hourlyCtx = document.getElementById('hourlyChart').getContext('2d');\n            hourlyChart = new Chart(hourlyCtx, {\n              type: 'bar',\n              data: {\n                labels: Array.from({length: 24}, (_, i) => `${i}:00`),\n                datasets: [{\n                  label: 'Readings per Hour',\n                  data: hourlyData,\n                  backgroundColor: 'rgba(54, 162, 235, 0.5)',\n                  borderColor: 'rgba(54, 162, 235, 1)',\n                  borderWidth: 1\n                }]\n              },\n              options: {\n                responsive: true,\n                scales: {\n                  y: {\n                    beginAtZero: true\n                  }\n                }\n              }\n            });\n            \n            // Create daily chart\n            if (dailyChart) dailyChart.destroy();\n            const dailyCtx = document.getElementById('dailyChart').getContext('2d');\n            const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];\n            \n            dailyChart = new Chart(dailyCtx, {\n              type: 'bar',\n              data: {\n                labels: dayNames,\n                datasets: [{\n                  label: 'Readings per Day',\n                  data: dailyData,\n                  backgroundColor: 'rgba(75, 192, 192, 0.5)',\n                  borderColor: 'rgba(75, 192, 192, 1)',\n                  borderWidth: 1\n                }]\n              },\n              options: {\n                responsive: true,\n                scales: {\n                  y: {\n                    beginAtZero: true\n                  }\n                }\n              }\n            });\n          }, 100);\n        } else if (scope.chartType === 'sensorTypes') {\n          // Sensor types chart\n          setTimeout(() => {\n            if (sensorTypeChart) sensorTypeChart.destroy();\n            \n            if (stats.sensorTypes && Object.keys(stats.sensorTypes).length > 0) {\n              const sensorTypeCtx = document.getElementById('sensorTypeChart').getContext('2d');\n              \n              const sensorLabels = Object.keys(stats.sensorTypes);\n              const sensorCounts = sensorLabels.map(type => stats.sensorTypes[type]);\n              \n              const colors = generateColors(sensorLabels.length);\n              \n              sensorTypeChart = new Chart(sensorTypeCtx, {\n                type: 'pie',\n                data: {\n                  labels: sensorLabels,\n                  datasets: [{\n                    data: sensorCounts,\n                    backgroundColor: colors,\n                    borderWidth: 1\n                  }]\n                },\n                options: {\n                  responsive: true,\n                  plugins: {\n                    legend: {\n                      position: 'right'\n                    },\n                    title: {\n                      display: true,\n                      text: 'Sensor Types Distribution'\n                    }\n                  }\n                }\n              });\n            }\n          }, 100);\n        }\n      } else if (!scope.selectedGateway && scope.sensorTypeStats) {\n        // Global sensor types chart\n        setTimeout(() => {\n          if (globalSensorTypeChart) globalSensorTypeChart.destroy();\n          \n          if (Object.keys(scope.sensorTypeStats).length > 0) {\n            const ctx = document.getElementById('globalSensorTypeChart').getContext('2d');\n            \n            const labels = Object.keys(scope.sensorTypeStats);\n            const data = labels.map(type => scope.sensorTypeStats[type].count);\n            \n            const colors = generateColors(labels.length);\n            \n            globalSensorTypeChart = new Chart(ctx, {\n              type: 'pie',\n              data: {\n                labels: labels,\n                datasets: [{\n                  data: data,\n                  backgroundColor: colors,\n                  borderWidth: 1\n                }]\n              },\n              options: {\n                responsive: true,\n                plugins: {\n                  legend: {\n                    position: 'right'\n                  },\n                  title: {\n                    display: true,\n                    text: 'All Sensor Types'\n                  }\n                }\n              }\n            });\n          }\n        }, 100);\n      }\n    };\n    \n    // Helper function to generate unique colors\n    function generateColors(count) {\n      const baseColors = [\n        'rgba(255, 99, 132, 0.7)',\n        'rgba(54, 162, 235, 0.7)',\n        'rgba(255, 206, 86, 0.7)',\n        'rgba(75, 192, 192, 0.7)',\n        'rgba(153, 102, 255, 0.7)',\n        'rgba(255, 159, 64, 0.7)',\n        'rgba(199, 199, 199, 0.7)',\n        'rgba(83, 102, 255, 0.7)',\n        'rgba(40, 159, 64, 0.7)',\n        'rgba(210, 199, 199, 0.7)'\n      ];\n      \n      const colors = [];\n      for (let i = 0; i < count; i++) {\n        colors.push(baseColors[i % baseColors.length]);\n      }\n      \n      return colors;\n    }\n    \n    scope.$watch('msg.payload', function(payload) {\n      if (!payload) return;\n\n      // Extract gateway stats (filter out special keys)\n      const gatewayEntries = Object.entries(payload).filter(\n        ([key]) => key !== 'sensorTypes' && key !== 'meta'\n      );\n      scope.gatewayStats = Object.fromEntries(gatewayEntries);\n      \n      // Extract sensor type stats\n      scope.sensorTypeStats = payload.sensorTypes || {};\n      \n      // If no gateway is selected but we have data, select the first one\n      const availableGateways = Object.keys(scope.gatewayStats);\n      if (!scope.selectedGateway && availableGateways.length > 0) {\n        scope.selectedGateway = availableGateways[0];\n      }\n      \n      scope.updateCharts();\n    });\n  };\n})(scope);\n</script>\n<script src=\"https://cdn.jsdelivr.net/npm/chart.js\"></script>",
+        "storeOutMessages": true,
+        "fwdInMessages": true,
+        "resendOnRefresh": true,
+        "templateScope": "local",
+        "className": "",
+        "x": 860,
+        "y": 160,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "trigger-stats-refresh",
+        "type": "inject",
+        "z": "gateway-stats-dashboard",
+        "name": "Refresh Stats (Every 1 min)",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "60",
+        "crontab": "",
+        "once": true,
+        "onceDelay": "5",
+        "topic": "",
+        "payload": "",
+        "payloadType": "date",
+        "x": 190,
+        "y": 200,
+        "wires": [
+            [
+                "gateway-stats-process"
+            ]
+        ]
+    },
+    {
+        "id": "mqtt-stats-debug",
+        "type": "debug",
+        "z": "gateway-stats-dashboard",
+        "name": "Debug: MQTT Stats",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "payload",
+        "targetType": "msg",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 440,
+        "y": 60,
+        "wires": []
+    },
+    {
+        "id": "gateway_stats_group",
+        "type": "ui_group",
+        "name": "Gateway Overview",
+        "tab": "gateway_stats_tab",
+        "order": 1,
+        "disp": true,
+        "width": "12",
+        "collapse": false
+    },
+    {
+        "id": "gateway_charts_group",
+        "type": "ui_group",
+        "name": "Gateway Charts",
+        "tab": "gateway_stats_tab",
+        "order": 2,
+        "disp": true,
+        "width": "12",
+        "collapse": false
+    },
+    {
+        "id": "gateway_stats_tab",
+        "type": "ui_tab",
+        "name": "Gateway Statistics",
+        "icon": "dashboard",
+        "disabled": false,
+        "hidden": false
+    },
+    {
+        "id": "sensor_types_group",
+        "type": "ui_group",
+        "name": "Sensor Types",
+        "tab": "gateway_stats_tab",
+        "order": 3,
+        "disp": true,
+        "width": "12",
+        "collapse": false
+    }
+]
