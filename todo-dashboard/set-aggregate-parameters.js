@@ -1,6 +1,3 @@
-// Placeholder for future schedule pipeline
-const schedulePipeline = [];
-
 // Get Pending Todos Pipeline
 const pendingTodosPipeline = [
     // Match pending todos
@@ -22,6 +19,73 @@ const completedTodosPipeline = [
 
     // Limit to last 50
     { $limit: 50 }
+];
+
+// Schedule Pipeline - for generating daily schedule data
+const schedulePipeline = [
+    // Get only pending todos for scheduling
+    { $match: { status: "pending" } },
+
+    // Sort todos by priority first (high priority first)
+    // The sort order is opposite from pending todos list because we want high priority first
+    {
+        $sort: {
+            // Convert priority to numeric value for sorting
+            // high: 1, medium/initial: 2, low: 3
+            $cond: [
+                { $eq: ["$priority", "high"] },
+                1,
+                {
+                    $cond: [
+                        {
+                            $or: [
+                                { $eq: ["$priority", "medium"] },
+                                { $eq: ["$priority", "initial"] }
+                            ]
+                        },
+                        2,
+                        3
+                    ]
+                }
+            ],
+            // Then by creation date (newer first)
+            created_at: -1
+        }
+    },
+
+    // Limit to a reasonable number of tasks per day
+    { $limit: 8 },
+
+    // Project to add scheduling metadata
+    {
+        $project: {
+            _id: 0,
+            todo_id: "$id",
+            description: 1,
+            priority: 1,
+            status: 1,
+            created_at: 1,
+            // Estimate duration based on priority
+            duration_minutes: {
+                $cond: [
+                    { $eq: ["$priority", "high"] },
+                    60, // High priority: 1 hour
+                    {
+                        $cond: [
+                            {
+                                $or: [
+                                    { $eq: ["$priority", "medium"] },
+                                    { $eq: ["$priority", "initial"] }
+                                ]
+                            },
+                            45, // Medium priority: 45 minutes
+                            30   // Low priority: 30 minutes
+                        ]
+                    }
+                ]
+            }
+        }
+    }
 ];
 
 // Construct msg objects for each pipeline
@@ -47,7 +111,7 @@ const scheduleMsg = {
 };
 
 return [
-    scheduleMsg,
     pendingTodosMsg,
-    completedTodosMsg
+    completedTodosMsg,
+    scheduleMsg
 ];

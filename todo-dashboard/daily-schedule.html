@@ -133,7 +133,7 @@
     border-color: #e53935;
 }
 
-.timeline-item.medium::after {
+.timeline-item.medium::after, .timeline-item.initial::after {
     border-color: #fb8c00;
 }
 
@@ -173,7 +173,7 @@
     color: #c62828;
 }
 
-.task-priority-medium {
+.task-priority-medium, .task-priority-initial {
     background-color: #fff3e0;
     color: #e65100;
 }
@@ -198,6 +198,18 @@
     background-color: #f5f5f5;
     border-radius: 8px;
     margin-top: 20px;
+}
+
+/* Debug info */
+.debug-info {
+    margin-top: 20px;
+    padding: 10px;
+    background-color: #f8f9fa;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-family: monospace;
+    font-size: 12px;
+    white-space: pre-wrap;
 }
 </style>
 
@@ -275,6 +287,15 @@
   <div ng-if="!msg.payload.schedule || msg.payload.schedule.length === 0" class="no-schedule-message">
     <p>No tasks scheduled for this day.</p>
     <p>Use the date picker to select a different day or add more pending tasks to generate a schedule.</p>
+  </div>
+  
+  <!-- Debug section to help troubleshoot data flow -->
+  <div class="debug-info">
+    <div>Topic: {{msg.topic}}</div>
+    <div>Date: {{msg.payload.date}}</div>
+    <div>Scheduled Tasks: {{(msg.payload.schedule || []).length}}</div>
+    <div>Total Minutes: {{msg.payload.total_scheduled_minutes || 0}}</div>
+    <div>Utilization: {{msg.payload.utilization_percentage || 0}}%</div>
   </div>
 </div>
 

@@ -31,15 +31,15 @@
         "type": "function",
         "z": "b4172645077d3f56",
         "name": "schedule-generator",
-        "func": "// Get the date from the payload\nconst targetDate = msg.payload.date;\n\n// Create a Date object from the target date\nconst date = new Date(targetDate);\nconst weekday = [\"Sunday\", \"Monday\", \"Tuesday\", \"Wednesday\", \"Thursday\", \"Friday\", \"Saturday\"][date.getDay()];\n\n// Define working hours based on the day of the week\nlet workingHours;\nconst day = date.getDay(); // 0 = Sunday, 1 = Monday, ...\n\nif (day === 0) { // Sunday\n    workingHours = { start: \"10:00\", end: \"14:00\" };\n} else if (day === 6) { // Saturday\n    workingHours = { start: \"10:00\", end: \"15:00\" };\n} else { // Weekday\n    workingHours = { start: \"09:00\", end: \"17:00\" };\n}\n\n// Calculate available minutes\nfunction timeToMinutes(timeStr) {\n    const [hours, minutes] = timeStr.split(':').map(Number);\n    return hours * 60 + minutes;\n}\n\nconst startMinutes = timeToMinutes(workingHours.start);\nconst endMinutes = timeToMinutes(workingHours.end);\nconst availableMinutes = endMinutes - startMinutes;\n\n// Get todos from context\nlet pendingTodos = [];\n\n// Try to get pending todos from flow context\nconst flowContext = flow.get('pendingTodos');\nif (flowContext && Array.isArray(flowContext)) {\n    pendingTodos = flowContext;\n}\n\n// If no todos in context, try to get them from MongoDB\nif (pendingTodos.length === 0) {\n    // This is just a placeholder. We'll make a real MongoDB query for todos in the MongoDB flow\n    // In a real implementation, we would query MongoDB here\n    // For now we'll use some example todos\n    pendingTodos = [\n        { id: \"123\", description: \"Review project proposal\", priority: \"high\" },\n        { id: \"456\", description: \"Team meeting\", priority: \"medium\" },\n        { id: \"789\", description: \"Update documentation\", priority: \"low\" }\n    ];\n}\n\n// Function to generate time string from minutes\nfunction minutesToTime(totalMinutes) {\n    const hours = Math.floor(totalMinutes / 60);\n    const minutes = totalMinutes % 60;\n    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;\n}\n\n// Generate schedule from todos\nfunction generateSchedule(todos, startTime, availableMins) {\n    // Sort by priority\n    const priorityRank = {\"high\": 0, \"medium\": 1, \"low\": 2, \"initial\": 1};\n    todos.sort((a, b) => {\n        return priorityRank[a.priority || \"medium\"] - priorityRank[b.priority || \"medium\"];\n    });\n    \n    // Define task durations based on priority\n    const durations = {\n        \"high\": 90, // 1.5 hours\n        \"medium\": 60, // 1 hour\n        \"low\": 45, // 45 minutes\n        \"initial\": 60 // 1 hour\n    };\n    \n    const schedule = [];\n    let currentTime = startTime;\n    let scheduledMinutes = 0;\n    \n    // Schedule high priority tasks first, then medium, then low\n    todos.slice(0, 5).forEach((todo, index) => {\n        // Calculate duration\n        const duration = durations[todo.priority || \"medium\"];\n        \n        // Check if we have enough time left (including break)\n        const breakTime = index > 0 ? 15 : 0;\n        if (scheduledMinutes + duration + breakTime > availableMins) {\n            return; // Skip if not enough time\n        }\n        \n        // Add break time if not the first task\n        if (index > 0) {\n            currentTime += 15;\n            scheduledMinutes += 15;\n        }\n        \n        // Calculate start and end times\n        const startTimeStr = minutesToTime(currentTime);\n        const endTimeStr = minutesToTime(currentTime + duration);\n        \n        // Add to schedule\n        schedule.push({\n            todo_id: todo.id,\n            description: todo.description,\n            priority: todo.priority,\n            start_time: startTimeStr,\n            end_time: endTimeStr,\n            duration_minutes: duration\n        });\n        \n        // Update current time and scheduled minutes\n        currentTime += duration;\n        scheduledMinutes += duration;\n    });\n    \n    return {\n        schedule: schedule,\n        total_scheduled_minutes: scheduledMinutes,\n        utilization_percentage: Math.round((scheduledMinutes / availableMins) * 100)\n    };\n}\n\n// Generate the schedule\nconst scheduleResults = generateSchedule(pendingTodos, startMinutes, availableMinutes);\n\n// Prepare final schedule data\nconst scheduleData = {\n    date: targetDate,\n    weekday: weekday,\n    working_hours: workingHours,\n    schedule: scheduleResults.schedule,\n    total_tasks: scheduleResults.schedule.length,\n    total_scheduled_minutes: scheduleResults.total_scheduled_minutes,\n    available_minutes: availableMinutes,\n    utilization_percentage: scheduleResults.utilization_percentage\n};\n\n// Return the schedule data for publishing\nreturn {\n    payload: scheduleData,\n    topic: \"todo/dashboard/schedule\"\n};",
+        "func": "// Get the scheduled todos from MongoDB\nconst todos = msg.payload || [];\n\n// Current date for the schedule\nconst today = new Date();\nconst dateStr = today.toISOString().split('T')[0]; // YYYY-MM-DD\n\n// Get day of week\nconst days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];\nconst weekday = days[today.getDay()];\n\n// Define working hours\nconst workingHours = {\n    start: \"09:00\",\n    end: \"17:00\"\n};\n\n// Calculate available minutes in working day (8 hours = 480 minutes)\nconst availableMinutes = 480;\n\n// Generate schedule with time slots\nconst schedule = [];\nlet currentTime = new Date();\ncurrentTime.setHours(9, 0, 0, 0); // Start at 9 AM\n\n// Process each todo and assign a time slot\ntodos.forEach((todo, index) => {\n    // Skip if we're past working hours (4:15 PM is latest we can start a task)\n    if (currentTime.getHours() >= 16 && currentTime.getMinutes() >= 15) {\n        return;\n    }\n    \n    // Format start time\n    const startHour = currentTime.getHours().toString().padStart(2, '0');\n    const startMinute = currentTime.getMinutes().toString().padStart(2, '0');\n    const startTime = `${startHour}:${startMinute}`;\n    \n    // Calculate end time\n    const endTime = new Date(currentTime.getTime() + todo.duration_minutes * 60000);\n    const endHour = endTime.getHours().toString().padStart(2, '0');\n    const endMinute = endTime.getMinutes().toString().padStart(2, '0');\n    \n    // Add to schedule\n    schedule.push({\n        todo_id: todo.todo_id,\n        description: todo.description,\n        priority: todo.priority,\n        start_time: startTime,\n        end_time: `${endHour}:${endMinute}`,\n        duration_minutes: todo.duration_minutes,\n        notes: index === 0 ? \"Highest priority task for today\" : null\n    });\n    \n    // Move time forward for next task (add task duration + 15 min break)\n    currentTime = new Date(endTime.getTime() + 15 * 60000); // Add 15-minute break\n});\n\n// Calculate total scheduled minutes\nconst totalScheduledMinutes = schedule.reduce((total, task) => total + task.duration_minutes, 0);\n\n// Calculate utilization percentage\nconst utilizationPercentage = Math.round((totalScheduledMinutes / availableMinutes) * 100);\n\n// Format final output for dashboard\nconst scheduleData = {\n    date: dateStr,\n    weekday: weekday,\n    working_hours: workingHours,\n    schedule: schedule,\n    total_tasks: schedule.length,\n    total_scheduled_minutes: totalScheduledMinutes,\n    available_minutes: availableMinutes,\n    utilization_percentage: utilizationPercentage\n};\n\n// Debug output\nnode.warn(\"Generated schedule with \" + schedule.length + \" tasks\");\nnode.warn(\"Total scheduled time: \" + totalScheduledMinutes + \" minutes\");\nnode.warn(\"Utilization: \" + utilizationPercentage + \"%\");\n\nreturn { \n    payload: scheduleData,\n    topic: \"todo/dashboard/schedule\"\n};",
         "outputs": 1,
         "timeout": "",
         "noerr": 0,
         "initialize": "",
         "finalize": "",
         "libs": [],
-        "x": 890,
-        "y": 240,
+        "x": 620,
+        "y": 400,
         "wires": [
             [
                 "f70bd971a518ccaa",
@@ -265,7 +265,7 @@
         "type": "function",
         "z": "b4172645077d3f56",
         "name": "set-aggregate-parameters",
-        "func": "// Placeholder for future schedule pipeline \nconst schedulePipeline = [];\n\n// Get Pending Todos Pipeline\nconst pendingTodosPipeline = [\n    // Match pending todos\n    { $match: { status: \"pending\" } },\n\n    // Sort by priority (asc) and created date (asc)\n    { $sort: { priority: 1, created_at: 1 } }\n\n    // Could add limit stage here if needed\n];\n\n// Get Completed Todos Pipeline\nconst completedTodosPipeline = [\n    // Match completed todos\n    { $match: { status: \"completed\" } },\n\n    // Sort by completed date (desc)\n    { $sort: { completed_at: -1 } },\n\n    // Limit to last 50\n    { $limit: 50 }\n];\n\n// Construct msg objects for each pipeline\nconst pendingTodosMsg = {\n    mode: 'collection',\n    collection: 'todos',\n    operation: 'aggregate',\n    payload: [pendingTodosPipeline]\n};\n\nconst completedTodosMsg = {\n    mode: 'collection',\n    collection: 'todos',\n    operation: 'aggregate',\n    payload: [completedTodosPipeline]\n};\n\nconst scheduleMsg = {\n    mode: 'collection',\n    collection: 'todos',\n    operation: 'aggregate',\n    payload: [schedulePipeline]\n};\n\nreturn [\n    scheduleMsg,\n    pendingTodosMsg,\n    completedTodosMsg\n];",
+        "func": "// Get Pending Todos Pipeline\nconst pendingTodosPipeline = [\n    // Match pending todos\n    { $match: { status: \"pending\" } },\n\n    // Sort by priority (asc) and created date (asc)\n    { $sort: { priority: 1, created_at: 1 } }\n\n    // Could add limit stage here if needed\n];\n\n// Get Completed Todos Pipeline\nconst completedTodosPipeline = [\n    // Match completed todos\n    { $match: { status: \"completed\" } },\n\n    // Sort by completed date (desc)\n    { $sort: { completed_at: -1 } },\n\n    // Limit to last 50\n    { $limit: 50 }\n];\n\n// Placeholder for future schedule pipeline \nconst schedulePipeline = [];\n\n// Construct msg objects for each pipeline\nconst pendingTodosMsg = {\n    mode: 'collection',\n    collection: 'todos',\n    operation: 'aggregate',\n    payload: [pendingTodosPipeline]\n};\n\nconst completedTodosMsg = {\n    mode: 'collection',\n    collection: 'todos',\n    operation: 'aggregate',\n    payload: [completedTodosPipeline]\n};\n\nconst scheduleMsg = {\n    mode: 'collection',\n    collection: 'todos',\n    operation: 'aggregate',\n    payload: [schedulePipeline]\n};\n\nreturn [\n    pendingTodosMsg,\n    completedTodosMsg,\n    scheduleMsg\n];",
         "outputs": 3,
         "timeout": "",
         "noerr": 0,
@@ -276,24 +276,24 @@
         "y": 319.0000720024109,
         "wires": [
             [
-                "e97adde808d5df0a"
-            ],
-            [
                 "e0331cad3d892e23",
                 "66a07c12fe5bb9f4"
             ],
             [
                 "fc7c9c43e624f82b",
                 "66a07c12fe5bb9f4"
+            ],
+            [
+                "e97adde808d5df0a"
             ]
         ],
         "inputLabels": [
             "Trigger dashboard update"
         ],
         "outputLabels": [
-            "Generate Schedule Request",
+            "Get Pending Todos",
             "Get Completed Todos",
-            "Get Pending Todos"
+            "Generate Schedule Request"
         ],
         "icon": "node-red/db.svg"
     },
@@ -307,15 +307,15 @@
                 "p": "payload"
             }
         ],
-        "repeat": "",
+        "repeat": "120",
         "crontab": "",
         "once": true,
         "onceDelay": "0.5",
         "topic": "",
         "payload": "{}",
         "payloadType": "json",
-        "x": 278.00000762939453,
-        "y": 239.0000720024109,
+        "x": 158,
+        "y": 319,
         "wires": [
             [
                 "7a644b6d7527f2c6"
@@ -330,6 +330,7 @@
         "mode": "collection",
         "collection": "todos",
         "operation": "aggregate",
+        "output": "toArray",
         "maxTimeMS": "",
         "handleDocId": false,
         "name": "Get Pending Todos",
@@ -347,7 +348,7 @@
         "type": "function",
         "z": "b4172645077d3f56",
         "name": "format-todos-for-dashboard",
-        "func": "// Get all the todos\nconst todos = msg.payload || [];\n\n// Count priorities\nconst highPriority = todos.filter(todo => todo.priority === \"high\").length;\nconst mediumPriority = todos.filter(todo => todo.priority === \"medium\" || todo.priority === \"initial\").length;\nconst lowPriority = todos.filter(todo => todo.priority === \"low\").length;\n\n// Sort pending todos by priority and creation date\nconst priorityRank = {\"high\": 0, \"medium\": 1, \"low\": 2, \"initial\": 1};\ntodos.sort((a, b) => {\n    // First by priority\n    const priorityDiff = priorityRank[a.priority || \"medium\"] - priorityRank[b.priority || \"medium\"];\n    if (priorityDiff !== 0) return priorityDiff;\n    \n    // Then by creation date (descending)\n    return (b.created_at || 0) - (a.created_at || 0);\n});\n\n// Store completed todos in flow context for AI Pattern Analysis\nconst completedTodos = global.get(\"completedTodos\") || [];\n\n// Format for dashboard\nconst dashboardData = {\n    todos: todos,\n    total_pending: todos.length,\n    total_completed: completedTodos.length,\n    high_priority: highPriority,\n    medium_priority: mediumPriority,\n    low_priority: lowPriority,\n    last_updated: new Date().toISOString()\n};\n\nreturn { \n    payload: dashboardData,\n    topic: \"todo/dashboard/todos\"\n};",
+        "func": "// Get all the todos\nconst todos = msg.payload || [];\n\n// Count priorities\nconst highPriority = todos.filter(todo => todo.priority === \"high\").length;\nconst mediumPriority = todos.filter(todo => todo.priority === \"medium\" || todo.priority === \"initial\").length;\nconst lowPriority = todos.filter(todo => todo.priority === \"low\").length;\n\n// Sort pending todos by priority and creation date\nconst priorityRank = {\"high\": 0, \"medium\": 1, \"low\": 2, \"initial\": 1};\ntodos.sort((a, b) => {\n    // First by priority\n    const priorityDiff = priorityRank[a.priority || \"medium\"] - priorityRank[b.priority || \"medium\"];\n    if (priorityDiff !== 0) return priorityDiff;\n    \n    // Then by creation date (descending)\n    return (b.created_at || 0) - (a.created_at || 0);\n});\n\n// Store pending todos in global context for other nodes to use\nglobal.set(\"pendingTodos\", todos);\n\n// Get completed todos count (if available)\nconst completedTodos = global.get(\"completedTodos\") || [];\n\n// Format for dashboard\nconst dashboardData = {\n    todos: todos,\n    total_pending: todos.length,\n    total_completed: completedTodos.length,\n    high_priority: highPriority,\n    medium_priority: mediumPriority,\n    low_priority: lowPriority,\n    last_updated: new Date().toISOString()\n};\n\n// Debug output\nnode.warn(\"Publishing todos to dashboard: \" + todos.length + \" todos\");\nnode.warn(\"Priorities - High: \" + highPriority + \", Medium: \" + mediumPriority + \", Low: \" + lowPriority);\n\nreturn { \n    payload: dashboardData,\n    topic: \"todo/dashboard/todos\"\n};",
         "outputs": 1,
         "timeout": "",
         "noerr": 0,
@@ -368,7 +369,7 @@
         "type": "function",
         "z": "b4172645077d3f56",
         "name": "ai-pattern-analysis",
-        "func": "// Get completed todos from MongoDB\nconst completedTodos = msg.payload || [];\n\n// Store in global context for other nodes to use\nglobal.set(\"completedTodos\", completedTodos);\n\n// Sort completed todos by completion date (descending)\ncompletedTodos.sort((a, b) => (b.completed_at || 0) - (a.completed_at || 0));\n\n// Limit to most recent for dashboard\nconst recentCompleted = completedTodos.slice(0, 5);\n\n// Find patterns in similar tasks (simplified implementation)\nfunction findPatterns(todos) {\n    const patterns = [];\n    \n    // Group by words in description\n    const taskGroups = {};\n    \n    todos.forEach(todo => {\n        const words = todo.description.toLowerCase().split(/\\s+/).filter(w => w.length > 4);\n        \n        words.forEach(word => {\n            if (!taskGroups[word]) {\n                taskGroups[word] = [];\n            }\n            \n            // Only add if not already in the group\n            if (!taskGroups[word].find(t => t.id === todo.id)) {\n                taskGroups[word].push(todo);\n            }\n        });\n    });\n    \n    // Find patterns with at least 2 todos\n    Object.keys(taskGroups).forEach(word => {\n        if (taskGroups[word].length >= 2) {\n            patterns.push({\n                pattern_id: `pattern-${patterns.length + 1}`,\n                keyword: word,\n                similar_tasks: taskGroups[word].length,\n                template: `${word} task`,\n                automation_confidence: Math.round(60 + (taskGroups[word].length * 5)),\n                examples: taskGroups[word].slice(0, 3).map(t => t.description)\n            });\n        }\n    });\n    \n    return patterns.slice(0, 3); // Return top 3 patterns\n}\n\n// Generate simple recommendations\nfunction generateRecommendations(todos) {\n    const recommendations = [];\n    \n    // Find pending todos similar to completed todos\n    const pendingTodos = global.get(\"pendingTodos\") || [];\n    \n    // For demo, just recommend high priority for first few todos\n    pendingTodos.slice(0, 2).forEach(todo => {\n        if (todo.priority !== \"high\") {\n            recommendations.push({\n                todo_id: todo.id,\n                description: todo.description,\n                current_priority: todo.priority || \"medium\",\n                recommended_priority: \"high\",\n                confidence: Math.round(70 + Math.random() * 20)\n            });\n        }\n    });\n    \n    return recommendations;\n}\n\n// Format AI suggestions for dashboard\nconst aiSuggestions = {\n    automation_suggestions: findPatterns(completedTodos),\n    priority_recommendations: generateRecommendations(completedTodos),\n    pattern_analysis: {\n        total_patterns: completedTodos.length > 0 ? Math.min(3, Math.floor(completedTodos.length / 2)) : 0,\n        analyzed_todos: completedTodos.length\n    },\n    completed: recentCompleted\n};\n\nreturn { \n    payload: aiSuggestions,\n    topic: \"todo/dashboard/suggestions\"\n};",
+        "func": "// Get completed todos from MongoDB\nconst completedTodos = msg.payload || [];\n\n// Store in global context for other nodes to use\nglobal.set(\"completedTodos\", completedTodos);\n\n// Sort completed todos by completion date (descending)\ncompletedTodos.sort((a, b) => (b.completed_at || 0) - (a.completed_at || 0));\n\n// Limit to most recent for dashboard\nconst recentCompleted = completedTodos.slice(0, 5);\n\n// Find patterns in similar tasks (simplified implementation)\nfunction findPatterns(todos) {\n    const patterns = [];\n    \n    // Group by words in description\n    const taskGroups = {};\n    \n    todos.forEach(todo => {\n        const words = todo.description.toLowerCase().split(/\\s+/).filter(w => w.length > 4);\n        \n        words.forEach(word => {\n            if (!taskGroups[word]) {\n                taskGroups[word] = [];\n            }\n            \n            // Only add if not already in the group\n            if (!taskGroups[word].find(t => t.id === todo.id)) {\n                taskGroups[word].push(todo);\n            }\n        });\n    });\n    \n    // Find patterns with at least 2 todos\n    Object.keys(taskGroups).forEach(word => {\n        if (taskGroups[word].length >= 2) {\n            patterns.push({\n                pattern_id: `pattern-${patterns.length + 1}`,\n                keyword: word,\n                similar_tasks: taskGroups[word].length,\n                template: `${word} task`,\n                automation_confidence: Math.round(60 + (taskGroups[word].length * 5)),\n                examples: taskGroups[word].slice(0, 3).map(t => t.description)\n            });\n        }\n    });\n    \n    return patterns.slice(0, 3); // Return top 3 patterns\n}\n\n// Generate simple recommendations\nfunction generateRecommendations(todos) {\n    const recommendations = [];\n    \n    // Find pending todos similar to completed todos\n    const pendingTodos = global.get(\"pendingTodos\") || [];\n    \n    // For demo, just recommend high priority for first few todos\n    pendingTodos.slice(0, 2).forEach(todo => {\n        if (todo.priority !== \"high\") {\n            recommendations.push({\n                todo_id: todo.id,\n                description: todo.description,\n                current_priority: todo.priority || \"medium\",\n                recommended_priority: \"high\",\n                confidence: Math.round(70 + Math.random() * 20)\n            });\n        }\n    });\n    \n    return recommendations;\n}\n\n// Format AI suggestions for dashboard\nconst aiSuggestions = {\n    automation_suggestions: findPatterns(completedTodos),\n    priority_recommendations: generateRecommendations(completedTodos),\n    pattern_analysis: {\n        total_patterns: completedTodos.length > 0 ? Math.min(3, Math.floor(completedTodos.length / 2)) : 0,\n        analyzed_todos: completedTodos.length\n    },\n    completed: recentCompleted\n};\n\n// Debug output\nnode.warn(\"Publishing AI suggestions with \" + aiSuggestions.automation_suggestions.length + \" automation suggestions\");\nnode.warn(\"Publishing \" + aiSuggestions.priority_recommendations.length + \" priority recommendations\");\nnode.warn(\"Including \" + recentCompleted.length + \" recently completed todos\");\n\nreturn { \n    payload: aiSuggestions,\n    topic: \"todo/dashboard/suggestions\"\n};",
         "outputs": 1,
         "timeout": "",
         "noerr": 0,
@@ -407,7 +408,7 @@
         "type": "debug",
         "z": "b4172645077d3f56",
         "name": "todo-db-output",
-        "active": false,
+        "active": true,
         "tosidebar": true,
         "console": false,
         "tostatus": true,
@@ -441,7 +442,7 @@
         "type": "debug",
         "z": "b4172645077d3f56",
         "name": "publish-to-dashboard-debug",
-        "active": false,
+        "active": true,
         "tosidebar": true,
         "console": false,
         "tostatus": true,
