@@ -13,7 +13,6 @@ from fastmcp_todo_server.tools import add_lesson
 from fastmcp_todo_server.tools import add_todo
 from fastmcp_todo_server.tools import delete_lesson
 from fastmcp_todo_server.tools import delete_todo
-from fastmcp_todo_server.tools import deploy_nodered_flow
 from fastmcp_todo_server.tools import get_lesson
 from fastmcp_todo_server.tools import get_todo
 from fastmcp_todo_server.tools import list_lessons
@@ -107,11 +106,6 @@ async def update_todo_tool(todo_id: str, updates: dict, ctx: Context = None) -> 
 @register_tool_once
 async def mqtt_publish_tool(topic: str, message: str, ctx: Context = None) -> str:
     return await mqtt_publish(topic, message, ctx)
-
-
-@register_tool_once
-async def deploy_nodered_flow_tool(flow_json_name: str) -> str:
-    return await deploy_nodered_flow(flow_json_name)
 
 
 @register_tool_once
