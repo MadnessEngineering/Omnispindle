@@ -56,7 +56,13 @@ class Omnispindle(FastMCP):
             )
 
             # Run the server
-            await self.run_sse_async()  # Use self instead of server
+            app = await self.run_sse_async()
+            if app is None:
+                logger.warning("run_sse_async returned None, using dummy app")
+                async def dummy_app(scope, receive, send):
+                    ...
+                app = dummy_app
+            return app
         except Exception as e:
             print(f"Error in server: {str(e)}")
             # Publish offline status with retain flag in case of error
