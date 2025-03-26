@@ -9,7 +9,7 @@ import uvicorn
 
 class Omnispindle(FastMCP):
     def __init__(self, name: str = "todo-server", server_type: str = "sse"):
-        super().__init__(name, server_type)
+        super().__init__(name=name, server_type=server_type)
         # We don't need to create another server instance since we inherit from FastMCP
 
     async def run_server(self, publish_mqtt_status: Callable):
