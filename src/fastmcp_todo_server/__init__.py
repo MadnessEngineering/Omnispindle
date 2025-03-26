@@ -7,23 +7,23 @@ from dotenv import load_dotenv
 # Import FastMCP
 from fastmcp import Context
 # Import the Omnispindle class from the server module
-from fastmcp_todo_server.server import server
-from fastmcp_todo_server.tools import add_lesson
+from server import server
+from tools import add_lesson
 # Import the tool functions from the tools module
-from fastmcp_todo_server.tools import add_todo
-from fastmcp_todo_server.tools import delete_lesson
-from fastmcp_todo_server.tools import delete_todo
-from fastmcp_todo_server.tools import get_lesson
-from fastmcp_todo_server.tools import get_todo
-from fastmcp_todo_server.tools import list_lessons
-from fastmcp_todo_server.tools import list_todos_by_status
-from fastmcp_todo_server.tools import mark_todo_complete
-from fastmcp_todo_server.tools import mqtt_publish
-from fastmcp_todo_server.tools import query_todos
-from fastmcp_todo_server.tools import search_lessons
-from fastmcp_todo_server.tools import search_todos
-from fastmcp_todo_server.tools import update_lesson
-from fastmcp_todo_server.tools import update_todo
+from tools import add_todo
+from tools import delete_lesson
+from tools import delete_todo
+from tools import get_lesson
+from tools import get_todo
+from tools import list_lessons
+from tools import list_todos_by_status
+from tools import mark_todo_complete
+from tools import mqtt_publish
+from tools import query_todos
+from tools import search_lessons
+from tools import search_todos
+from tools import update_lesson
+from tools import update_todo
 from pymongo import MongoClient
 
 # Load environment variables
@@ -79,7 +79,7 @@ def register_tool_once(tool_func):
     Decorator to register a tool only if it hasn't been registered before
     """
     try:
-        # Use the server's register_tool method which handles duplicates
+        # Use the Omnispindle's register_tool method which handles duplicates
         return server.register_tool(tool_func)
     except Exception as e:
         print(f"Failed to register tool {tool_func.__name__}: {str(e)}")
