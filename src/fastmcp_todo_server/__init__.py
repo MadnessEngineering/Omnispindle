@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 # Import FastMCP
 from fastmcp import Context
 # Import the Omnispindle class from the server module
-from server import server
+from server import Omnispindle
 from tools import add_lesson
 # Import the tool functions from the tools module
 from tools import add_todo
@@ -44,7 +44,7 @@ mongo_client = MongoClient(MONGODB_URI)
 db = mongo_client[MONGODB_DB]
 collection = db[MONGODB_COLLECTION]
 lessons_collection = db["lessons_learned"]
-
+server = Omnispindle()
 MOSQUITTO_PUB_AVAILABLE = shutil.which("mosquitto_pub") is not None
 
 
