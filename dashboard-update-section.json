@@ -1,0 +1,77 @@
+[
+    {
+        "id": "f6f2187d.f17ca8",
+        "type": "function",
+        "z": "e87fb0a3.9981f",
+        "name": "Set Aggregate Parameters",
+        "func": "// Get Pending Todos Pipeline\nconst pendingTodosPipeline = [\n    // Match pending todos\n    { $match: { status: \"pending\" } },\n    \n    // Sort by priority (asc) and created date (asc)\n    { $sort: { priority: 1, created_at: 1 } }\n    \n    // Could add limit stage here if needed\n];\n\n// Get Completed Todos Pipeline\nconst completedTodosPipeline = [\n    // Match completed todos\n    { $match: { status: \"completed\" } },\n    \n    // Sort by completed date (desc)\n    { $sort: { completed_at: -1 } },\n    \n    // Limit to last 50\n    { $limit: 50 }\n];\n\n// Placeholder for future schedule pipeline \nconst schedulePipeline = [];\n\n// Construct msg objects for each pipeline\nconst pendingTodosMsg = {\n    mode: 'collection',\n    collection: 'todos',\n    operation: 'aggregate',\n    payload: [pendingTodosPipeline]\n};\n\nconst completedTodosMsg = {\n    mode: 'collection',\n    collection: 'todos',\n    operation: 'aggregate',\n    payload: [completedTodosPipeline]  \n};\n\nconst scheduleMsg = {\n    mode: 'collection',\n    collection: 'todos',\n    operation: 'aggregate',\n    payload: [schedulePipeline]\n};\n\nreturn [\n    pendingTodosMsg,\n    completedTodosMsg,\n    scheduleMsg\n];",
+        "outputs": 3,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 360,
+        "y": 220,
+        "wires": [
+            [
+                "8f5a34c7.f4d8c8"
+            ],
+            [
+                "c8cb9b73.2b6888",
+                "4edb3648.6ba288"
+            ],
+            []
+        ]
+    },
+    {
+        "id": "4edb3648.6ba288",
+        "type": "debug",
+        "z": "e87fb0a3.9981f",
+        "name": "Completed Todos Payload",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "payload",
+        "targetType": "msg",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 630,
+        "y": 280,
+        "wires": []
+    },
+    {
+        "id": "8f5a34c7.f4d8c8",
+        "type": "mongodb4",
+        "z": "e87fb0a3.9981f",
+        "clientNode": "e6e7813b.0ecb8",
+        "collection": "todos",
+        "operation": "aggregate",
+        "output": "toArray",
+        "name": "Get Pending Todos",
+        "x": 620,
+        "y": 180,
+        "wires": [
+            [
+                "bfe253a6cc12e9f4"
+            ]
+        ]
+    },
+    {
+        "id": "c8cb9b73.2b6888",
+        "type": "mongodb4",
+        "z": "e87fb0a3.9981f",
+        "clientNode": "e6e7813b.0ecb8",
+        "collection": "todos",
+        "operation": "aggregate",
+        "output": "toArray",
+        "name": "Get Completed Todos",
+        "x": 620,
+        "y": 220,
+        "wires": [
+            [
+                "e2e52259.ea8ea"
+            ]
+        ]
+    }
+]

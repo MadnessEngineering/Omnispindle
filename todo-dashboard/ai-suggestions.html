@@ -1,0 +1,201 @@
+<!-- AI Suggestions Panel for FastMCP Todo Server Dashboard -->
+
+<style>
+.suggestions-panel {
+    font-family: 'Roboto', sans-serif;
+    padding: 0 10px;
+}
+
+.suggestion-item, .recommendation-item {
+    padding: 15px;
+    margin-bottom: 15px;
+    border-radius: 8px;
+    background-color: #e3f2fd;
+    border-left: 6px solid #2196f3;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    transition: all 0.3s ease;
+}
+
+.suggestion-item:hover, .recommendation-item:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+}
+
+.suggestion-title, .recommendation-title {
+    font-weight: bold;
+    display: block;
+    margin-bottom: 10px;
+    font-size: 16px;
+    color: #1565c0;
+}
+
+.suggestion-confidence {
+    font-size: 12px;
+    background-color: #bbdefb;
+    color: #0d47a1;
+    padding: 3px 8px;
+    border-radius: 12px;
+    display: inline-block;
+    margin-left: 10px;
+}
+
+.similar-tasks {
+    margin-top: 8px;
+    font-size: 13px;
+    color: #546e7a;
+}
+
+.recommendation-details {
+    display: flex;
+    align-items: center;
+    margin-top: 8px;
+}
+
+.priority-change {
+    display: flex;
+    align-items: center;
+}
+
+.priority-badge {
+    padding: 3px 8px;
+    border-radius: 12px;
+    font-size: 12px;
+    margin: 0 5px;
+}
+
+.priority-high {
+    background-color: #ffebee;
+    color: #c62828;
+}
+
+.priority-medium {
+    background-color: #fff3e0;
+    color: #e65100;
+}
+
+.priority-low {
+    background-color: #e8f5e9;
+    color: #2e7d32;
+}
+
+.priority-arrow {
+    font-size: 18px;
+    margin: 0 5px;
+    color: #546e7a;
+}
+
+.pattern-summary {
+    background-color: #f5f5f5;
+    border-radius: 8px;
+    padding: 12px;
+    margin-top: 20px;
+    border-left: 6px solid #9e9e9e;
+}
+
+.section-header {
+    margin-top: 25px;
+    margin-bottom: 15px;
+    border-bottom: 2px solid #e0e0e0;
+    padding-bottom: 8px;
+    color: #424242;
+    font-weight: 500;
+}
+
+.empty-message {
+    color: #757575;
+    font-style: italic;
+    padding: 20px;
+    text-align: center;
+    background-color: #f5f5f5;
+    border-radius: 8px;
+}
+</style>
+
+<div class="suggestions-panel">
+  <h2>AI-Powered Insights</h2>
+
+  <div ng-if="msg.payload.automation_suggestions && msg.payload.automation_suggestions.length > 0">
+    <h3 class="section-header">Automation Opportunities</h3>
+    <div ng-repeat="suggestion in msg.payload.automation_suggestions">
+      <div class="suggestion-item">
+        <div>
+          <span class="suggestion-title">{{suggestion.template}}</span>
+          <span class="suggestion-confidence">{{suggestion.automation_confidence}}% confidence</span>
+        </div>
+        <p class="similar-tasks">Found {{suggestion.similar_tasks}} similar tasks</p>
+        <div ng-if="suggestion.examples && suggestion.examples.length > 0">
+          <p><strong>Examples:</strong></p>
+          <ul>
+            <li ng-repeat="example in suggestion.examples | limitTo:2">{{example}}</li>
+          </ul>
+        </div>
+        <div ng-if="suggestion.avg_completion_time">
+          <p>Average completion time: {{(suggestion.avg_completion_time / 60).toFixed(1)}} minutes</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div ng-if="msg.payload.priority_recommendations && msg.payload.priority_recommendations.length > 0">
+    <h3 class="section-header">Priority Recommendations</h3>
+    <div ng-repeat="rec in msg.payload.priority_recommendations">
+      <div class="recommendation-item">
+        <span class="recommendation-title">{{rec.description}}</span>
+        <div class="recommendation-details">
+          <div class="priority-change">
+            <span>Current:</span>
+            <span class="priority-badge priority-{{rec.current_priority}}">{{rec.current_priority}}</span>
+            <span class="priority-arrow">→</span>
+            <span>Recommended:</span>
+            <span class="priority-badge priority-{{rec.recommended_priority}}">{{rec.recommended_priority}}</span>
+          </div>
+          <div style="margin-left: auto;">
+            <span class="suggestion-confidence">{{rec.confidence}}% match</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div ng-if="msg.payload.pattern_analysis && msg.payload.pattern_analysis.total_patterns > 0">
+    <div class="pattern-summary">
+      <p><strong>Pattern Analysis:</strong> Found {{msg.payload.pattern_analysis.total_patterns}} recurring patterns across {{msg.payload.pattern_analysis.analyzed_todos}} completed todos.</p>
+    </div>
+  </div>
+
+  <div ng-if="(!msg.payload.automation_suggestions || msg.payload.automation_suggestions.length === 0) &&
+              (!msg.payload.priority_recommendations || msg.payload.priority_recommendations.length === 0)">
+    <div class="empty-message">
+      <p>No AI suggestions available yet. Complete more tasks to generate insights and recommendations.</p>
+      <p>The AI assistant analyzes your task completion patterns to identify opportunities for automation and optimization.</p>
+    </div>
+  </div>
+</div>
+
+<!--
+Node-RED Message Format:
+{
+  "automation_suggestions": [
+    {
+      "pattern_id": "123",
+      "similar_tasks": 5,
+      "template": "Daily progress report",
+      "automation_confidence": 85,
+      "examples": ["Submit daily report", "Send progress update"]
+    }
+  ],
+  "priority_recommendations": [
+    {
+      "todo_id": "456",
+      "description": "Review project proposal",
+      "current_priority": "medium",
+      "recommended_priority": "high",
+      "confidence": 75
+    }
+  ],
+  "pattern_analysis": {
+    "total_patterns": 3,
+    "analyzed_todos": 25
+  }
+}
+-->

@@ -2,7 +2,7 @@ import json
 import os
 import shutil
 import subprocess
-from typing import Callable
+from typing import Callable, Optional
 
 from dotenv import load_dotenv
 # Import FastMCP
@@ -29,6 +29,11 @@ from pymongo import MongoClient
 # Import the AI assistant functions
 from ai_assistant import get_todo_suggestions
 from ai_assistant import get_specific_suggestions
+# Import the scheduler functions
+from scheduler import suggest_deadline
+from scheduler import suggest_time_slot
+from scheduler import generate_daily_schedule
+from .tools import deploy_nodered_flow, publish_to_dashboard
 
 # Load environment variables
 load_dotenv()
@@ -202,6 +207,71 @@ async def get_specific_todo_suggestions_tool(todo_id: str) -> str:
         A JSON string containing suggestions specific to the todo
     """
     return await get_specific_suggestions(todo_id)
+
+
+@register_tool_once
+async def suggest_deadline_tool(todo_id: str) -> str:
+    """
+    Suggest an optimal deadline for a specific todo based on priority and content analysis.
+    
+    This tool analyzes a todo's priority and description to suggest a reasonable deadline:
+    1. High priority tasks get shorter deadlines
+    2. Keywords like "urgent" or "tomorrow" influence the suggestion
+    3. The deadline always falls on a working day
+    
+    Args:
+        todo_id: ID of the todo to suggest a deadline for
+        
+    Returns:
+        A JSON string containing the deadline suggestion with reasoning
+    """
+    return await suggest_deadline(todo_id)
+
+
+@register_tool_once
+async def suggest_time_slot_tool(todo_id: str, date: Optional[str] = None) -> str:
+    """
+    Suggest an optimal time slot for completing a specific todo.
+    
+    This tool analyzes completed todos to find patterns in when similar tasks 
+    are typically completed, then suggests an optimal time slot:
+    1. Based on historical completion patterns for similar tasks
+    2. Considering the priority of the task (high priority = morning slots)
+    3. Using appropriate duration based on task priority
+    
+    Args:
+        todo_id: ID of the todo to schedule
+        date: Optional specific date in YYYY-MM-DD format
+        
+    Returns:
+        A JSON string containing the time slot suggestion with reasoning
+    """
+    return await suggest_time_slot(todo_id, date)
+
+
+@register_tool_once
+async def generate_daily_schedule_tool(date: Optional[str] = None) -> str:
+    """
+    Generate an optimized daily schedule based on pending todos.
+    
+    This tool creates a complete daily schedule by:
+    1. Prioritizing tasks based on their importance
+    2. Allocating appropriate time slots with breaks between tasks
+    3. Ensuring the schedule respects working hours
+    4. Limiting the number of tasks to a reasonable amount per day
+    
+    Args:
+        date: Optional specific date in YYYY-MM-DD format (defaults to tomorrow)
+        
+    Returns:
+        A JSON string containing the complete suggested schedule
+    """
+    return await generate_daily_schedule(date)
+
+
+# Add Node-RED dashboard tools
+server.register_tool(deploy_nodered_flow, name="deploy_nodered_dashboard_tool", description="Deploy a Node-RED dashboard for the todo application")
+server.register_tool(publish_to_dashboard, name="publish_to_dashboard_tool", description="Publish data to the Node-RED dashboard")
 
 
 async def run_server() -> Callable:

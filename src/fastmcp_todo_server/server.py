@@ -81,10 +81,10 @@ class Omnispindle(FastMCP):
             # Run the server
             logger.info("Calling run_sse_async() to start the server")
             app = await self.run_sse_async()
-            
+
             if app is None:
                 logger.warning("run_sse_async returned None, using dummy fallback app")
-                
+
                 async def dummy_app(scope: Dict[str, Any], receive: Callable, send: Callable) -> None:
                     """
                     A robust fallback ASGI application that handles basic requests when the main app is unavailable.
@@ -93,11 +93,11 @@ class Omnispindle(FastMCP):
                     It logs details about incoming requests for debugging purposes.
                     """
                     logger.info(f"Dummy app received request: {scope['type']} {scope.get('path', 'unknown path')}")
-                    
+
                     if scope["type"] == "http":
                         # Wait for the request body
                         await receive()
-                        
+
                         # Create a JSON response
                         response = JSONResponse(
                             status_code=503,
@@ -107,7 +107,7 @@ class Omnispindle(FastMCP):
                                 "path": scope.get("path", "unknown")
                             }
                         )
-                        
+
                         # Send response headers
                         logger.debug(f"Dummy app sending 503 response for {scope.get('path', 'unknown path')}")
                         await send({
@@ -118,13 +118,13 @@ class Omnispindle(FastMCP):
                                 [b"x-fallback-app", b"true"]
                             ]
                         })
-                        
+
                         # Send response body
                         await send({
                             "type": "http.response.body",
                             "body": json.dumps(response.body).encode("utf-8"),
                         })
-                    
+
                     elif scope["type"] == "websocket":
                         # Handle WebSocket connections
                         logger.debug(f"Dummy app closing WebSocket connection for {scope.get('path', 'unknown path')}")
@@ -132,7 +132,7 @@ class Omnispindle(FastMCP):
                             "type": "websocket.close",
                             "code": 1013,  # Try again later
                         })
-                    
+
                     elif scope["type"] == "lifespan":
                         # Handle lifespan events (startup/shutdown)
                         logger.debug("Dummy app handling lifespan events")
@@ -147,12 +147,12 @@ class Omnispindle(FastMCP):
                                 break
                             else:
                                 logger.warning(f"Dummy app received unknown lifespan message: {message['type']}")
-                
+
                 app = dummy_app
                 logger.info("Fallback dummy app is now active")
             else:
                 logger.info("ASGI application successfully obtained from run_sse_async()")
-            
+
             logger.info("Server startup complete, returning ASGI application")
             return app
         except Exception as e:
@@ -174,7 +174,7 @@ class Omnispindle(FastMCP):
         """Register a single tool with the server"""
         tool_name = getattr(tool_func, "__name__", str(tool_func))
         logger.debug(f"Attempting to register tool: {tool_name}")
-        
+
         if not hasattr(self, '_registered_tools'):
             logger.debug("Initializing _registered_tools set")
             self._registered_tools = set()
@@ -187,7 +187,7 @@ class Omnispindle(FastMCP):
             logger.info(f"Successfully registered tool: {tool_name}")
         else:
             logger.debug(f"Tool {tool_name} already registered, skipping")
-        
+
         return tool_func
 
     def register_tools(self, tools_list):

@@ -1,0 +1,334 @@
+[
+    {
+        "id": "todo-dashboard",
+        "type": "tab",
+        "label": "todo-dashboard",
+        "disabled": false,
+        "info": "Dashboard for FastMCP Todo Server with AI-powered insights"
+    },
+    {
+        "id": "mqtt-in",
+        "type": "mqtt in",
+        "z": "todo-dashboard",
+        "name": "Todo Updates",
+        "topic": "todo/dashboard/#",
+        "qos": "1",
+        "datatype": "json",
+        "broker": "5b41a831.e6efd8",
+        "nl": false,
+        "rap": false,
+        "inputs": 0,
+        "x": 145.99998474121094,
+        "y": 169.00001049041748,
+        "wires": [
+            [
+                "route-messages"
+            ]
+        ]
+    },
+    {
+        "id": "route-messages",
+        "type": "switch",
+        "z": "todo-dashboard",
+        "name": "Route by Topic",
+        "property": "topic",
+        "propertyType": "msg",
+        "rules": [
+            {
+                "t": "eq",
+                "v": "todo/dashboard/todos",
+                "vt": "str"
+            },
+            {
+                "t": "eq",
+                "v": "todo/dashboard/suggestions",
+                "vt": "str"
+            },
+            {
+                "t": "eq",
+                "v": "todo/dashboard/schedule",
+                "vt": "str"
+            }
+        ],
+        "checkall": "true",
+        "outputs": 3,
+        "x": 335.99998474121094,
+        "y": 149.00001049041748,
+        "wires": [
+            [
+                "todo-list"
+            ],
+            [
+                "suggestions-panel"
+            ],
+            [
+                "schedule-display"
+            ]
+        ]
+    },
+    {
+        "id": "todo-list",
+        "type": "ui_template",
+        "z": "todo-dashboard",
+        "group": "g-todos",
+        "name": "Todo List",
+        "order": 1,
+        "width": "12",
+        "height": "8",
+        "format": "<!-- Todo List Panel for FastMCP Todo Server Dashboard -->\n\n<style>\n    .todo-container {\n        font-family: 'Roboto', sans-serif;\n        padding: 0 10px;\n    }\n\n    .todo-stats {\n        background-color: #f5f5f5;\n        border-radius: 8px;\n        padding: 15px;\n        margin-bottom: 20px;\n        display: flex;\n        flex-wrap: wrap;\n    }\n\n    .stats-item {\n        margin-right: 25px;\n        margin-bottom: 10px;\n        text-align: center;\n    }\n\n    .stats-value {\n        font-size: 24px;\n        font-weight: 500;\n        color: #212121;\n        margin-bottom: 5px;\n    }\n\n    .stats-label {\n        font-size: 13px;\n        color: #757575;\n    }\n\n    .todo-actions {\n        margin-bottom: 20px;\n        display: flex;\n        justify-content: space-between;\n        align-items: center;\n    }\n\n    .filter-options {\n        display: flex;\n        gap: 10px;\n    }\n\n    .filter-button {\n        padding: 6px 12px;\n        border-radius: 16px;\n        border: 1px solid #e0e0e0;\n        background-color: white;\n        font-size: 13px;\n        cursor: pointer;\n        transition: all 0.2s;\n    }\n\n    .filter-button:hover {\n        background-color: #f5f5f5;\n    }\n\n    .filter-button.active {\n        background-color: #e3f2fd;\n        border-color: #90caf9;\n        color: #1976d2;\n    }\n\n    .search-field {\n        position: relative;\n        flex-grow: 1;\n        max-width: 300px;\n        margin-left: 10px;\n    }\n\n    .search-field input {\n        width: 100%;\n        padding: 8px 12px 8px 35px;\n        border-radius: 20px;\n        border: 1px solid #e0e0e0;\n        font-size: 14px;\n    }\n\n    .search-icon {\n        position: absolute;\n        left: 12px;\n        top: 50%;\n        transform: translateY(-50%);\n        color: #9e9e9e;\n        font-size: 16px;\n    }\n\n    .todo-list {\n        margin-bottom: 20px;\n    }\n\n    .todo-item {\n        margin-bottom: 15px;\n        padding: 0;\n        border-radius: 8px;\n        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.08);\n        background-color: white;\n        transition: all 0.3s ease;\n        overflow: hidden;\n    }\n\n    .todo-item:hover {\n        transform: translateY(-2px);\n        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);\n    }\n\n    .todo-item.high {\n        border-left: 6px solid #e53935;\n    }\n\n    .todo-item.medium {\n        border-left: 6px solid #fb8c00;\n    }\n\n    .todo-item.low {\n        border-left: 6px solid #43a047;\n    }\n\n    .todo-content {\n        padding: 15px;\n        cursor: pointer;\n    }\n\n    .todo-header {\n        display: flex;\n        justify-content: space-between;\n        align-items: flex-start;\n        margin-bottom: 10px;\n    }\n\n    .todo-title {\n        font-weight: 500;\n        font-size: 16px;\n        color: #212121;\n        margin-right: 10px;\n        word-break: break-word;\n    }\n\n    .todo-meta {\n        display: flex;\n        flex-wrap: wrap;\n        gap: 8px;\n        align-items: center;\n        margin-top: 10px;\n        color: #757575;\n        font-size: 13px;\n    }\n\n    .todo-priority {\n        font-size: 12px;\n        text-transform: uppercase;\n        padding: 2px 8px;\n        border-radius: 12px;\n        font-weight: 500;\n        flex-shrink: 0;\n    }\n\n    .todo-item.high .todo-priority {\n        background-color: #ffebee;\n        color: #c62828;\n    }\n\n    .todo-item.medium .todo-priority {\n        background-color: #fff3e0;\n        color: #e65100;\n    }\n\n    .todo-item.low .todo-priority {\n        background-color: #e8f5e9;\n        color: #2e7d32;\n    }\n\n    .todo-date {\n        color: #757575;\n        font-size: 13px;\n        flex-shrink: 0;\n    }\n\n    .todo-id {\n        font-size: 12px;\n        color: #9e9e9e;\n        font-family: monospace;\n    }\n\n    .todo-buttons {\n        display: flex;\n        flex-wrap: wrap;\n        gap: 8px;\n        padding: 0 15px 15px 15px;\n    }\n\n    .action-button {\n        padding: 6px 12px;\n        border-radius: 4px;\n        font-size: 13px;\n        text-transform: uppercase;\n        font-weight: 500;\n        border: none;\n        cursor: pointer;\n        transition: background-color 0.2s;\n        display: flex;\n        align-items: center;\n    }\n\n    .action-button .action-icon {\n        margin-right: 6px;\n    }\n\n    .complete-button {\n        background-color: #e8f5e9;\n        color: #2e7d32;\n    }\n\n    .complete-button:hover {\n        background-color: #c8e6c9;\n    }\n\n    .suggestions-button {\n        background-color: #e3f2fd;\n        color: #1565c0;\n    }\n\n    .suggestions-button:hover {\n        background-color: #bbdefb;\n    }\n\n    .schedule-button {\n        background-color: #fff3e0;\n        color: #e65100;\n    }\n\n    .schedule-button:hover {\n        background-color: #ffe0b2;\n    }\n\n    .empty-message {\n        color: #757575;\n        font-style: italic;\n        padding: 20px;\n        text-align: center;\n        background-color: #f5f5f5;\n        border-radius: 8px;\n    }\n\n    .recently-completed {\n        margin-top: 30px;\n    }\n\n    .section-header {\n        font-size: 18px;\n        font-weight: 500;\n        color: #424242;\n        margin-bottom: 15px;\n        border-bottom: 2px solid #e0e0e0;\n        padding-bottom: 8px;\n    }\n\n    .completed-item {\n        padding: 10px 15px;\n        border-radius: 8px;\n        background-color: #f5f5f5;\n        margin-bottom: 10px;\n        display: flex;\n        justify-content: space-between;\n        align-items: center;\n    }\n\n    .completed-title {\n        color: #757575;\n        text-decoration: line-through;\n        margin-right: 10px;\n    }\n\n    .completed-time {\n        font-size: 12px;\n        color: #9e9e9e;\n    }\n</style>\n\n<div class=\"todo-container\">\n    <div class=\"todo-stats\">\n        <div class=\"stats-item\">\n            <div class=\"stats-value\">{{msg.payload.total_pending || 0}}</div>\n            <div class=\"stats-label\">Pending Tasks</div>\n        </div>\n\n        <div class=\"stats-item\">\n            <div class=\"stats-value\">{{msg.payload.total_completed || 0}}</div>\n            <div class=\"stats-label\">Completed Tasks</div>\n        </div>\n\n        <div class=\"stats-item\" ng-if=\"msg.payload.high_priority\">\n            <div class=\"stats-value\" style=\"color: #e53935;\">{{msg.payload.high_priority || 0}}</div>\n            <div class=\"stats-label\">High Priority</div>\n        </div>\n\n        <div class=\"stats-item\">\n            <div class=\"stats-value\" style=\"color: #fb8c00;\">{{msg.payload.medium_priority || 0}}</div>\n            <div class=\"stats-label\">Medium Priority</div>\n        </div>\n\n        <div class=\"stats-item\">\n            <div class=\"stats-value\" style=\"color: #43a047;\">{{msg.payload.low_priority || 0}}</div>\n            <div class=\"stats-label\">Low Priority</div>\n        </div>\n    </div>\n\n    <div class=\"todo-actions\">\n        <div class=\"filter-options\">\n            <button class=\"filter-button active\" ng-click=\"filterTodos('all')\">All</button>\n            <button class=\"filter-button\" ng-click=\"filterTodos('high')\">High Priority</button>\n            <button class=\"filter-button\" ng-click=\"filterTodos('medium')\">Medium</button>\n            <button class=\"filter-button\" ng-click=\"filterTodos('low')\">Low</button>\n        </div>\n\n        <div class=\"search-field\">\n            <i class=\"fa fa-search search-icon\"></i>\n            <input type=\"text\" placeholder=\"Search tasks...\" ng-model=\"searchText\" />\n        </div>\n    </div>\n\n    <div class=\"todo-list\">\n        <div ng-if=\"msg.payload.todos && msg.payload.todos.length > 0\">\n            <div ng-repeat=\"item in msg.payload.todos | filter:searchFilter\" class=\"todo-item {{item.priority}}\">\n                <div class=\"todo-content\" ng-click=\"item.expanded = !item.expanded\">\n                    <div class=\"todo-header\">\n                        <div class=\"todo-title\">{{item.description}}</div>\n                        <div>\n                            <span class=\"todo-priority\">{{item.priority}}</span>\n                        </div>\n                    </div>\n\n                    <div class=\"todo-meta\">\n                        <span class=\"todo-date\" ng-if=\"item.created_at\">\n              Created: {{item.created_at | date:'MMM d, yyyy'}}\n            </span>\n                        <span class=\"todo-id\" ng-if=\"item.id\">\n              #{{item.id.substring(0,8)}}\n            </span>\n                    </div>\n                </div>\n\n                <div class=\"todo-buttons\">\n                    <button class=\"action-button complete-button\" ng-click=\"send({payload: {action: 'complete', id: item.id}})\">\n            <i class=\"fa fa-check action-icon\"></i> Complete\n          </button>\n                    <button class=\"action-button suggestions-button\" ng-click=\"send({payload: {action: 'suggestions', id: item.id}})\">\n            <i class=\"fa fa-lightbulb-o action-icon\"></i> AI Insights\n          </button>\n                    <button class=\"action-button schedule-button\" ng-click=\"send({payload: {action: 'schedule', id: item.id}})\">\n            <i class=\"fa fa-calendar action-icon\"></i> Schedule\n          </button>\n                </div>\n            </div>\n        </div>\n\n        <div ng-if=\"!msg.payload.todos || msg.payload.todos.length === 0\" class=\"empty-message\">\n            <p>No pending todo items found.</p>\n            <p>Create new tasks to get started.</p>\n        </div>\n    </div>\n\n    <div class=\"recently-completed\" ng-if=\"msg.payload.completed && msg.payload.completed.length > 0\">\n        <h3 class=\"section-header\">Recently Completed</h3>\n        <div ng-repeat=\"item in msg.payload.completed | limitTo:5\" class=\"completed-item\">\n            <div class=\"completed-title\">{{item.description}}</div>\n            <div class=\"completed-time\" ng-if=\"item.completed_at\">\n                {{item.completed_at | date:'MMM d, h:mm a'}}\n            </div>\n        </div>\n    </div>\n</div>\n\n<script>\n    (function(scope) {\n    // Initialize active filter\n    scope.activeFilter = 'all';\n    scope.searchText = '';\n\n    // Filter function for todos\n    scope.filterTodos = function(filter) {\n      scope.activeFilter = filter;\n\n      // Update active button styling\n      angular.element(document.querySelectorAll('.filter-button'))\n        .removeClass('active');\n      angular.element(event.target).addClass('active');\n    };\n\n    // Search filter function\n    scope.searchFilter = function(item) {\n      // First apply priority filter\n      if (scope.activeFilter !== 'all' && item.priority !== scope.activeFilter) {\n        return false;\n      }\n\n      // Then apply text search if there is search text\n      if (scope.searchText && scope.searchText.length > 0) {\n        return item.description.toLowerCase().includes(scope.searchText.toLowerCase());\n      }\n\n      return true;\n    };\n  })(scope);\n</script>\n\n<!--\nNode-RED Message Format:\n{\n  \"todos\": [\n    {\n      \"id\": \"123e4567-e89b-12d3-a456-426614174000\",\n      \"description\": \"Prepare weekly report\",\n      \"priority\": \"high\",\n      \"status\": \"pending\",\n      \"created_at\": 1682424116000\n    },\n    {\n      \"id\": \"223e4567-e89b-12d3-a456-426614174001\",\n      \"description\": \"Schedule team meeting\",\n      \"priority\": \"medium\",\n      \"status\": \"pending\",\n      \"created_at\": 1682510516000\n    }\n  ],\n  \"completed\": [\n    {\n      \"id\": \"323e4567-e89b-12d3-a456-426614174002\",\n      \"description\": \"Review pull request\",\n      \"priority\": \"high\",\n      \"status\": \"completed\",\n      \"created_at\": 1682424116000,\n      \"completed_at\": 1682434916000\n    }\n  ],\n  \"total_pending\": 2,\n  \"total_completed\": 1,\n  \"high_priority\": 1,\n  \"medium_priority\": 1,\n  \"low_priority\": 0,\n  \"last_updated\": \"2023-05-15T14:30:00Z\"\n}\n-->",
+        "storeOutMessages": true,
+        "fwdInMessages": false,
+        "resendOnRefresh": true,
+        "templateScope": "local",
+        "x": 515.9999847412109,
+        "y": 109.00001049041748,
+        "wires": [
+            [
+                "todo-actions"
+            ]
+        ]
+    },
+    {
+        "id": "suggestions-panel",
+        "type": "ui_template",
+        "z": "todo-dashboard",
+        "group": "g-suggestions",
+        "name": "AI Suggestions",
+        "order": 1,
+        "width": "12",
+        "height": "8",
+        "format": "<!-- AI Suggestions Panel for FastMCP Todo Server Dashboard -->\n\n<style>\n    .suggestions-panel {\n        font-family: 'Roboto', sans-serif;\n        padding: 0 10px;\n    }\n\n    .suggestion-item,\n    .recommendation-item {\n        padding: 15px;\n        margin-bottom: 15px;\n        border-radius: 8px;\n        background-color: #e3f2fd;\n        border-left: 6px solid #2196f3;\n        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);\n        transition: all 0.3s ease;\n    }\n\n    .suggestion-item:hover,\n    .recommendation-item:hover {\n        transform: translateY(-2px);\n        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);\n    }\n\n    .suggestion-title,\n    .recommendation-title {\n        font-weight: bold;\n        display: block;\n        margin-bottom: 10px;\n        font-size: 16px;\n        color: #1565c0;\n    }\n\n    .suggestion-confidence {\n        font-size: 12px;\n        background-color: #bbdefb;\n        color: #0d47a1;\n        padding: 3px 8px;\n        border-radius: 12px;\n        display: inline-block;\n        margin-left: 10px;\n    }\n\n    .similar-tasks {\n        margin-top: 8px;\n        font-size: 13px;\n        color: #546e7a;\n    }\n\n    .recommendation-details {\n        display: flex;\n        align-items: center;\n        margin-top: 8px;\n    }\n\n    .priority-change {\n        display: flex;\n        align-items: center;\n    }\n\n    .priority-badge {\n        padding: 3px 8px;\n        border-radius: 12px;\n        font-size: 12px;\n        margin: 0 5px;\n    }\n\n    .priority-high {\n        background-color: #ffebee;\n        color: #c62828;\n    }\n\n    .priority-medium {\n        background-color: #fff3e0;\n        color: #e65100;\n    }\n\n    .priority-low {\n        background-color: #e8f5e9;\n        color: #2e7d32;\n    }\n\n    .priority-arrow {\n        font-size: 18px;\n        margin: 0 5px;\n        color: #546e7a;\n    }\n\n    .pattern-summary {\n        background-color: #f5f5f5;\n        border-radius: 8px;\n        padding: 12px;\n        margin-top: 20px;\n        border-left: 6px solid #9e9e9e;\n    }\n\n    .section-header {\n        margin-top: 25px;\n        margin-bottom: 15px;\n        border-bottom: 2px solid #e0e0e0;\n        padding-bottom: 8px;\n        color: #424242;\n        font-weight: 500;\n    }\n\n    .empty-message {\n        color: #757575;\n        font-style: italic;\n        padding: 20px;\n        text-align: center;\n        background-color: #f5f5f5;\n        border-radius: 8px;\n    }\n</style>\n\n<div class=\"suggestions-panel\">\n    <h2>AI-Powered Insights</h2>\n\n    <div ng-if=\"msg.payload.automation_suggestions && msg.payload.automation_suggestions.length > 0\">\n        <h3 class=\"section-header\">Automation Opportunities</h3>\n        <div ng-repeat=\"suggestion in msg.payload.automation_suggestions\">\n            <div class=\"suggestion-item\">\n                <div>\n                    <span class=\"suggestion-title\">{{suggestion.template}}</span>\n                    <span class=\"suggestion-confidence\">{{suggestion.automation_confidence}}% confidence</span>\n                </div>\n                <p class=\"similar-tasks\">Found {{suggestion.similar_tasks}} similar tasks</p>\n                <div ng-if=\"suggestion.examples && suggestion.examples.length > 0\">\n                    <p><strong>Examples:</strong></p>\n                    <ul>\n                        <li ng-repeat=\"example in suggestion.examples | limitTo:2\">{{example}}</li>\n                    </ul>\n                </div>\n                <div ng-if=\"suggestion.avg_completion_time\">\n                    <p>Average completion time: {{(suggestion.avg_completion_time / 60).toFixed(1)}} minutes</p>\n                </div>\n            </div>\n        </div>\n    </div>\n\n    <div ng-if=\"msg.payload.priority_recommendations && msg.payload.priority_recommendations.length > 0\">\n        <h3 class=\"section-header\">Priority Recommendations</h3>\n        <div ng-repeat=\"rec in msg.payload.priority_recommendations\">\n            <div class=\"recommendation-item\">\n                <span class=\"recommendation-title\">{{rec.description}}</span>\n                <div class=\"recommendation-details\">\n                    <div class=\"priority-change\">\n                        <span>Current:</span>\n                        <span class=\"priority-badge priority-{{rec.current_priority}}\">{{rec.current_priority}}</span>\n                        <span class=\"priority-arrow\">→</span>\n                        <span>Recommended:</span>\n                        <span class=\"priority-badge priority-{{rec.recommended_priority}}\">{{rec.recommended_priority}}</span>\n                    </div>\n                    <div style=\"margin-left: auto;\">\n                        <span class=\"suggestion-confidence\">{{rec.confidence}}% match</span>\n                    </div>\n                </div>\n            </div>\n        </div>\n    </div>\n\n    <div ng-if=\"msg.payload.pattern_analysis && msg.payload.pattern_analysis.total_patterns > 0\">\n        <div class=\"pattern-summary\">\n            <p><strong>Pattern Analysis:</strong> Found {{msg.payload.pattern_analysis.total_patterns}} recurring\n                patterns across {{msg.payload.pattern_analysis.analyzed_todos}} completed todos.</p>\n        </div>\n    </div>\n\n    <div ng-if=\"(!msg.payload.automation_suggestions || msg.payload.automation_suggestions.length === 0) &&\n              (!msg.payload.priority_recommendations || msg.payload.priority_recommendations.length === 0)\">\n        <div class=\"empty-message\">\n            <p>No AI suggestions available yet. Complete more tasks to generate insights and recommendations.</p>\n            <p>The AI assistant analyzes your task completion patterns to identify opportunities for automation and\n                optimization.</p>\n        </div>\n    </div>\n</div>\n\n<!--\nNode-RED Message Format:\n{\n  \"automation_suggestions\": [\n    {\n      \"pattern_id\": \"123\",\n      \"similar_tasks\": 5,\n      \"template\": \"Daily progress report\",\n      \"automation_confidence\": 85,\n      \"examples\": [\"Submit daily report\", \"Send progress update\"]\n    }\n  ],\n  \"priority_recommendations\": [\n    {\n      \"todo_id\": \"456\",\n      \"description\": \"Review project proposal\",\n      \"current_priority\": \"medium\",\n      \"recommended_priority\": \"high\",\n      \"confidence\": 75\n    }\n  ],\n  \"pattern_analysis\": {\n    \"total_patterns\": 3,\n    \"analyzed_todos\": 25\n  }\n}\n-->",
+        "storeOutMessages": true,
+        "fwdInMessages": false,
+        "resendOnRefresh": true,
+        "templateScope": "local",
+        "x": 535.9999847412109,
+        "y": 149.00001049041748,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "schedule-display",
+        "type": "ui_template",
+        "z": "todo-dashboard",
+        "group": "g-schedule",
+        "name": "Daily Schedule",
+        "order": 1,
+        "width": "12",
+        "height": "8",
+        "format": "<!-- Daily Schedule Panel for FastMCP Todo Server Dashboard -->\n\n<style>\n    .schedule-panel {\n        font-family: 'Roboto', sans-serif;\n        padding: 0 10px;\n    }\n\n    .schedule-header {\n        margin-bottom: 20px;\n    }\n\n    .schedule-date {\n        font-size: 22px;\n        font-weight: 600;\n        color: #212121;\n        margin-bottom: 5px;\n    }\n\n    .schedule-summary {\n        background-color: #f5f5f5;\n        border-radius: 8px;\n        padding: 15px;\n        margin-bottom: 20px;\n        display: flex;\n        justify-content: space-between;\n        flex-wrap: wrap;\n    }\n\n    .summary-item {\n        margin-right: 20px;\n        margin-bottom: 10px;\n    }\n\n    .summary-label {\n        font-size: 13px;\n        color: #757575;\n        margin-bottom: 5px;\n    }\n\n    .summary-value {\n        font-size: 16px;\n        font-weight: 500;\n        color: #424242;\n    }\n\n    .utilization-bar {\n        background-color: #e0e0e0;\n        height: 8px;\n        border-radius: 4px;\n        width: 100%;\n        margin-top: 15px;\n        overflow: hidden;\n    }\n\n    .utilization-fill {\n        height: 100%;\n        background-color: #4caf50;\n        border-radius: 4px;\n        transition: width 1s ease-in-out;\n    }\n\n    /* Adjust color based on utilization */\n    .utilization-low {\n        background-color: #8bc34a;\n    }\n\n    .utilization-medium {\n        background-color: #ff9800;\n    }\n\n    .utilization-high {\n        background-color: #f44336;\n    }\n\n    .timeline {\n        position: relative;\n        padding: 20px 0;\n    }\n\n    .timeline::before {\n        content: '';\n        position: absolute;\n        top: 0;\n        bottom: 0;\n        left: 100px;\n        width: 4px;\n        background-color: #e0e0e0;\n        border-radius: 2px;\n    }\n\n    .timeline-item {\n        display: flex;\n        margin-bottom: 20px;\n        position: relative;\n    }\n\n    .timeline-time {\n        position: relative;\n        width: 100px;\n        padding-right: 20px;\n        text-align: right;\n        flex-shrink: 0;\n    }\n\n    .timeline-time-text {\n        font-weight: 500;\n        color: #616161;\n    }\n\n    .timeline-content {\n        flex-grow: 1;\n        background-color: white;\n        border-radius: 8px;\n        padding: 15px;\n        margin-left: 20px;\n        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);\n        transition: all 0.3s ease;\n    }\n\n    .timeline-content:hover {\n        transform: translateY(-2px);\n        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);\n    }\n\n    .timeline-item::after {\n        content: '';\n        position: absolute;\n        width: 14px;\n        height: 14px;\n        border-radius: 50%;\n        background-color: white;\n        border: 3px solid #9e9e9e;\n        left: 95px;\n        top: 15px;\n        transform: translateX(-50%);\n        z-index: 1;\n    }\n\n    .timeline-item.high::after {\n        border-color: #e53935;\n    }\n\n    .timeline-item.medium::after {\n        border-color: #fb8c00;\n    }\n\n    .timeline-item.low::after {\n        border-color: #43a047;\n    }\n\n    .task-header {\n        display: flex;\n        justify-content: space-between;\n        margin-bottom: 10px;\n    }\n\n    .task-description {\n        font-weight: 500;\n        color: #212121;\n    }\n\n    .task-duration {\n        font-size: 13px;\n        padding: 2px 8px;\n        border-radius: 12px;\n        background-color: #eeeeee;\n        color: #616161;\n    }\n\n    .task-priority {\n        font-size: 12px;\n        text-transform: uppercase;\n        padding: 2px 6px;\n        border-radius: 4px;\n        margin-right: 8px;\n    }\n\n    .task-priority-high {\n        background-color: #ffebee;\n        color: #c62828;\n    }\n\n    .task-priority-medium {\n        background-color: #fff3e0;\n        color: #e65100;\n    }\n\n    .task-priority-low {\n        background-color: #e8f5e9;\n        color: #2e7d32;\n    }\n\n    .break-item {\n        color: #757575;\n        font-style: italic;\n        margin: 10px 0 10px 120px;\n        font-size: 13px;\n    }\n\n    .no-schedule-message {\n        color: #757575;\n        font-style: italic;\n        padding: 20px;\n        text-align: center;\n        background-color: #f5f5f5;\n        border-radius: 8px;\n        margin-top: 20px;\n    }\n</style>\n\n<div class=\"schedule-panel\">\n    <div class=\"schedule-header\">\n        <div class=\"schedule-date\">\n            Schedule for {{msg.payload.date}} <span ng-if=\"msg.payload.weekday\">({{msg.payload.weekday}})</span>\n        </div>\n    </div>\n\n    <div class=\"schedule-summary\">\n        <div class=\"summary-item\">\n            <div class=\"summary-label\">Working Hours</div>\n            <div class=\"summary-value\">{{msg.payload.working_hours.start}} - {{msg.payload.working_hours.end}}</div>\n        </div>\n\n        <div class=\"summary-item\">\n            <div class=\"summary-label\">Total Tasks</div>\n            <div class=\"summary-value\">{{msg.payload.total_tasks || 0}}</div>\n        </div>\n\n        <div class=\"summary-item\">\n            <div class=\"summary-label\">Scheduled Time</div>\n            <div class=\"summary-value\">{{msg.payload.total_scheduled_minutes || 0}} min</div>\n        </div>\n\n        <div class=\"summary-item\">\n            <div class=\"summary-label\">Time Utilization</div>\n            <div class=\"summary-value\">{{msg.payload.utilization_percentage || 0}}%</div>\n        </div>\n\n        <div style=\"width: 100%;\">\n            <div class=\"utilization-bar\">\n                <div class=\"utilization-fill\" ng-class=\"{\n               'utilization-low': msg.payload.utilization_percentage < 50,\n               'utilization-medium': msg.payload.utilization_percentage >= 50 && msg.payload.utilization_percentage < 80,\n               'utilization-high': msg.payload.utilization_percentage >= 80\n             }\" ng-style=\"{'width': (msg.payload.utilization_percentage || 0) + '%'}\">\n                </div>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"timeline\" ng-if=\"msg.payload.schedule && msg.payload.schedule.length > 0\">\n        <div ng-repeat=\"task in msg.payload.schedule\">\n            <div class=\"timeline-item {{task.priority}}\">\n                <div class=\"timeline-time\">\n                    <span class=\"timeline-time-text\">{{task.start_time}}</span>\n                </div>\n                <div class=\"timeline-content\">\n                    <div class=\"task-header\">\n                        <div>\n                            <span class=\"task-description\">{{task.description}}</span>\n                        </div>\n                        <div>\n                            <span class=\"task-priority task-priority-{{task.priority}}\">{{task.priority}}</span>\n                            <span class=\"task-duration\">{{task.duration_minutes}} min</span>\n                        </div>\n                    </div>\n                    <div ng-if=\"task.notes\" class=\"task-notes\">\n                        {{task.notes}}\n                    </div>\n                </div>\n            </div>\n\n            <!-- Add break between tasks if not the last task -->\n            <div class=\"break-item\" ng-if=\"!$last\">\n                <i class=\"fa fa-coffee\"></i> 15-minute break\n            </div>\n        </div>\n    </div>\n\n    <div ng-if=\"!msg.payload.schedule || msg.payload.schedule.length === 0\" class=\"no-schedule-message\">\n        <p>No tasks scheduled for this day.</p>\n        <p>Use the date picker to select a different day or add more pending tasks to generate a schedule.</p>\n    </div>\n</div>\n\n<!--\nNode-RED Message Format:\n{\n  \"date\": \"2023-05-15\",\n  \"weekday\": \"Monday\",\n  \"working_hours\": {\n    \"start\": \"09:00\",\n    \"end\": \"17:00\"\n  },\n  \"schedule\": [\n    {\n      \"todo_id\": \"123\",\n      \"description\": \"Review project proposal\",\n      \"priority\": \"high\",\n      \"start_time\": \"09:30\",\n      \"end_time\": \"10:30\",\n      \"duration_minutes\": 60,\n      \"notes\": \"Pay attention to budget section\"\n    },\n    {\n      \"todo_id\": \"456\",\n      \"description\": \"Team meeting\",\n      \"priority\": \"medium\",\n      \"start_time\": \"11:00\",\n      \"end_time\": \"12:00\",\n      \"duration_minutes\": 60\n    }\n  ],\n  \"total_tasks\": 2,\n  \"total_scheduled_minutes\": 120,\n  \"available_minutes\": 480,\n  \"utilization_percentage\": 25\n}\n-->",
+        "storeOutMessages": true,
+        "fwdInMessages": false,
+        "resendOnRefresh": true,
+        "templateScope": "local",
+        "x": 535.9999847412109,
+        "y": 189.00001049041748,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "todo-actions",
+        "type": "function",
+        "z": "todo-dashboard",
+        "name": "Handle Todo Actions",
+        "func": "const action = msg.payload.action;\nconst todoId = msg.payload.id;\n\nlet topic = '';\nlet newMsg = { payload: {} };\n\nswitch(action) {\n    case 'complete':\n        topic = 'todo/action/complete';\n        newMsg.payload = { id: todoId };\n        break;\n    case 'suggestions':\n        topic = 'todo/action/suggestions';\n        newMsg.payload = { id: todoId };\n        break;\n    case 'schedule':\n        topic = 'todo/action/schedule';\n        newMsg.payload = { id: todoId };\n        break;\n    default:\n        return null;\n}\n\nnewMsg.topic = topic;\nreturn newMsg;",
+        "outputs": 1,
+        "noerr": 0,
+        "x": 755.9999847412109,
+        "y": 129.00001049041748,
+        "wires": [
+            [
+                "action-mqtt"
+            ]
+        ]
+    },
+    {
+        "id": "action-mqtt",
+        "type": "mqtt out",
+        "z": "todo-dashboard",
+        "name": "Send Action",
+        "topic": "",
+        "qos": "1",
+        "retain": "false",
+        "respTopic": "",
+        "contentType": "",
+        "userProps": "",
+        "correl": "",
+        "expiry": "",
+        "broker": "5b41a831.e6efd8",
+        "x": 945.9999847412109,
+        "y": 229.00001049041748,
+        "wires": []
+    },
+    {
+        "id": "date-picker",
+        "type": "ui_date_picker",
+        "z": "todo-dashboard",
+        "name": "Select Date",
+        "label": "Schedule Date",
+        "group": "g-controls",
+        "order": 1,
+        "width": 6,
+        "height": 1,
+        "passthru": true,
+        "topic": "topic",
+        "x": 545.9999847412109,
+        "y": 309.0000104904175,
+        "wires": [
+            [
+                "format-date"
+            ]
+        ]
+    },
+    {
+        "id": "format-date",
+        "type": "function",
+        "z": "todo-dashboard",
+        "name": "Format for Schedule",
+        "func": "const date = new Date(msg.payload);\nconst formattedDate = date.toISOString().split('T')[0];\n\nreturn {\n    topic: 'todo/action/daily_schedule',\n    payload: {\n        date: formattedDate\n    }\n};",
+        "outputs": 1,
+        "noerr": 0,
+        "x": 775.9999847412109,
+        "y": 289.0000104904175,
+        "wires": [
+            [
+                "action-mqtt"
+            ]
+        ]
+    },
+    {
+        "id": "refresh-todos",
+        "type": "ui_button",
+        "z": "todo-dashboard",
+        "name": "Refresh Todos",
+        "group": "g-controls",
+        "order": 2,
+        "width": 4,
+        "height": 1,
+        "passthru": false,
+        "label": "Refresh Todo List",
+        "tooltip": "",
+        "color": "",
+        "bgcolor": "",
+        "icon": "refresh",
+        "payload": "{}",
+        "payloadType": "json",
+        "topic": "todo/action/refresh_todos",
+        "x": 515.9999847412109,
+        "y": 229.00001049041748,
+        "wires": [
+            [
+                "action-mqtt"
+            ]
+        ]
+    },
+    {
+        "id": "refresh-suggestions",
+        "type": "ui_button",
+        "z": "todo-dashboard",
+        "name": "Refresh Suggestions",
+        "group": "g-controls",
+        "order": 3,
+        "width": 4,
+        "height": 1,
+        "passthru": false,
+        "label": "Refresh Suggestions",
+        "tooltip": "",
+        "color": "",
+        "bgcolor": "",
+        "icon": "refresh",
+        "payload": "{}",
+        "payloadType": "json",
+        "topic": "todo/action/refresh_suggestions",
+        "x": 555.9999847412109,
+        "y": 269.0000104904175,
+        "wires": [
+            [
+                "action-mqtt"
+            ]
+        ]
+    },
+    {
+        "id": "5b41a831.e6efd8",
+        "type": "mqtt-broker",
+        "name": "eaws",
+        "broker": "localhost",
+        "port": "3003",
+        "clientid": "local-node-red",
+        "autoConnect": true,
+        "usetls": false,
+        "compatmode": false,
+        "protocolVersion": "4",
+        "keepalive": "60",
+        "cleansession": false,
+        "autoUnsubscribe": true,
+        "birthTopic": "status/DvtLabMonitor/alive",
+        "birthQos": "1",
+        "birthRetain": "true",
+        "birthPayload": "1",
+        "birthMsg": {},
+        "closeTopic": "status/DvtLabMonitor/alive",
+        "closeQos": "1",
+        "closeRetain": "true",
+        "closePayload": "0",
+        "closeMsg": {},
+        "willTopic": "status/DvtLabMonitor/alive",
+        "willQos": "1",
+        "willRetain": "true",
+        "willPayload": "0",
+        "willMsg": {},
+        "userProps": "",
+        "sessionExpiry": ""
+    },
+    {
+        "id": "g-todos",
+        "type": "ui_group",
+        "name": "Todo List",
+        "tab": "t-dashboard",
+        "order": 1,
+        "disp": true,
+        "width": "12",
+        "collapse": false
+    },
+    {
+        "id": "g-suggestions",
+        "type": "ui_group",
+        "name": "AI Suggestions",
+        "tab": "t-dashboard",
+        "order": 2,
+        "disp": true,
+        "width": "12",
+        "collapse": false
+    },
+    {
+        "id": "g-schedule",
+        "type": "ui_group",
+        "name": "Daily Schedule",
+        "tab": "t-dashboard",
+        "order": 3,
+        "disp": true,
+        "width": "12",
+        "collapse": false
+    },
+    {
+        "id": "g-controls",
+        "type": "ui_group",
+        "name": "Dashboard Controls",
+        "tab": "t-dashboard",
+        "order": 4,
+        "disp": true,
+        "width": "12",
+        "collapse": false
+    },
+    {
+        "id": "t-dashboard",
+        "type": "ui_tab",
+        "name": "FastMCP Todo Dashboard",
+        "icon": "dashboard",
+        "order": 1,
+        "disabled": false,
+        "hidden": false
+    }
+]

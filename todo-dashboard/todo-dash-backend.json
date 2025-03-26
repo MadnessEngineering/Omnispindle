@@ -1,0 +1,512 @@
+[
+    {
+        "id": "b4172645077d3f56",
+        "type": "tab",
+        "label": "todo-dash-backend",
+        "disabled": false,
+        "info": "Dashboard with MongoDB4 connection for FastMCP Todo Server"
+    },
+    {
+        "id": "e97adde808d5df0a",
+        "type": "function",
+        "z": "b4172645077d3f56",
+        "name": "generate-schedule-request",
+        "func": "// Generate tomorrow's date in YYYY-MM-DD format\nconst tomorrow = new Date();\ntomorrow.setDate(tomorrow.getDate() + 1);\nconst formattedDate = tomorrow.toISOString().split('T')[0];\n\nreturn {\n    payload: { date: formattedDate },\n    topic: \"todo/action/daily_schedule\"\n};",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 628.0000076293945,
+        "y": 259.0000720024109,
+        "wires": [
+            [
+                "3d07bd180f8db764"
+            ]
+        ]
+    },
+    {
+        "id": "3d07bd180f8db764",
+        "type": "function",
+        "z": "b4172645077d3f56",
+        "name": "schedule-generator",
+        "func": "// Get the date from the payload\nconst targetDate = msg.payload.date;\n\n// Create a Date object from the target date\nconst date = new Date(targetDate);\nconst weekday = [\"Sunday\", \"Monday\", \"Tuesday\", \"Wednesday\", \"Thursday\", \"Friday\", \"Saturday\"][date.getDay()];\n\n// Define working hours based on the day of the week\nlet workingHours;\nconst day = date.getDay(); // 0 = Sunday, 1 = Monday, ...\n\nif (day === 0) { // Sunday\n    workingHours = { start: \"10:00\", end: \"14:00\" };\n} else if (day === 6) { // Saturday\n    workingHours = { start: \"10:00\", end: \"15:00\" };\n} else { // Weekday\n    workingHours = { start: \"09:00\", end: \"17:00\" };\n}\n\n// Calculate available minutes\nfunction timeToMinutes(timeStr) {\n    const [hours, minutes] = timeStr.split(':').map(Number);\n    return hours * 60 + minutes;\n}\n\nconst startMinutes = timeToMinutes(workingHours.start);\nconst endMinutes = timeToMinutes(workingHours.end);\nconst availableMinutes = endMinutes - startMinutes;\n\n// Get todos from context\nlet pendingTodos = [];\n\n// Try to get pending todos from flow context\nconst flowContext = flow.get('pendingTodos');\nif (flowContext && Array.isArray(flowContext)) {\n    pendingTodos = flowContext;\n}\n\n// If no todos in context, try to get them from MongoDB\nif (pendingTodos.length === 0) {\n    // This is just a placeholder. We'll make a real MongoDB query for todos in the MongoDB flow\n    // In a real implementation, we would query MongoDB here\n    // For now we'll use some example todos\n    pendingTodos = [\n        { id: \"123\", description: \"Review project proposal\", priority: \"high\" },\n        { id: \"456\", description: \"Team meeting\", priority: \"medium\" },\n        { id: \"789\", description: \"Update documentation\", priority: \"low\" }\n    ];\n}\n\n// Function to generate time string from minutes\nfunction minutesToTime(totalMinutes) {\n    const hours = Math.floor(totalMinutes / 60);\n    const minutes = totalMinutes % 60;\n    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;\n}\n\n// Generate schedule from todos\nfunction generateSchedule(todos, startTime, availableMins) {\n    // Sort by priority\n    const priorityRank = {\"high\": 0, \"medium\": 1, \"low\": 2, \"initial\": 1};\n    todos.sort((a, b) => {\n        return priorityRank[a.priority || \"medium\"] - priorityRank[b.priority || \"medium\"];\n    });\n    \n    // Define task durations based on priority\n    const durations = {\n        \"high\": 90, // 1.5 hours\n        \"medium\": 60, // 1 hour\n        \"low\": 45, // 45 minutes\n        \"initial\": 60 // 1 hour\n    };\n    \n    const schedule = [];\n    let currentTime = startTime;\n    let scheduledMinutes = 0;\n    \n    // Schedule high priority tasks first, then medium, then low\n    todos.slice(0, 5).forEach((todo, index) => {\n        // Calculate duration\n        const duration = durations[todo.priority || \"medium\"];\n        \n        // Check if we have enough time left (including break)\n        const breakTime = index > 0 ? 15 : 0;\n        if (scheduledMinutes + duration + breakTime > availableMins) {\n            return; // Skip if not enough time\n        }\n        \n        // Add break time if not the first task\n        if (index > 0) {\n            currentTime += 15;\n            scheduledMinutes += 15;\n        }\n        \n        // Calculate start and end times\n        const startTimeStr = minutesToTime(currentTime);\n        const endTimeStr = minutesToTime(currentTime + duration);\n        \n        // Add to schedule\n        schedule.push({\n            todo_id: todo.id,\n            description: todo.description,\n            priority: todo.priority,\n            start_time: startTimeStr,\n            end_time: endTimeStr,\n            duration_minutes: duration\n        });\n        \n        // Update current time and scheduled minutes\n        currentTime += duration;\n        scheduledMinutes += duration;\n    });\n    \n    return {\n        schedule: schedule,\n        total_scheduled_minutes: scheduledMinutes,\n        utilization_percentage: Math.round((scheduledMinutes / availableMins) * 100)\n    };\n}\n\n// Generate the schedule\nconst scheduleResults = generateSchedule(pendingTodos, startMinutes, availableMinutes);\n\n// Prepare final schedule data\nconst scheduleData = {\n    date: targetDate,\n    weekday: weekday,\n    working_hours: workingHours,\n    schedule: scheduleResults.schedule,\n    total_tasks: scheduleResults.schedule.length,\n    total_scheduled_minutes: scheduleResults.total_scheduled_minutes,\n    available_minutes: availableMinutes,\n    utilization_percentage: scheduleResults.utilization_percentage\n};\n\n// Return the schedule data for publishing\nreturn {\n    payload: scheduleData,\n    topic: \"todo/dashboard/schedule\"\n};",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 890,
+        "y": 240,
+        "wires": [
+            [
+                "f70bd971a518ccaa",
+                "ecadaf11765dc184"
+            ]
+        ]
+    },
+    {
+        "id": "97e81147054a3b14",
+        "type": "mqtt in",
+        "z": "b4172645077d3f56",
+        "name": "Subscribe to Actions",
+        "topic": "todo/action/#",
+        "qos": "2",
+        "datatype": "json",
+        "broker": "5b41a831.e6efd8",
+        "nl": false,
+        "rap": true,
+        "rh": 0,
+        "inputs": 0,
+        "x": 338.00000762939453,
+        "y": 179.0000720024109,
+        "wires": [
+            [
+                "2d071552612126e7"
+            ]
+        ]
+    },
+    {
+        "id": "2d071552612126e7",
+        "type": "switch",
+        "z": "b4172645077d3f56",
+        "name": "Route by Action",
+        "property": "topic",
+        "propertyType": "msg",
+        "rules": [
+            {
+                "t": "eq",
+                "v": "todo/action/complete",
+                "vt": "str"
+            },
+            {
+                "t": "eq",
+                "v": "todo/action/suggestions",
+                "vt": "str"
+            },
+            {
+                "t": "eq",
+                "v": "todo/action/schedule",
+                "vt": "str"
+            },
+            {
+                "t": "eq",
+                "v": "todo/action/daily_schedule",
+                "vt": "str"
+            },
+            {
+                "t": "eq",
+                "v": "todo/action/refresh_todos",
+                "vt": "str"
+            }
+        ],
+        "checkall": "true",
+        "repair": false,
+        "outputs": 5,
+        "x": 628.0000076293945,
+        "y": 179.0000720024109,
+        "wires": [
+            [
+                "b1ca5cbd60b3e231"
+            ],
+            [
+                "a62a172431617e56"
+            ],
+            [
+                "fe50373eca68eaaf"
+            ],
+            [
+                "3d07bd180f8db764"
+            ],
+            []
+        ]
+    },
+    {
+        "id": "b1ca5cbd60b3e231",
+        "type": "function",
+        "z": "b4172645077d3f56",
+        "name": "mark-todo-complete",
+        "func": "// Get the todo ID from the payload\nconst todoId = msg.payload.id;\n\nif (!todoId) {\n    return { payload: { status: \"error\", message: \"No todo ID provided\" } };\n}\n\n// Prepare MongoDB update query for MongoDB4 node\nreturn {\n    payload: {\n        // Find document by ID\n        filter: { id: todoId },\n        // Set status to completed and add completed timestamp\n        update: { $set: {\n            status: \"completed\",\n            completed_at: Math.floor(Date.now() / 1000)\n        }},\n        // Additional options\n        options: {\n            returnNewDocument: true\n        }\n    },\n    collection: \"todos\"\n};",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 908.0000076293945,
+        "y": 119.00007200241089,
+        "wires": [
+            [
+                "b6bca49ba9ac8b1d"
+            ]
+        ]
+    },
+    {
+        "id": "b6bca49ba9ac8b1d",
+        "type": "mongodb4",
+        "z": "b4172645077d3f56",
+        "clientNode": "1cdab81a6028b016",
+        "mode": "collection",
+        "collection": "todos",
+        "operation": "updateOne",
+        "maxTimeMS": "",
+        "handleDocId": false,
+        "name": "Update Todo in MongoDB",
+        "x": 1198.0000076293945,
+        "y": 119.00007200241089,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "a62a172431617e56",
+        "type": "function",
+        "z": "b4172645077d3f56",
+        "name": "get-todo-suggestions",
+        "func": "// Get the todo ID from the payload\nconst todoId = msg.payload.id;\n\nif (!todoId) {\n    return { payload: { status: \"error\", message: \"No todo ID provided\" } };\n}\n\n// Prepare MongoDB find query\nreturn {\n    payload: {\n        // Query for MongoDB4 node format\n        filter: { id: todoId }\n    },\n    collection: \"todos\"\n};",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 908.0000076293945,
+        "y": 159.0000720024109,
+        "wires": [
+            [
+                "a143455f40f88a3e"
+            ]
+        ]
+    },
+    {
+        "id": "fe50373eca68eaaf",
+        "type": "function",
+        "z": "b4172645077d3f56",
+        "name": "schedule-todo",
+        "func": "// Get the todo ID from the payload\nconst todoId = msg.payload.id;\n\nif (!todoId) {\n    return { payload: { status: \"error\", message: \"No todo ID provided\" } };\n}\n\n// Generate tomorrow's date in YYYY-MM-DD format\nconst tomorrow = new Date();\ntomorrow.setDate(tomorrow.getDate() + 1);\nconst formattedDate = tomorrow.toISOString().split('T')[0];\n\n// Prepare MongoDB find query\nreturn {\n    payload: {\n        // Query for MongoDB4 node format\n        filter: { id: todoId }\n    },\n    collection: \"todos\",\n    // Store date in msg so we can use it later\n    date: formattedDate\n};",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 888.0000076293945,
+        "y": 199.0000720024109,
+        "wires": [
+            [
+                "a143455f40f88a3e"
+            ]
+        ]
+    },
+    {
+        "id": "a143455f40f88a3e",
+        "type": "mongodb4",
+        "z": "b4172645077d3f56",
+        "clientNode": "1cdab81a6028b016",
+        "mode": "collection",
+        "collection": "todos",
+        "operation": "find",
+        "maxTimeMS": "",
+        "handleDocId": false,
+        "name": "Find Todo by ID",
+        "x": 1188.0000076293945,
+        "y": 179.0000720024109,
+        "wires": [
+            [
+                "cb689f014470c136"
+            ]
+        ]
+    },
+    {
+        "id": "cb689f014470c136",
+        "type": "function",
+        "z": "b4172645077d3f56",
+        "name": "process-todo-result",
+        "func": "// Check if we found a todo\nif (!msg.payload || msg.payload.length === 0) {\n    return { payload: { status: \"error\", message: \"Todo not found\" } };\n}\n\n// Get the first todo from the results\nconst todo = msg.payload[0];\n\n// Check which action we're performing\nif (msg.topic === \"todo/action/suggestions\") {\n    // Create a specific suggestion response for this todo\n    const response = {\n        todo: {\n            id: todo.id,\n            description: todo.description,\n            current_priority: todo.priority || \"medium\",\n            status: todo.status\n        },\n        suggestions: {\n            suggested_priority: suggestPriority(todo),\n            estimated_completion_time: estimateCompletionTime(todo),\n            automation_confidence: Math.round(60 + Math.random() * 25)\n        }\n    };\n    \n    return {\n        payload: response,\n        topic: \"todo/dashboard/suggestions\"\n    };\n} else if (msg.topic.includes(\"schedule\")) {\n    // Get the date (either from the msg.date or default to tomorrow)\n    const targetDate = msg.date || (() => {\n        const tomorrow = new Date();\n        tomorrow.setDate(tomorrow.getDate() + 1);\n        return tomorrow.toISOString().split('T')[0];\n    })();\n    \n    // Create a schedule specifically for this todo\n    const scheduleResponse = createScheduleForTodo(todo, targetDate);\n    \n    return {\n        payload: scheduleResponse,\n        topic: \"todo/dashboard/schedule\"\n    };\n}\n\n// Helper function to suggest priority\nfunction suggestPriority(todo) {\n    // Simple logic - but in real app would be more sophisticated\n    const description = todo.description.toLowerCase();\n    \n    if (description.includes(\"urgent\") || description.includes(\"important\")) {\n        return \"high\";\n    }\n    \n    if (description.includes(\"review\") || description.includes(\"meeting\")) {\n        return \"medium\";\n    }\n    \n    return todo.priority || \"medium\";\n}\n\n// Helper function to estimate completion time\nfunction estimateCompletionTime(todo) {\n    // Simple logic - but in real app would analyze similar tasks\n    const priority = todo.priority || \"medium\";\n    \n    // Estimate in minutes\n    const estimates = {\n        \"high\": 90,\n        \"medium\": 60,\n        \"low\": 45,\n        \"initial\": 60\n    };\n    \n    return estimates[priority];\n}\n\n// Create a schedule for a specific todo\nfunction createScheduleForTodo(todo, dateStr) {\n    // Create a Date object from the target date\n    const date = new Date(dateStr);\n    const weekday = [\"Sunday\", \"Monday\", \"Tuesday\", \"Wednesday\", \"Thursday\", \"Friday\", \"Saturday\"][date.getDay()];\n    \n    // Define working hours based on the day of the week\n    let workingHours;\n    const day = date.getDay();\n    \n    if (day === 0) { // Sunday\n        workingHours = { start: \"10:00\", end: \"14:00\" };\n    } else if (day === 6) { // Saturday\n        workingHours = { start: \"10:00\", end: \"15:00\" };\n    } else { // Weekday\n        workingHours = { start: \"09:00\", end: \"17:00\" };\n    }\n    \n    // Calculate available minutes\n    function timeToMinutes(timeStr) {\n        const [hours, minutes] = timeStr.split(':').map(Number);\n        return hours * 60 + minutes;\n    }\n    \n    function minutesToTime(totalMinutes) {\n        const hours = Math.floor(totalMinutes / 60);\n        const minutes = totalMinutes % 60;\n        return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;\n    }\n    \n    const startMinutes = timeToMinutes(workingHours.start);\n    const endMinutes = timeToMinutes(workingHours.end);\n    const availableMinutes = endMinutes - startMinutes;\n    \n    // Duration based on priority\n    const durations = {\n        \"high\": 90,\n        \"medium\": 60,\n        \"low\": 45,\n        \"initial\": 60\n    };\n    \n    const duration = durations[todo.priority || \"medium\"];\n    \n    // Calculate a good time slot based on priority\n    let startTimeMinutes;\n    if (todo.priority === \"high\") {\n        // Schedule high priority in the morning\n        startTimeMinutes = startMinutes + 60; // 1 hour after start\n    } else if (todo.priority === \"low\") {\n        // Schedule low priority in the afternoon\n        startTimeMinutes = endMinutes - duration - 60; // 1 hour before end\n    } else {\n        // Schedule medium priority in mid-day\n        startTimeMinutes = startMinutes + Math.floor((availableMinutes - duration) / 2);\n    }\n    \n    // Ensure within bounds\n    if (startTimeMinutes < startMinutes) {\n        startTimeMinutes = startMinutes;\n    }\n    if (startTimeMinutes + duration > endMinutes) {\n        startTimeMinutes = endMinutes - duration;\n    }\n    \n    // Format times\n    const startTimeStr = minutesToTime(startTimeMinutes);\n    const endTimeStr = minutesToTime(startTimeMinutes + duration);\n    \n    // Create the schedule\n    return {\n        date: dateStr,\n        weekday: weekday,\n        working_hours: workingHours,\n        schedule: [\n            {\n                todo_id: todo.id,\n                description: todo.description,\n                priority: todo.priority || \"medium\",\n                start_time: startTimeStr,\n                end_time: endTimeStr,\n                duration_minutes: duration\n            }\n        ],\n        total_tasks: 1,\n        total_scheduled_minutes: duration,\n        available_minutes: availableMinutes,\n        utilization_percentage: Math.round((duration / availableMinutes) * 100)\n    };\n}",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1408.0000076293945,
+        "y": 179.0000720024109,
+        "wires": [
+            [
+                "f70bd971a518ccaa",
+                "ecadaf11765dc184"
+            ]
+        ]
+    },
+    {
+        "id": "fc7c9c43e624f82b",
+        "type": "mongodb4",
+        "z": "b4172645077d3f56",
+        "clientNode": "1cdab81a6028b016",
+        "mode": "collection",
+        "collection": "todos",
+        "operation": "aggregate",
+        "maxTimeMS": "",
+        "handleDocId": false,
+        "name": "Get Completed Todos",
+        "x": 628.0000152587891,
+        "y": 363.0000319480896,
+        "wires": [
+            [
+                "9e0f9e038762b798",
+                "bf20b4db05a9201f"
+            ]
+        ]
+    },
+    {
+        "id": "7a644b6d7527f2c6",
+        "type": "function",
+        "z": "b4172645077d3f56",
+        "name": "set-aggregate-parameters",
+        "func": "// Placeholder for future schedule pipeline \nconst schedulePipeline = [];\n\n// Get Pending Todos Pipeline\nconst pendingTodosPipeline = [\n    // Match pending todos\n    { $match: { status: \"pending\" } },\n\n    // Sort by priority (asc) and created date (asc)\n    { $sort: { priority: 1, created_at: 1 } }\n\n    // Could add limit stage here if needed\n];\n\n// Get Completed Todos Pipeline\nconst completedTodosPipeline = [\n    // Match completed todos\n    { $match: { status: \"completed\" } },\n\n    // Sort by completed date (desc)\n    { $sort: { completed_at: -1 } },\n\n    // Limit to last 50\n    { $limit: 50 }\n];\n\n// Construct msg objects for each pipeline\nconst pendingTodosMsg = {\n    mode: 'collection',\n    collection: 'todos',\n    operation: 'aggregate',\n    payload: [pendingTodosPipeline]\n};\n\nconst completedTodosMsg = {\n    mode: 'collection',\n    collection: 'todos',\n    operation: 'aggregate',\n    payload: [completedTodosPipeline]\n};\n\nconst scheduleMsg = {\n    mode: 'collection',\n    collection: 'todos',\n    operation: 'aggregate',\n    payload: [schedulePipeline]\n};\n\nreturn [\n    scheduleMsg,\n    pendingTodosMsg,\n    completedTodosMsg\n];",
+        "outputs": 3,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 348.00000762939453,
+        "y": 319.0000720024109,
+        "wires": [
+            [
+                "e97adde808d5df0a"
+            ],
+            [
+                "e0331cad3d892e23",
+                "66a07c12fe5bb9f4"
+            ],
+            [
+                "fc7c9c43e624f82b",
+                "66a07c12fe5bb9f4"
+            ]
+        ],
+        "inputLabels": [
+            "Trigger dashboard update"
+        ],
+        "outputLabels": [
+            "Generate Schedule Request",
+            "Get Completed Todos",
+            "Get Pending Todos"
+        ],
+        "icon": "node-red/db.svg"
+    },
+    {
+        "id": "2f5c23fef9835ba7",
+        "type": "inject",
+        "z": "b4172645077d3f56",
+        "name": "Update Dashboard (120s)",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": true,
+        "onceDelay": "0.5",
+        "topic": "",
+        "payload": "{}",
+        "payloadType": "json",
+        "x": 278.00000762939453,
+        "y": 239.0000720024109,
+        "wires": [
+            [
+                "7a644b6d7527f2c6"
+            ]
+        ]
+    },
+    {
+        "id": "e0331cad3d892e23",
+        "type": "mongodb4",
+        "z": "b4172645077d3f56",
+        "clientNode": "1cdab81a6028b016",
+        "mode": "collection",
+        "collection": "todos",
+        "operation": "aggregate",
+        "maxTimeMS": "",
+        "handleDocId": false,
+        "name": "Get Pending Todos",
+        "x": 618.0000152587891,
+        "y": 303.0000319480896,
+        "wires": [
+            [
+                "ab1bed4eb653c0f8",
+                "bf20b4db05a9201f"
+            ]
+        ]
+    },
+    {
+        "id": "ab1bed4eb653c0f8",
+        "type": "function",
+        "z": "b4172645077d3f56",
+        "name": "format-todos-for-dashboard",
+        "func": "// Get all the todos\nconst todos = msg.payload || [];\n\n// Count priorities\nconst highPriority = todos.filter(todo => todo.priority === \"high\").length;\nconst mediumPriority = todos.filter(todo => todo.priority === \"medium\" || todo.priority === \"initial\").length;\nconst lowPriority = todos.filter(todo => todo.priority === \"low\").length;\n\n// Sort pending todos by priority and creation date\nconst priorityRank = {\"high\": 0, \"medium\": 1, \"low\": 2, \"initial\": 1};\ntodos.sort((a, b) => {\n    // First by priority\n    const priorityDiff = priorityRank[a.priority || \"medium\"] - priorityRank[b.priority || \"medium\"];\n    if (priorityDiff !== 0) return priorityDiff;\n    \n    // Then by creation date (descending)\n    return (b.created_at || 0) - (a.created_at || 0);\n});\n\n// Store completed todos in flow context for AI Pattern Analysis\nconst completedTodos = global.get(\"completedTodos\") || [];\n\n// Format for dashboard\nconst dashboardData = {\n    todos: todos,\n    total_pending: todos.length,\n    total_completed: completedTodos.length,\n    high_priority: highPriority,\n    medium_priority: mediumPriority,\n    low_priority: lowPriority,\n    last_updated: new Date().toISOString()\n};\n\nreturn { \n    payload: dashboardData,\n    topic: \"todo/dashboard/todos\"\n};",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 928.0000076293945,
+        "y": 299.0000720024109,
+        "wires": [
+            [
+                "f70bd971a518ccaa",
+                "ecadaf11765dc184"
+            ]
+        ]
+    },
+    {
+        "id": "9e0f9e038762b798",
+        "type": "function",
+        "z": "b4172645077d3f56",
+        "name": "ai-pattern-analysis",
+        "func": "// Get completed todos from MongoDB\nconst completedTodos = msg.payload || [];\n\n// Store in global context for other nodes to use\nglobal.set(\"completedTodos\", completedTodos);\n\n// Sort completed todos by completion date (descending)\ncompletedTodos.sort((a, b) => (b.completed_at || 0) - (a.completed_at || 0));\n\n// Limit to most recent for dashboard\nconst recentCompleted = completedTodos.slice(0, 5);\n\n// Find patterns in similar tasks (simplified implementation)\nfunction findPatterns(todos) {\n    const patterns = [];\n    \n    // Group by words in description\n    const taskGroups = {};\n    \n    todos.forEach(todo => {\n        const words = todo.description.toLowerCase().split(/\\s+/).filter(w => w.length > 4);\n        \n        words.forEach(word => {\n            if (!taskGroups[word]) {\n                taskGroups[word] = [];\n            }\n            \n            // Only add if not already in the group\n            if (!taskGroups[word].find(t => t.id === todo.id)) {\n                taskGroups[word].push(todo);\n            }\n        });\n    });\n    \n    // Find patterns with at least 2 todos\n    Object.keys(taskGroups).forEach(word => {\n        if (taskGroups[word].length >= 2) {\n            patterns.push({\n                pattern_id: `pattern-${patterns.length + 1}`,\n                keyword: word,\n                similar_tasks: taskGroups[word].length,\n                template: `${word} task`,\n                automation_confidence: Math.round(60 + (taskGroups[word].length * 5)),\n                examples: taskGroups[word].slice(0, 3).map(t => t.description)\n            });\n        }\n    });\n    \n    return patterns.slice(0, 3); // Return top 3 patterns\n}\n\n// Generate simple recommendations\nfunction generateRecommendations(todos) {\n    const recommendations = [];\n    \n    // Find pending todos similar to completed todos\n    const pendingTodos = global.get(\"pendingTodos\") || [];\n    \n    // For demo, just recommend high priority for first few todos\n    pendingTodos.slice(0, 2).forEach(todo => {\n        if (todo.priority !== \"high\") {\n            recommendations.push({\n                todo_id: todo.id,\n                description: todo.description,\n                current_priority: todo.priority || \"medium\",\n                recommended_priority: \"high\",\n                confidence: Math.round(70 + Math.random() * 20)\n            });\n        }\n    });\n    \n    return recommendations;\n}\n\n// Format AI suggestions for dashboard\nconst aiSuggestions = {\n    automation_suggestions: findPatterns(completedTodos),\n    priority_recommendations: generateRecommendations(completedTodos),\n    pattern_analysis: {\n        total_patterns: completedTodos.length > 0 ? Math.min(3, Math.floor(completedTodos.length / 2)) : 0,\n        analyzed_todos: completedTodos.length\n    },\n    completed: recentCompleted\n};\n\nreturn { \n    payload: aiSuggestions,\n    topic: \"todo/dashboard/suggestions\"\n};",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 910,
+        "y": 340,
+        "wires": [
+            [
+                "f70bd971a518ccaa",
+                "ecadaf11765dc184"
+            ]
+        ]
+    },
+    {
+        "id": "f70bd971a518ccaa",
+        "type": "mqtt out",
+        "z": "b4172645077d3f56",
+        "name": "Publish to Dashboard",
+        "topic": "${msg.topic}",
+        "qos": "1",
+        "retain": "false",
+        "respTopic": "",
+        "contentType": "",
+        "userProps": "",
+        "correl": "",
+        "expiry": "",
+        "broker": "5b41a831.e6efd8",
+        "x": 1408.0000076293945,
+        "y": 259.0000720024109,
+        "wires": []
+    },
+    {
+        "id": "bf20b4db05a9201f",
+        "type": "debug",
+        "z": "b4172645077d3f56",
+        "name": "todo-db-output",
+        "active": false,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": true,
+        "complete": "true",
+        "targetType": "full",
+        "statusVal": "payload",
+        "statusType": "auto",
+        "x": 620,
+        "y": 420,
+        "wires": []
+    },
+    {
+        "id": "66a07c12fe5bb9f4",
+        "type": "debug",
+        "z": "b4172645077d3f56",
+        "name": "set-aggergate-parameters-debug",
+        "active": false,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "true",
+        "targetType": "full",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 340,
+        "y": 380,
+        "wires": []
+    },
+    {
+        "id": "ecadaf11765dc184",
+        "type": "debug",
+        "z": "b4172645077d3f56",
+        "name": "publish-to-dashboard-debug",
+        "active": false,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": true,
+        "complete": "true",
+        "targetType": "full",
+        "statusVal": "payload",
+        "statusType": "auto",
+        "x": 1460,
+        "y": 360,
+        "wires": []
+    },
+    {
+        "id": "5b41a831.e6efd8",
+        "type": "mqtt-broker",
+        "name": "eaws",
+        "broker": "localhost",
+        "port": "3003",
+        "clientid": "local-node-red",
+        "autoConnect": true,
+        "usetls": false,
+        "compatmode": false,
+        "protocolVersion": "4",
+        "keepalive": "60",
+        "cleansession": false,
+        "autoUnsubscribe": true,
+        "birthTopic": "status/DvtLabMonitor/alive",
+        "birthQos": "1",
+        "birthRetain": "true",
+        "birthPayload": "1",
+        "birthMsg": {},
+        "closeTopic": "status/DvtLabMonitor/alive",
+        "closeQos": "1",
+        "closeRetain": "true",
+        "closePayload": "0",
+        "closeMsg": {},
+        "willTopic": "status/DvtLabMonitor/alive",
+        "willQos": "1",
+        "willRetain": "true",
+        "willPayload": "0",
+        "willMsg": {},
+        "userProps": "",
+        "sessionExpiry": ""
+    },
+    {
+        "id": "1cdab81a6028b016",
+        "type": "mongodb4-client",
+        "name": "swarmonomicon",
+        "protocol": "mongodb",
+        "hostname": "127.0.0.1",
+        "port": "",
+        "dbName": "swarmonomicon",
+        "appName": "",
+        "authSource": "",
+        "authMechanism": "DEFAULT",
+        "tls": false,
+        "tlsCAFile": "",
+        "tlsCertificateKeyFile": "",
+        "tlsInsecure": false,
+        "connectTimeoutMS": "30000",
+        "socketTimeoutMS": "0",
+        "minPoolSize": "0",
+        "maxPoolSize": "100",
+        "maxIdleTimeMS": "0",
+        "uri": "",
+        "advanced": "{}",
+        "uriTabActive": "tab-uri-simple"
+    }
+]

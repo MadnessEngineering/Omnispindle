@@ -1,0 +1,447 @@
+<!-- Todo List Panel for FastMCP Todo Server Dashboard -->
+
+<style>
+.todo-container {
+    font-family: 'Roboto', sans-serif;
+    padding: 0 10px;
+}
+
+.todo-stats {
+    background-color: #f5f5f5;
+    border-radius: 8px;
+    padding: 15px;
+    margin-bottom: 20px;
+    display: flex;
+    flex-wrap: wrap;
+}
+
+.stats-item {
+    margin-right: 25px;
+    margin-bottom: 10px;
+    text-align: center;
+}
+
+.stats-value {
+    font-size: 24px;
+    font-weight: 500;
+    color: #212121;
+    margin-bottom: 5px;
+}
+
+.stats-label {
+    font-size: 13px;
+    color: #757575;
+}
+
+.todo-actions {
+    margin-bottom: 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.filter-options {
+    display: flex;
+    gap: 10px;
+}
+
+.filter-button {
+    padding: 6px 12px;
+    border-radius: 16px;
+    border: 1px solid #e0e0e0;
+    background-color: white;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.filter-button:hover {
+    background-color: #f5f5f5;
+}
+
+.filter-button.active {
+    background-color: #e3f2fd;
+    border-color: #90caf9;
+    color: #1976d2;
+}
+
+.search-field {
+    position: relative;
+    flex-grow: 1;
+    max-width: 300px;
+    margin-left: 10px;
+}
+
+.search-field input {
+    width: 100%;
+    padding: 8px 12px 8px 35px;
+    border-radius: 20px;
+    border: 1px solid #e0e0e0;
+    font-size: 14px;
+}
+
+.search-icon {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #9e9e9e;
+    font-size: 16px;
+}
+
+.todo-list {
+    margin-bottom: 20px;
+}
+
+.todo-item {
+    margin-bottom: 15px;
+    padding: 0;
+    border-radius: 8px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.08);
+    background-color: white;
+    transition: all 0.3s ease;
+    overflow: hidden;
+}
+
+.todo-item:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+}
+
+.todo-item.high {
+    border-left: 6px solid #e53935;
+}
+
+.todo-item.medium {
+    border-left: 6px solid #fb8c00;
+}
+
+.todo-item.low {
+    border-left: 6px solid #43a047;
+}
+
+.todo-content {
+    padding: 15px;
+    cursor: pointer;
+}
+
+.todo-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 10px;
+}
+
+.todo-title {
+    font-weight: 500;
+    font-size: 16px;
+    color: #212121;
+    margin-right: 10px;
+    word-break: break-word;
+}
+
+.todo-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    margin-top: 10px;
+    color: #757575;
+    font-size: 13px;
+}
+
+.todo-priority {
+    font-size: 12px;
+    text-transform: uppercase;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-weight: 500;
+    flex-shrink: 0;
+}
+
+.todo-item.high .todo-priority {
+    background-color: #ffebee;
+    color: #c62828;
+}
+
+.todo-item.medium .todo-priority {
+    background-color: #fff3e0;
+    color: #e65100;
+}
+
+.todo-item.low .todo-priority {
+    background-color: #e8f5e9;
+    color: #2e7d32;
+}
+
+.todo-date {
+    color: #757575;
+    font-size: 13px;
+    flex-shrink: 0;
+}
+
+.todo-id {
+    font-size: 12px;
+    color: #9e9e9e;
+    font-family: monospace;
+}
+
+.todo-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 0 15px 15px 15px;
+}
+
+.action-button {
+    padding: 6px 12px;
+    border-radius: 4px;
+    font-size: 13px;
+    text-transform: uppercase;
+    font-weight: 500;
+    border: none;
+    cursor: pointer;
+    transition: background-color 0.2s;
+    display: flex;
+    align-items: center;
+}
+
+.action-button .action-icon {
+    margin-right: 6px;
+}
+
+.complete-button {
+    background-color: #e8f5e9;
+    color: #2e7d32;
+}
+
+.complete-button:hover {
+    background-color: #c8e6c9;
+}
+
+.suggestions-button {
+    background-color: #e3f2fd;
+    color: #1565c0;
+}
+
+.suggestions-button:hover {
+    background-color: #bbdefb;
+}
+
+.schedule-button {
+    background-color: #fff3e0;
+    color: #e65100;
+}
+
+.schedule-button:hover {
+    background-color: #ffe0b2;
+}
+
+.empty-message {
+    color: #757575;
+    font-style: italic;
+    padding: 20px;
+    text-align: center;
+    background-color: #f5f5f5;
+    border-radius: 8px;
+}
+
+.recently-completed {
+    margin-top: 30px;
+}
+
+.section-header {
+    font-size: 18px;
+    font-weight: 500;
+    color: #424242;
+    margin-bottom: 15px;
+    border-bottom: 2px solid #e0e0e0;
+    padding-bottom: 8px;
+}
+
+.completed-item {
+    padding: 10px 15px;
+    border-radius: 8px;
+    background-color: #f5f5f5;
+    margin-bottom: 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.completed-title {
+    color: #757575;
+    text-decoration: line-through;
+    margin-right: 10px;
+}
+
+.completed-time {
+    font-size: 12px;
+    color: #9e9e9e;
+}
+</style>
+
+<div class="todo-container">
+  <div class="todo-stats">
+    <div class="stats-item">
+      <div class="stats-value">{{msg.payload.total_pending || 0}}</div>
+      <div class="stats-label">Pending Tasks</div>
+    </div>
+
+    <div class="stats-item">
+      <div class="stats-value">{{msg.payload.total_completed || 0}}</div>
+      <div class="stats-label">Completed Tasks</div>
+    </div>
+
+    <div class="stats-item" ng-if="msg.payload.high_priority">
+      <div class="stats-value" style="color: #e53935;">{{msg.payload.high_priority || 0}}</div>
+      <div class="stats-label">High Priority</div>
+    </div>
+
+    <div class="stats-item">
+      <div class="stats-value" style="color: #fb8c00;">{{msg.payload.medium_priority || 0}}</div>
+      <div class="stats-label">Medium Priority</div>
+    </div>
+
+    <div class="stats-item">
+      <div class="stats-value" style="color: #43a047;">{{msg.payload.low_priority || 0}}</div>
+      <div class="stats-label">Low Priority</div>
+    </div>
+  </div>
+
+  <div class="todo-actions">
+    <div class="filter-options">
+      <button class="filter-button active" ng-click="filterTodos('all')">All</button>
+      <button class="filter-button" ng-click="filterTodos('high')">High Priority</button>
+      <button class="filter-button" ng-click="filterTodos('medium')">Medium</button>
+      <button class="filter-button" ng-click="filterTodos('low')">Low</button>
+    </div>
+
+    <div class="search-field">
+      <i class="fa fa-search search-icon"></i>
+      <input type="text" placeholder="Search tasks..." ng-model="searchText" />
+    </div>
+  </div>
+
+  <div class="todo-list">
+    <div ng-if="msg.payload.todos && msg.payload.todos.length > 0">
+      <div ng-repeat="item in msg.payload.todos | filter:searchFilter" class="todo-item {{item.priority}}">
+        <div class="todo-content" ng-click="item.expanded = !item.expanded">
+          <div class="todo-header">
+            <div class="todo-title">{{item.description}}</div>
+            <div>
+              <span class="todo-priority">{{item.priority}}</span>
+            </div>
+          </div>
+
+          <div class="todo-meta">
+            <span class="todo-date" ng-if="item.created_at">
+              Created: {{item.created_at | date:'MMM d, yyyy'}}
+            </span>
+            <span class="todo-id" ng-if="item.id">
+              #{{item.id.substring(0,8)}}
+            </span>
+          </div>
+        </div>
+
+        <div class="todo-buttons">
+          <button class="action-button complete-button" ng-click="send({payload: {action: 'complete', id: item.id}})">
+            <i class="fa fa-check action-icon"></i> Complete
+          </button>
+          <button class="action-button suggestions-button" ng-click="send({payload: {action: 'suggestions', id: item.id}})">
+            <i class="fa fa-lightbulb-o action-icon"></i> AI Insights
+          </button>
+          <button class="action-button schedule-button" ng-click="send({payload: {action: 'schedule', id: item.id}})">
+            <i class="fa fa-calendar action-icon"></i> Schedule
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div ng-if="!msg.payload.todos || msg.payload.todos.length === 0" class="empty-message">
+      <p>No pending todo items found.</p>
+      <p>Create new tasks to get started.</p>
+    </div>
+  </div>
+
+  <div class="recently-completed" ng-if="msg.payload.completed && msg.payload.completed.length > 0">
+    <h3 class="section-header">Recently Completed</h3>
+    <div ng-repeat="item in msg.payload.completed | limitTo:5" class="completed-item">
+      <div class="completed-title">{{item.description}}</div>
+      <div class="completed-time" ng-if="item.completed_at">
+        {{item.completed_at | date:'MMM d, h:mm a'}}
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  (function(scope) {
+    // Initialize active filter
+    scope.activeFilter = 'all';
+    scope.searchText = '';
+
+    // Filter function for todos
+    scope.filterTodos = function(filter) {
+      scope.activeFilter = filter;
+
+      // Update active button styling
+      angular.element(document.querySelectorAll('.filter-button'))
+        .removeClass('active');
+      angular.element(event.target).addClass('active');
+    };
+
+    // Search filter function
+    scope.searchFilter = function(item) {
+      // First apply priority filter
+      if (scope.activeFilter !== 'all' && item.priority !== scope.activeFilter) {
+        return false;
+      }
+
+      // Then apply text search if there is search text
+      if (scope.searchText && scope.searchText.length > 0) {
+        return item.description.toLowerCase().includes(scope.searchText.toLowerCase());
+      }
+
+      return true;
+    };
+  })(scope);
+</script>
+
+<!--
+Node-RED Message Format:
+{
+  "todos": [
+    {
+      "id": "123e4567-e89b-12d3-a456-426614174000",
+      "description": "Prepare weekly report",
+      "priority": "high",
+      "status": "pending",
+      "created_at": 1682424116000
+    },
+    {
+      "id": "223e4567-e89b-12d3-a456-426614174001",
+      "description": "Schedule team meeting",
+      "priority": "medium",
+      "status": "pending",
+      "created_at": 1682510516000
+    }
+  ],
+  "completed": [
+    {
+      "id": "323e4567-e89b-12d3-a456-426614174002",
+      "description": "Review pull request",
+      "priority": "high",
+      "status": "completed",
+      "created_at": 1682424116000,
+      "completed_at": 1682434916000
+    }
+  ],
+  "total_pending": 2,
+  "total_completed": 1,
+  "high_priority": 1,
+  "medium_priority": 1,
+  "low_priority": 0,
+  "last_updated": "2023-05-15T14:30:00Z"
+}
+-->
