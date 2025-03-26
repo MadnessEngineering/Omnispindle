@@ -2,6 +2,7 @@ import json
 import os
 import shutil
 import subprocess
+from typing import Callable
 
 from dotenv import load_dotenv
 # Import FastMCP
@@ -25,6 +26,9 @@ from tools import search_todos
 from tools import update_lesson
 from tools import update_todo
 from pymongo import MongoClient
+# Import the AI assistant functions
+from ai_assistant import get_todo_suggestions
+from ai_assistant import get_specific_suggestions
 
 # Load environment variables
 load_dotenv()
@@ -165,7 +169,53 @@ async def search_lessons_tool(query: str, fields: list = None, limit: int = 100)
     return await search_lessons(query, fields, limit)
 
 
-async def run_server():
-    """Run the FastMCP server"""
+@register_tool_once
+async def get_todo_suggestions_tool() -> str:
+    """
+    Get AI-powered suggestions for todos based on pattern analysis.
+    
+    This tool analyzes completed todos to identify patterns and makes suggestions for:
+    1. Task automation opportunities
+    2. Priority recommendations for pending todos
+    3. Insights about task patterns
+    
+    Returns:
+        A JSON string containing suggestions and analysis results
+    """
+    return await get_todo_suggestions()
+
+
+@register_tool_once
+async def get_specific_todo_suggestions_tool(todo_id: str) -> str:
+    """
+    Get AI-powered suggestions for a specific todo.
+    
+    This tool analyzes a specific todo and compares it with completed todos to provide:
+    1. Priority recommendations based on similar completed todos
+    2. Estimated completion time based on similar tasks
+    3. List of similar completed todos for reference
+    
+    Args:
+        todo_id: ID of the todo to get suggestions for
+        
+    Returns:
+        A JSON string containing suggestions specific to the todo
+    """
+    return await get_specific_suggestions(todo_id)
+
+
+async def run_server() -> Callable:
+    """
+    Run the FastMCP server.
+    
+    This function initializes and starts the FastMCP server by calling the run_server method
+    on the Omnispindle instance. It handles server setup and ensures that all tools are
+    properly registered before starting.
+    
+    Returns:
+        Callable: An ASGI application that can handle HTTP, WebSocket, and lifespan requests.
+        If the underlying run_sse_async() method returns None, a fallback ASGI application
+        will be returned that properly handles requests with appropriate error responses.
+    """
     # Register all the tools with the server
-    await server.run_server(publish_mqtt_status)
+    return await server.run_server(publish_mqtt_status)
