@@ -1,5 +1,23 @@
 <!-- AI Suggestions Panel for FastMCP Todo Server Dashboard -->
 
+<script>
+  (function(scope) {
+    // Parse JSON payload if it's a string
+    scope.$watch('msg.payload', function(payload) {
+      if (payload && typeof payload === 'string') {
+        try {
+          scope.parsedPayload = JSON.parse(payload);
+        } catch(e) {
+          console.error('Error parsing payload JSON:', e);
+          scope.parsedPayload = {};
+        }
+      } else {
+        scope.parsedPayload = payload || {};
+      }
+    });
+  })(scope);
+</script>
+
 <style>
 .suggestions-panel {
     font-family: 'Roboto', sans-serif;
@@ -152,9 +170,9 @@
 <div class="suggestions-panel">
   <h2>AI-Powered Insights</h2>
 
-  <div ng-if="msg.payload.automation_suggestions && msg.payload.automation_suggestions.length > 0">
+  <div ng-if="parsedPayload.automation_suggestions && parsedPayload.automation_suggestions.length > 0">
     <h3 class="section-header">Automation Opportunities</h3>
-    <div ng-repeat="suggestion in msg.payload.automation_suggestions">
+    <div ng-repeat="suggestion in parsedPayload.automation_suggestions">
       <div class="suggestion-item">
         <div>
           <span class="suggestion-title">{{suggestion.template}}</span>
@@ -174,9 +192,9 @@
     </div>
   </div>
 
-  <div ng-if="msg.payload.priority_recommendations && msg.payload.priority_recommendations.length > 0">
+  <div ng-if="parsedPayload.priority_recommendations && parsedPayload.priority_recommendations.length > 0">
     <h3 class="section-header">Priority Recommendations</h3>
-    <div ng-repeat="rec in msg.payload.priority_recommendations">
+    <div ng-repeat="rec in parsedPayload.priority_recommendations">
       <div class="recommendation-item">
         <span class="recommendation-title">{{rec.description}}</span>
         <div class="recommendation-details">
@@ -195,16 +213,16 @@
     </div>
   </div>
 
-  <div ng-if="msg.payload.pattern_analysis && msg.payload.pattern_analysis.total_patterns > 0">
+  <div ng-if="parsedPayload.pattern_analysis && parsedPayload.pattern_analysis.total_patterns > 0">
     <div class="pattern-summary">
-      <p><strong>Pattern Analysis:</strong> Found {{msg.payload.pattern_analysis.total_patterns}} recurring patterns across {{msg.payload.pattern_analysis.analyzed_todos}} completed todos.</p>
+      <p><strong>Pattern Analysis:</strong> Found {{parsedPayload.pattern_analysis.total_patterns}} recurring patterns across {{parsedPayload.pattern_analysis.analyzed_todos}} completed todos.</p>
     </div>
   </div>
 
   <!-- Recently completed section from MongoDB4 backend -->
-  <div class="recently-completed" ng-if="msg.payload.completed && msg.payload.completed.length > 0">
+  <div class="recently-completed" ng-if="parsedPayload.completed && parsedPayload.completed.length > 0">
     <h3 class="section-header">Recently Completed Tasks</h3>
-    <div ng-repeat="item in msg.payload.completed | limitTo:5" class="completed-item">
+    <div ng-repeat="item in parsedPayload.completed | limitTo:5" class="completed-item">
       <div class="completed-title">{{item.description}}</div>
       <div class="completed-time" ng-if="item.completed_at">
         {{item.completed_at | date:'MMM d, h:mm a'}}
@@ -212,8 +230,8 @@
     </div>
   </div>
 
-  <div ng-if="(!msg.payload.automation_suggestions || msg.payload.automation_suggestions.length === 0) &&
-              (!msg.payload.priority_recommendations || msg.payload.priority_recommendations.length === 0)">
+  <div ng-if="(!parsedPayload.automation_suggestions || parsedPayload.automation_suggestions.length === 0) &&
+              (!parsedPayload.priority_recommendations || parsedPayload.priority_recommendations.length === 0)">
     <div class="empty-message">
       <p>No AI suggestions available yet. Complete more tasks to generate insights and recommendations.</p>
       <p>The AI assistant analyzes your task completion patterns to identify opportunities for automation and optimization.</p>
@@ -223,10 +241,11 @@
   <!-- Debug section to help troubleshoot data flow -->
   <div class="debug-info">
     <div>Topic: {{msg.topic}}</div>
-    <div>Automation Suggestions: {{(msg.payload.automation_suggestions || []).length}}</div>
-    <div>Priority Recommendations: {{(msg.payload.priority_recommendations || []).length}}</div>
-    <div>Analyzed Todos: {{msg.payload.pattern_analysis.analyzed_todos || 0}}</div>
-    <div>Completed Tasks: {{(msg.payload.completed || []).length}}</div>
+    <div>Raw Payload: {{msg.payload}}</div>
+    <div>Automation Suggestions: {{(parsedPayload.automation_suggestions || []).length}}</div>
+    <div>Priority Recommendations: {{(parsedPayload.priority_recommendations || []).length}}</div>
+    <div>Analyzed Todos: {{parsedPayload.pattern_analysis.analyzed_todos || 0}}</div>
+    <div>Completed Tasks: {{(parsedPayload.completed || []).length}}</div>
   </div>
 </div>
 

@@ -1,5 +1,23 @@
 <!-- Daily Schedule Panel for FastMCP Todo Server Dashboard -->
 
+<script>
+  (function(scope) {
+    // Parse JSON payload if it's a string
+    scope.$watch('msg.payload', function(payload) {
+      if (payload && typeof payload === 'string') {
+        try {
+          scope.parsedPayload = JSON.parse(payload);
+        } catch(e) {
+          console.error('Error parsing payload JSON:', e);
+          scope.parsedPayload = {};
+        }
+      } else {
+        scope.parsedPayload = payload || {};
+      }
+    });
+  })(scope);
+</script>
+
 <style>
 .schedule-panel {
     font-family: 'Roboto', sans-serif;
@@ -216,47 +234,47 @@
 <div class="schedule-panel">
   <div class="schedule-header">
     <div class="schedule-date">
-      Schedule for {{msg.payload.date}} <span ng-if="msg.payload.weekday">({{msg.payload.weekday}})</span>
+      Schedule for {{parsedPayload.date}} <span ng-if="parsedPayload.weekday">({{parsedPayload.weekday}})</span>
     </div>
   </div>
 
   <div class="schedule-summary">
     <div class="summary-item">
       <div class="summary-label">Working Hours</div>
-      <div class="summary-value">{{msg.payload.working_hours.start}} - {{msg.payload.working_hours.end}}</div>
+      <div class="summary-value">{{parsedPayload.working_hours.start}} - {{parsedPayload.working_hours.end}}</div>
     </div>
 
     <div class="summary-item">
       <div class="summary-label">Total Tasks</div>
-      <div class="summary-value">{{msg.payload.total_tasks || 0}}</div>
+      <div class="summary-value">{{parsedPayload.total_tasks || 0}}</div>
     </div>
 
     <div class="summary-item">
       <div class="summary-label">Scheduled Time</div>
-      <div class="summary-value">{{msg.payload.total_scheduled_minutes || 0}} min</div>
+      <div class="summary-value">{{parsedPayload.total_scheduled_minutes || 0}} min</div>
     </div>
 
     <div class="summary-item">
       <div class="summary-label">Time Utilization</div>
-      <div class="summary-value">{{msg.payload.utilization_percentage || 0}}%</div>
+      <div class="summary-value">{{parsedPayload.utilization_percentage || 0}}%</div>
     </div>
 
     <div style="width: 100%;">
       <div class="utilization-bar">
         <div class="utilization-fill"
              ng-class="{
-               'utilization-low': msg.payload.utilization_percentage < 50,
-               'utilization-medium': msg.payload.utilization_percentage >= 50 && msg.payload.utilization_percentage < 80,
-               'utilization-high': msg.payload.utilization_percentage >= 80
+               'utilization-low': parsedPayload.utilization_percentage < 50,
+               'utilization-medium': parsedPayload.utilization_percentage >= 50 && parsedPayload.utilization_percentage < 80,
+               'utilization-high': parsedPayload.utilization_percentage >= 80
              }"
-             ng-style="{'width': (msg.payload.utilization_percentage || 0) + '%'}">
+             ng-style="{'width': (parsedPayload.utilization_percentage || 0) + '%'}">
         </div>
       </div>
     </div>
   </div>
 
-  <div class="timeline" ng-if="msg.payload.schedule && msg.payload.schedule.length > 0">
-    <div ng-repeat="task in msg.payload.schedule">
+  <div class="timeline" ng-if="parsedPayload.schedule && parsedPayload.schedule.length > 0">
+    <div ng-repeat="task in parsedPayload.schedule">
       <div class="timeline-item {{task.priority}}">
         <div class="timeline-time">
           <span class="timeline-time-text">{{task.start_time}}</span>
@@ -284,7 +302,7 @@
     </div>
   </div>
 
-  <div ng-if="!msg.payload.schedule || msg.payload.schedule.length === 0" class="no-schedule-message">
+  <div ng-if="!parsedPayload.schedule || parsedPayload.schedule.length === 0" class="no-schedule-message">
     <p>No tasks scheduled for this day.</p>
     <p>Use the date picker to select a different day or add more pending tasks to generate a schedule.</p>
   </div>
@@ -292,10 +310,11 @@
   <!-- Debug section to help troubleshoot data flow -->
   <div class="debug-info">
     <div>Topic: {{msg.topic}}</div>
-    <div>Date: {{msg.payload.date}}</div>
-    <div>Scheduled Tasks: {{(msg.payload.schedule || []).length}}</div>
-    <div>Total Minutes: {{msg.payload.total_scheduled_minutes || 0}}</div>
-    <div>Utilization: {{msg.payload.utilization_percentage || 0}}%</div>
+    <div>Raw Payload: {{msg.payload}}</div>
+    <div>Date: {{parsedPayload.date}}</div>
+    <div>Scheduled Tasks: {{(parsedPayload.schedule || []).length}}</div>
+    <div>Total Minutes: {{parsedPayload.total_scheduled_minutes || 0}}</div>
+    <div>Utilization: {{parsedPayload.utilization_percentage || 0}}%</div>
   </div>
 </div>
 

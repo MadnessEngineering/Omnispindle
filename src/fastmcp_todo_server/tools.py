@@ -93,7 +93,14 @@ async def mqtt_publish(topic: str, message: str, ctx: Context = None) -> str:
     mqtt_client = mqtt.Client()
     mqtt_client.connect(MQTT_HOST, MQTT_PORT, MQTT_KEEPALIVE)
 
-    result = mqtt_client.publish(topic, message)
+    if isinstance(message, str):
+        # If message is already a string, use it as is
+        payload = message
+    else:
+        # If message is an object, stringify it
+        payload = json.dumps(message)
+
+    result = mqtt_client.publish(topic, payload)
     result.wait_for_publish()
 
     mqtt_client.disconnect()

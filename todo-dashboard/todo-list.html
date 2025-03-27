@@ -296,27 +296,27 @@
 <div class="todo-container">
   <div class="todo-stats">
     <div class="stats-item">
-      <div class="stats-value">{{msg.payload.total_pending || 0}}</div>
+      <div class="stats-value">{{parsedPayload.total_pending || 0}}</div>
       <div class="stats-label">Pending Tasks</div>
     </div>
 
     <div class="stats-item">
-      <div class="stats-value">{{msg.payload.total_completed || 0}}</div>
+      <div class="stats-value">{{parsedPayload.total_completed || 0}}</div>
       <div class="stats-label">Completed Tasks</div>
     </div>
 
-    <div class="stats-item" ng-if="msg.payload.high_priority">
-      <div class="stats-value" style="color: #e53935;">{{msg.payload.high_priority || 0}}</div>
+    <div class="stats-item" ng-if="parsedPayload.high_priority">
+      <div class="stats-value" style="color: #e53935;">{{parsedPayload.high_priority || 0}}</div>
       <div class="stats-label">High Priority</div>
     </div>
 
     <div class="stats-item">
-      <div class="stats-value" style="color: #fb8c00;">{{msg.payload.medium_priority || 0}}</div>
+      <div class="stats-value" style="color: #fb8c00;">{{parsedPayload.medium_priority || 0}}</div>
       <div class="stats-label">Medium Priority</div>
     </div>
 
     <div class="stats-item">
-      <div class="stats-value" style="color: #43a047;">{{msg.payload.low_priority || 0}}</div>
+      <div class="stats-value" style="color: #43a047;">{{parsedPayload.low_priority || 0}}</div>
       <div class="stats-label">Low Priority</div>
     </div>
   </div>
@@ -336,8 +336,8 @@
   </div>
 
   <div class="todo-list">
-    <div ng-if="msg.payload.todos && msg.payload.todos.length > 0">
-      <div ng-repeat="item in msg.payload.todos | filter:searchFilter" class="todo-item {{item.priority}}">
+    <div ng-if="parsedPayload.todos && parsedPayload.todos.length > 0">
+      <div ng-repeat="item in parsedPayload.todos | filter:searchFilter" class="todo-item {{item.priority}}">
         <div class="todo-content" ng-click="item.expanded = !item.expanded">
           <div class="todo-header">
             <div class="todo-title">{{item.description}}</div>
@@ -370,15 +370,15 @@
       </div>
     </div>
 
-    <div ng-if="!msg.payload.todos || msg.payload.todos.length === 0" class="empty-message">
+    <div ng-if="!parsedPayload.todos || parsedPayload.todos.length === 0" class="empty-message">
       <p>No pending todo items found.</p>
       <p>Create new tasks to get started.</p>
     </div>
   </div>
 
-  <div class="recently-completed" ng-if="msg.payload.completed && msg.payload.completed.length > 0">
+  <div class="recently-completed" ng-if="parsedPayload.completed && parsedPayload.completed.length > 0">
     <h3 class="section-header">Recently Completed</h3>
-    <div ng-repeat="item in msg.payload.completed | limitTo:5" class="completed-item">
+    <div ng-repeat="item in parsedPayload.completed | limitTo:5" class="completed-item">
       <div class="completed-title">{{item.description}}</div>
       <div class="completed-time" ng-if="item.completed_at">
         {{item.completed_at | date:'MMM d, h:mm a'}}
@@ -388,15 +388,30 @@
 
   <!-- Debug section to help troubleshoot data flow -->
   <div class="debug-info">
-    <div>Last Updated: {{msg.payload.last_updated | date:'MMM d, yyyy h:mm:ss a'}}</div>
+    <div>Last Updated: {{parsedPayload.last_updated | date:'MMM d, yyyy h:mm:ss a'}}</div>
     <div>Topic: {{msg.topic}}</div>
-    <div>Todos Count: {{msg.payload.todos.length}}</div>
-    <div>Completed Count: {{msg.payload.completed.length}}</div>
+    <div>Raw Payload: {{msg.payload}}</div>
+    <div>Todos Count: {{(parsedPayload.todos || []).length}}</div>
+    <div>Completed Count: {{(parsedPayload.completed || []).length}}</div>
   </div>
 </div>
 
 <script>
   (function(scope) {
+    // Parse JSON payload if it's a string
+    scope.$watch('msg.payload', function(payload) {
+      if (payload && typeof payload === 'string') {
+        try {
+          scope.parsedPayload = JSON.parse(payload);
+        } catch(e) {
+          console.error('Error parsing payload JSON:', e);
+          scope.parsedPayload = {};
+        }
+      } else {
+        scope.parsedPayload = payload || {};
+      }
+    });
+
     // Initialize active filter
     scope.activeFilter = 'all';
     scope.searchText = '';

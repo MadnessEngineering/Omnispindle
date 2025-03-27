@@ -19,6 +19,7 @@ from collections import defaultdict
 
 from pymongo import MongoClient
 from ai_assistant import assistant as todo_assistant
+from mqtt_publish import mqtt_publish
 
 # Configure logger
 logger = logging.getLogger(__name__)
@@ -452,7 +453,8 @@ async def suggest_deadline(todo_id: str) -> str:
     """
     try:
         result = scheduler.suggest_deadline(todo_id)
-        return json.dumps(result, default=str)
+        await mqtt_publish(f"status/{os.getenv('DeNa')}-mcp/suggest_deadline", json.dumps({"todo_id": todo_id, "result": result}))
+        return json.dumps(result)
     except Exception as e:
         logger.error(f"Error suggesting deadline for todo {todo_id}: {e}")
         return json.dumps({"status": "error", "message": str(e)})
@@ -471,7 +473,8 @@ async def suggest_time_slot(todo_id: str, date: Optional[str] = None) -> str:
     """
     try:
         result = scheduler.suggest_time_slot(todo_id, date)
-        return json.dumps(result, default=str)
+        await mqtt_publish(f"status/{os.getenv('DeNa')}-mcp/suggest_time_slot", json.dumps({"todo_id": todo_id, "date": date, "result": result}))
+        return json.dumps(result)
     except Exception as e:
         logger.error(f"Error suggesting time slot for todo {todo_id}: {e}")
         return json.dumps({"status": "error", "message": str(e)})
@@ -489,7 +492,8 @@ async def generate_daily_schedule(date: Optional[str] = None) -> str:
     """
     try:
         result = scheduler.generate_daily_schedule(date)
-        return json.dumps(result, default=str)
+        await mqtt_publish(f"status/{os.getenv('DeNa')}-mcp/generate_daily_schedule", json.dumps({"date": date, "result": result}))
+        return json.dumps(result)
     except Exception as e:
         logger.error(f"Error generating daily schedule: {e}")
         return json.dumps({"status": "error", "message": str(e)})
