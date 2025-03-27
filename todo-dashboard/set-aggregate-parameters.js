@@ -93,7 +93,10 @@ const pendingTodosMsg = {
     mode: 'collection',
     collection: 'todos',
     operation: 'aggregate',
-    payload: [pendingTodosPipeline]
+    payload: [pendingTodosPipeline],
+    // Add a property to indicate this is for pending todos 
+    // so we can identify it in the MongoDB response handler
+    _pendingTodos: true
 };
 
 const completedTodosMsg = {
@@ -109,6 +112,11 @@ const scheduleMsg = {
     operation: 'aggregate',
     payload: [schedulePipeline]
 };
+
+// Log what we're requesting
+node.warn(`Requesting ${pendingTodosPipeline.length} pending todos`);
+node.warn(`Requesting ${completedTodosPipeline.length} completed todos`);
+node.warn(`Requesting schedule data with ${schedulePipeline.length} pipeline stages`);
 
 return [
     pendingTodosMsg,

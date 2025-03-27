@@ -7,7 +7,7 @@
         "info": "Dashboard for FastMCP Todo Server with AI-powered insights"
     },
     {
-        "id": "84dcf74365cf5d16",
+        "id": "b77d615373439387",
         "type": "mqtt in",
         "z": "todo-dashboard",
         "name": "Todo Updates",
@@ -18,16 +18,16 @@
         "nl": false,
         "rap": false,
         "inputs": 0,
-        "x": 110,
-        "y": 220,
+        "x": 190,
+        "y": 640,
         "wires": [
             [
-                "bfa0ffc3ffc42b02"
+                "df5047691ee23252"
             ]
         ]
     },
     {
-        "id": "bfa0ffc3ffc42b02",
+        "id": "df5047691ee23252",
         "type": "switch",
         "z": "todo-dashboard",
         "name": "Route by Topic",
@@ -53,22 +53,22 @@
         "checkall": "true",
         "repair": false,
         "outputs": 3,
-        "x": 300,
-        "y": 200,
+        "x": 380,
+        "y": 620,
         "wires": [
             [
-                "a91d1985c908289f"
+                "6a024b8d72e70f0b"
             ],
             [
-                "e4192b45b2be51ee"
+                "b9eb99ec1c3c2972"
             ],
             [
-                "69846d645d0c6598"
+                "8de09bc2448e4bdb"
             ]
         ]
     },
     {
-        "id": "a91d1985c908289f",
+        "id": "6a024b8d72e70f0b",
         "type": "ui_template",
         "z": "todo-dashboard",
         "group": "g-todos",
@@ -81,17 +81,17 @@
         "fwdInMessages": false,
         "resendOnRefresh": true,
         "templateScope": "local",
-        "x": 480,
-        "y": 160,
+        "x": 560,
+        "y": 580,
         "wires": [
             [
-                "afe30fa8d1de60d4",
-                "513b9ccf904f4905"
+                "373f8631915daeef",
+                "013bc675b103b356"
             ]
         ]
     },
     {
-        "id": "e4192b45b2be51ee",
+        "id": "b9eb99ec1c3c2972",
         "type": "ui_template",
         "z": "todo-dashboard",
         "group": "g-suggestions",
@@ -99,21 +99,21 @@
         "order": 1,
         "width": "12",
         "height": "12",
-        "format": "<!-- AI Suggestions Panel for FastMCP Todo Server Dashboard -->\n\n<style>\n    .suggestions-panel {\n        font-family: 'Roboto', sans-serif;\n        padding: 0 10px;\n    }\n\n    .suggestion-item,\n    .recommendation-item {\n        padding: 15px;\n        margin-bottom: 15px;\n        border-radius: 8px;\n        background-color: #e3f2fd;\n        border-left: 6px solid #2196f3;\n        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);\n        transition: all 0.3s ease;\n    }\n\n    .suggestion-item:hover,\n    .recommendation-item:hover {\n        transform: translateY(-2px);\n        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);\n    }\n\n    .suggestion-title,\n    .recommendation-title {\n        font-weight: bold;\n        display: block;\n        margin-bottom: 10px;\n        font-size: 16px;\n        color: #1565c0;\n    }\n\n    .suggestion-confidence {\n        font-size: 12px;\n        background-color: #bbdefb;\n        color: #0d47a1;\n        padding: 3px 8px;\n        border-radius: 12px;\n        display: inline-block;\n        margin-left: 10px;\n    }\n\n    .similar-tasks {\n        margin-top: 8px;\n        font-size: 13px;\n        color: #546e7a;\n    }\n\n    .recommendation-details {\n        display: flex;\n        align-items: center;\n        margin-top: 8px;\n    }\n\n    .priority-change {\n        display: flex;\n        align-items: center;\n    }\n\n    .priority-badge {\n        padding: 3px 8px;\n        border-radius: 12px;\n        font-size: 12px;\n        margin: 0 5px;\n    }\n\n    .priority-high {\n        background-color: #ffebee;\n        color: #c62828;\n    }\n\n    .priority-medium,\n    .priority-initial {\n        background-color: #fff3e0;\n        color: #e65100;\n    }\n\n    .priority-low {\n        background-color: #e8f5e9;\n        color: #2e7d32;\n    }\n\n    .priority-arrow {\n        font-size: 18px;\n        margin: 0 5px;\n        color: #546e7a;\n    }\n\n    .pattern-summary {\n        background-color: #f5f5f5;\n        border-radius: 8px;\n        padding: 12px;\n        margin-top: 20px;\n        border-left: 6px solid #9e9e9e;\n    }\n\n    .section-header {\n        margin-top: 25px;\n        margin-bottom: 15px;\n        border-bottom: 2px solid #e0e0e0;\n        padding-bottom: 8px;\n        color: #424242;\n        font-weight: 500;\n    }\n\n    .empty-message {\n        color: #757575;\n        font-style: italic;\n        padding: 20px;\n        text-align: center;\n        background-color: #f5f5f5;\n        border-radius: 8px;\n    }\n\n    /* Debug info */\n    .debug-info {\n        margin-top: 20px;\n        padding: 10px;\n        background-color: #f8f9fa;\n        border: 1px solid #ddd;\n        border-radius: 4px;\n        font-family: monospace;\n        font-size: 12px;\n        white-space: pre-wrap;\n    }\n\n    /* Recent completions section */\n    .recently-completed {\n        margin-top: 30px;\n    }\n\n    .completed-item {\n        padding: 10px 15px;\n        border-radius: 8px;\n        background-color: #f5f5f5;\n        margin-bottom: 10px;\n        display: flex;\n        justify-content: space-between;\n        align-items: center;\n    }\n\n    .completed-title {\n        color: #757575;\n        text-decoration: line-through;\n        margin-right: 10px;\n    }\n\n    .completed-time {\n        font-size: 12px;\n        color: #9e9e9e;\n    }\n</style>\n\n<div class=\"suggestions-panel\">\n    <h2>AI-Powered Insights</h2>\n\n    <div ng-if=\"msg.payload.automation_suggestions && msg.payload.automation_suggestions.length > 0\">\n        <h3 class=\"section-header\">Automation Opportunities</h3>\n        <div ng-repeat=\"suggestion in msg.payload.automation_suggestions\">\n            <div class=\"suggestion-item\">\n                <div>\n                    <span class=\"suggestion-title\">{{suggestion.template}}</span>\n                    <span class=\"suggestion-confidence\">{{suggestion.automation_confidence}}% confidence</span>\n                </div>\n                <p class=\"similar-tasks\">Found {{suggestion.similar_tasks}} similar tasks</p>\n                <div ng-if=\"suggestion.examples && suggestion.examples.length > 0\">\n                    <p><strong>Examples:</strong></p>\n                    <ul>\n                        <li ng-repeat=\"example in suggestion.examples | limitTo:2\">{{example}}</li>\n                    </ul>\n                </div>\n                <div ng-if=\"suggestion.avg_completion_time\">\n                    <p>Average completion time: {{(suggestion.avg_completion_time / 60).toFixed(1)}} minutes</p>\n                </div>\n            </div>\n        </div>\n    </div>\n\n    <div ng-if=\"msg.payload.priority_recommendations && msg.payload.priority_recommendations.length > 0\">\n        <h3 class=\"section-header\">Priority Recommendations</h3>\n        <div ng-repeat=\"rec in msg.payload.priority_recommendations\">\n            <div class=\"recommendation-item\">\n                <span class=\"recommendation-title\">{{rec.description}}</span>\n                <div class=\"recommendation-details\">\n                    <div class=\"priority-change\">\n                        <span>Current:</span>\n                        <span class=\"priority-badge priority-{{rec.current_priority}}\">{{rec.current_priority}}</span>\n                        <span class=\"priority-arrow\">→</span>\n                        <span>Recommended:</span>\n                        <span class=\"priority-badge priority-{{rec.recommended_priority}}\">{{rec.recommended_priority}}</span>\n                    </div>\n                    <div style=\"margin-left: auto;\">\n                        <span class=\"suggestion-confidence\">{{rec.confidence}}% match</span>\n                    </div>\n                </div>\n            </div>\n        </div>\n    </div>\n\n    <div ng-if=\"msg.payload.pattern_analysis && msg.payload.pattern_analysis.total_patterns > 0\">\n        <div class=\"pattern-summary\">\n            <p><strong>Pattern Analysis:</strong> Found {{msg.payload.pattern_analysis.total_patterns}} recurring\n                patterns across {{msg.payload.pattern_analysis.analyzed_todos}} completed todos.</p>\n        </div>\n    </div>\n\n    <!-- Recently completed section from MongoDB4 backend -->\n    <div class=\"recently-completed\" ng-if=\"msg.payload.completed && msg.payload.completed.length > 0\">\n        <h3 class=\"section-header\">Recently Completed Tasks</h3>\n        <div ng-repeat=\"item in msg.payload.completed | limitTo:5\" class=\"completed-item\">\n            <div class=\"completed-title\">{{item.description}}</div>\n            <div class=\"completed-time\" ng-if=\"item.completed_at\">\n                {{item.completed_at | date:'MMM d, h:mm a'}}\n            </div>\n        </div>\n    </div>\n\n    <div ng-if=\"(!msg.payload.automation_suggestions || msg.payload.automation_suggestions.length === 0) &&\n              (!msg.payload.priority_recommendations || msg.payload.priority_recommendations.length === 0)\">\n        <div class=\"empty-message\">\n            <p>No AI suggestions available yet. Complete more tasks to generate insights and recommendations.</p>\n            <p>The AI assistant analyzes your task completion patterns to identify opportunities for automation and\n                optimization.</p>\n        </div>\n    </div>\n\n    <!-- Debug section to help troubleshoot data flow -->\n    <div class=\"debug-info\">\n        <div>Topic: {{msg.topic}}</div>\n        <div>Automation Suggestions: {{(msg.payload.automation_suggestions || []).length}}</div>\n        <div>Priority Recommendations: {{(msg.payload.priority_recommendations || []).length}}</div>\n        <div>Analyzed Todos: {{msg.payload.pattern_analysis.analyzed_todos || 0}}</div>\n        <div>Completed Tasks: {{(msg.payload.completed || []).length}}</div>\n    </div>\n</div>\n\n<!--\nNode-RED Message Format:\n{\n  \"automation_suggestions\": [\n    {\n      \"pattern_id\": \"123\",\n      \"similar_tasks\": 5,\n      \"template\": \"Daily progress report\",\n      \"automation_confidence\": 85,\n      \"examples\": [\"Submit daily report\", \"Send progress update\"]\n    }\n  ],\n  \"priority_recommendations\": [\n    {\n      \"todo_id\": \"456\",\n      \"description\": \"Review project proposal\",\n      \"current_priority\": \"medium\",\n      \"recommended_priority\": \"high\",\n      \"confidence\": 75\n    }\n  ],\n  \"pattern_analysis\": {\n    \"total_patterns\": 3,\n    \"analyzed_todos\": 25\n  }\n}\n-->",
+        "format": "<!-- AI Suggestions Panel for FastMCP Todo Server Dashboard -->\n\n<style>\n    .suggestions-panel {\n        font-family: 'Roboto', sans-serif;\n        padding: 0 10px;\n    }\n\n    .suggestion-item,\n    .recommendation-item {\n        padding: 15px;\n        margin-bottom: 15px;\n        border-radius: 8px;\n        background-color: #e3f2fd;\n        border-left: 6px solid #2196f3;\n        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);\n        transition: all 0.3s ease;\n    }\n\n    .suggestion-item:hover,\n    .recommendation-item:hover {\n        transform: translateY(-2px);\n        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);\n    }\n\n    .suggestion-title,\n    .recommendation-title {\n        font-weight: bold;\n        display: block;\n        margin-bottom: 10px;\n        font-size: 16px;\n        color: #1565c0;\n    }\n\n    .suggestion-confidence {\n        font-size: 12px;\n        background-color: #bbdefb;\n        color: #0d47a1;\n        padding: 3px 8px;\n        border-radius: 12px;\n        display: inline-block;\n        margin-left: 10px;\n    }\n\n    .similar-tasks {\n        margin-top: 8px;\n        font-size: 13px;\n        color: #546e7a;\n    }\n\n    .recommendation-details {\n        display: flex;\n        align-items: center;\n        margin-top: 8px;\n    }\n\n    .priority-change {\n        display: flex;\n        align-items: center;\n    }\n\n    .priority-badge {\n        padding: 3px 8px;\n        border-radius: 12px;\n        font-size: 12px;\n        margin: 0 5px;\n    }\n\n    .priority-high {\n        background-color: #ffebee;\n        color: #c62828;\n    }\n\n    .priority-medium,\n    .priority-initial {\n        background-color: #fff3e0;\n        color: #e65100;\n    }\n\n    .priority-low {\n        background-color: #e8f5e9;\n        color: #2e7d32;\n    }\n\n    .priority-arrow {\n        font-size: 18px;\n        margin: 0 5px;\n        color: #546e7a;\n    }\n\n    .pattern-summary {\n        background-color: #f5f5f5;\n        border-radius: 8px;\n        padding: 12px;\n        margin-top: 20px;\n        border-left: 6px solid #9e9e9e;\n    }\n\n    .section-header {\n        margin-top: 25px;\n        margin-bottom: 15px;\n        border-bottom: 2px solid #e0e0e0;\n        padding-bottom: 8px;\n        color: #424242;\n        font-weight: 500;\n    }\n\n    .empty-message {\n        color: #757575;\n        font-style: italic;\n        padding: 20px;\n        text-align: center;\n        background-color: #f5f5f5;\n        border-radius: 8px;\n    }\n\n    /* Debug info */\n    .debug-info {\n        margin-top: 20px;\n        padding: 10px;\n        background-color: #f8f9fa;\n        border: 1px solid #ddd;\n        border-radius: 4px;\n        font-family: monospace;\n        font-size: 12px;\n        white-space: pre-wrap;\n    }\n\n    /* Recent completions section */\n    .recently-completed {\n        margin-top: 30px;\n    }\n\n    .completed-item {\n        padding: 10px 15px;\n        border-radius: 8px;\n        background-color: #f5f5f5;\n        margin-bottom: 10px;\n        display: flex;\n        justify-content: space-between;\n        align-items: center;\n    }\n\n    .completed-title {\n        color: #757575;\n        text-decoration: line-through;\n        margin-right: 10px;\n    }\n\n    .completed-time {\n        font-size: 12px;\n        color: #9e9e9e;\n    }\n</style>\n\n<div class=\"suggestions-panel\">\n    <h2>AI-Powered Insights</h2>\n\n    <div ng-if=\"msg.payload.automation_suggestions && msg.payload.automation_suggestions.length > 0\">\n        <h3 class=\"section-header\">Automation Opportunities</h3>\n        <div ng-repeat=\"suggestion in msg.payload.automation_suggestions\">\n            <div class=\"suggestion-item\">\n                <div>\n                    <span class=\"suggestion-title\">{{suggestion.template}}</span>\n                    <span class=\"suggestion-confidence\">{{suggestion.automation_confidence}}% confidence</span>\n                </div>\n                <p class=\"similar-tasks\">Found {{suggestion.similar_tasks}} similar tasks</p>\n                <div ng-if=\"suggestion.examples && suggestion.examples.length > 0\">\n                    <p><strong>Examples:</strong></p>\n                    <ul>\n                        <li ng-repeat=\"example in suggestion.examples | limitTo:2\">{{example}}</li>\n                    </ul>\n                </div>\n                <div ng-if=\"suggestion.avg_completion_time\">\n                    <p>Average completion time: {{(suggestion.avg_completion_time / 60).toFixed(1)}} minutes</p>\n                </div>\n            </div>\n        </div>\n    </div>\n\n    <div ng-if=\"msg.payload.priority_recommendations && msg.payload.priority_recommendations.length > 0\">\n        <h3 class=\"section-header\">Priority Recommendations</h3>\n        <div ng-repeat=\"rec in msg.payload.priority_recommendations\">\n            <div class=\"recommendation-item\">\n                <span class=\"recommendation-title\">{{rec.description}}</span>\n                <div class=\"recommendation-details\">\n                    <div class=\"priority-change\">\n                        <span>Current:</span>\n                        <span class=\"priority-badge priority-{{rec.current_priority}}\">{{rec.current_priority}}</span>\n                        <span class=\"priority-arrow\">→</span>\n                        <span>Recommended:</span>\n                        <span class=\"priority-badge priority-{{rec.recommended_priority}}\">{{rec.recommended_priority}}</span>\n                    </div>\n                    <div style=\"margin-left: auto;\">\n                        <span class=\"suggestion-confidence\">{{rec.confidence}}% match</span>\n                    </div>\n                </div>\n            </div>\n        </div>\n    </div>\n\n    <div ng-if=\"msg.payload.pattern_analysis && msg.payload.pattern_analysis.total_patterns > 0\">\n        <div class=\"pattern-summary\">\n            <p><strong>Pattern Analysis:</strong> Found {{msg.payload.pattern_analysis.total_patterns}} recurring\n                patterns across {{msg.payload.pattern_analysis.analyzed_todos}} completed todos.</p>\n        </div>\n    </div>\n\n    <!-- Recently completed section from MongoDB4 backend -->\n    <div class=\"recently-completed\" ng-if=\"msg.payload.completed && msg.payload.completed.length > 0\">\n        <h3 class=\"section-header\">Recently Completed Tasks</h3>\n        <div ng-repeat=\"item in msg.payload.completed | limitTo:5\" class=\"completed-item\"><div class=\"completed-title\">{{item.description}}</div>\n            <div class=\"completed-time\" ng-if=\"item.completed_at\">\n                {{item.completed_at | date:'MMM d, h:mm a'}}\n            </div>\n        </div>\n    </div>\n\n    <div ng-if=\"(!msg.payload.automation_suggestions || msg.payload.automation_suggestions.length === 0) &&\n              (!msg.payload.priority_recommendations || msg.payload.priority_recommendations.length === 0)\">\n        <div class=\"empty-message\">\n            <p>No AI suggestions available yet. Complete more tasks to generate insights and recommendations.</p>\n            <p>The AI assistant analyzes your task completion patterns to identify opportunities for automation and\n                optimization.</p>\n        </div>\n    </div>\n\n    <!-- Debug section to help troubleshoot data flow -->\n    <div class=\"debug-info\">\n        <div>Topic: {{msg.topic}}</div>\n        <div>Automation Suggestions: {{(msg.payload.automation_suggestions || []).length}}</div>\n        <div>Priority Recommendations: {{(msg.payload.priority_recommendations || []).length}}</div>\n        <div>Analyzed Todos: {{msg.payload.pattern_analysis.analyzed_todos || 0}}</div>\n        <div>Completed Tasks: {{(msg.payload.completed || []).length}}</div>\n    </div>\n</div>\n\n<!--\nNode-RED Message Format:\n{\n  \"automation_suggestions\": [\n    {\n      \"pattern_id\": \"123\",\n      \"similar_tasks\": 5,\n      \"template\": \"Daily progress report\",\n      \"automation_confidence\": 85,\n      \"examples\": [\"Submit daily report\", \"Send progress update\"]\n    }\n  ],\n  \"priority_recommendations\": [\n    {\n      \"todo_id\": \"456\",\n      \"description\": \"Review project proposal\",\n      \"current_priority\": \"medium\",\n      \"recommended_priority\": \"high\",\n      \"confidence\": 75\n    }\n  ],\n  \"pattern_analysis\": {\n    \"total_patterns\": 3,\n    \"analyzed_todos\": 25\n  }\n}\n-->",
         "storeOutMessages": true,
         "fwdInMessages": false,
         "resendOnRefresh": true,
         "templateScope": "local",
-        "x": 500,
-        "y": 200,
+        "x": 580,
+        "y": 620,
         "wires": [
             [
-                "513b9ccf904f4905"
+                "013bc675b103b356"
             ]
         ]
     },
     {
-        "id": "69846d645d0c6598",
+        "id": "8de09bc2448e4bdb",
         "type": "ui_template",
         "z": "todo-dashboard",
         "group": "g-schedule",
@@ -126,16 +126,16 @@
         "fwdInMessages": false,
         "resendOnRefresh": true,
         "templateScope": "local",
-        "x": 500,
-        "y": 240,
+        "x": 580,
+        "y": 660,
         "wires": [
             [
-                "513b9ccf904f4905"
+                "013bc675b103b356"
             ]
         ]
     },
     {
-        "id": "afe30fa8d1de60d4",
+        "id": "373f8631915daeef",
         "type": "function",
         "z": "todo-dashboard",
         "name": "Handle Todo Actions",
@@ -146,16 +146,16 @@
         "initialize": "",
         "finalize": "",
         "libs": [],
-        "x": 744.0000152587891,
-        "y": 170.99998950958252,
+        "x": 824.0000152587891,
+        "y": 590.9999895095825,
         "wires": [
             [
-                "164132cb4acb2b80"
+                "357e46e6ec2d1923"
             ]
         ]
     },
     {
-        "id": "164132cb4acb2b80",
+        "id": "357e46e6ec2d1923",
         "type": "mqtt out",
         "z": "todo-dashboard",
         "name": "Send Action",
@@ -168,12 +168,12 @@
         "correl": "",
         "expiry": "",
         "broker": "5b41a831.e6efd8",
-        "x": 1030,
-        "y": 280,
+        "x": 1110,
+        "y": 700,
         "wires": []
     },
     {
-        "id": "0783d61d4f790c8a",
+        "id": "0425d18194c283af",
         "type": "ui_date_picker",
         "z": "todo-dashboard",
         "name": "Select Date",
@@ -184,32 +184,32 @@
         "height": 1,
         "passthru": true,
         "topic": "topic",
-        "x": 394.00001525878906,
-        "y": 450.9999895095825,
+        "x": 474.00001525878906,
+        "y": 870.9999895095825,
         "wires": [
             [
-                "156736b031ea754c"
+                "05a5c5dad5f5eb17"
             ]
         ]
     },
     {
-        "id": "156736b031ea754c",
+        "id": "05a5c5dad5f5eb17",
         "type": "function",
         "z": "todo-dashboard",
         "name": "Format for Schedule",
         "func": "// Check if payload is a date or null/undefined\nlet formattedDate = 'all';\n\nif (msg.payload && msg.payload !== 'all') {\n    const date = new Date(msg.payload);\n    formattedDate = date.toISOString().split('T')[0];\n}\n\nreturn {\n    topic: 'todo/action/daily_schedule',\n    payload: {\n        date: formattedDate\n    }\n};",
         "outputs": 1,
         "noerr": 0,
-        "x": 760,
-        "y": 380,
+        "x": 840,
+        "y": 800,
         "wires": [
             [
-                "164132cb4acb2b80"
+                "357e46e6ec2d1923"
             ]
         ]
     },
     {
-        "id": "1ebce56b4c224396",
+        "id": "dd896c93c05a6e6e",
         "type": "ui_button",
         "z": "todo-dashboard",
         "name": "Show All",
@@ -226,16 +226,16 @@
         "payload": "all",
         "payloadType": "str",
         "topic": "todo/action/daily_schedule",
-        "x": 394.00001525878906,
-        "y": 410.9999895095825,
+        "x": 474.00001525878906,
+        "y": 830.9999895095825,
         "wires": [
             [
-                "156736b031ea754c"
+                "05a5c5dad5f5eb17"
             ]
         ]
     },
     {
-        "id": "c71e5c48be4c31b8",
+        "id": "8d92db12cc0c194e",
         "type": "ui_button",
         "z": "todo-dashboard",
         "name": "Refresh Todos",
@@ -252,16 +252,16 @@
         "payload": "refresh=true",
         "payloadType": "str",
         "topic": "todo/action/refresh_todos",
-        "x": 364.00001525878906,
-        "y": 290.9999895095825,
+        "x": 444.00001525878906,
+        "y": 710.9999895095825,
         "wires": [
             [
-                "164132cb4acb2b80"
+                "357e46e6ec2d1923"
             ]
         ]
     },
     {
-        "id": "51260c6ff9339ad1",
+        "id": "c6fbb506f5873327",
         "type": "ui_button",
         "z": "todo-dashboard",
         "name": "Refresh Suggestions",
@@ -278,16 +278,16 @@
         "payload": "{}",
         "payloadType": "json",
         "topic": "todo/action/refresh_suggestions",
-        "x": 364.00001525878906,
-        "y": 370.9999895095825,
+        "x": 444.00001525878906,
+        "y": 790.9999895095825,
         "wires": [
             [
-                "164132cb4acb2b80"
+                "357e46e6ec2d1923"
             ]
         ]
     },
     {
-        "id": "513b9ccf904f4905",
+        "id": "013bc675b103b356",
         "type": "debug",
         "z": "todo-dashboard",
         "name": "debug 2",
@@ -299,8 +299,8 @@
         "targetType": "msg",
         "statusVal": "payload",
         "statusType": "auto",
-        "x": 740,
-        "y": 260,
+        "x": 820,
+        "y": 680,
         "wires": []
     },
     {
