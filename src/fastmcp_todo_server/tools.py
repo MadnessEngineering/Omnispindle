@@ -25,9 +25,8 @@ MONGODB_DB = os.getenv("MONGODB_DB", "swarmonomicon")
 MONGODB_COLLECTION = os.getenv("MONGODB_COLLECTION", "todos")
 
 # MQTT configuration
-MQTT_HOST = "3.134.3.199"
-MQTT_PORT = 3003
-MQTT_KEEPALIVE = 60
+MQTT_HOST = os.getenv("MQTT_HOST", "localhost")
+MQTT_PORT = os.getenv("MQTT_PORT", 3003)
 
 # Create MongoDB connection at module level
 mongo_client = MongoClient(MONGODB_URI)
@@ -36,13 +35,14 @@ collection = db[MONGODB_COLLECTION]
 lessons_collection = db["lessons_learned"]
 
 
-async def add_todo(description: str, priority: str = "initial", target_agent: str = "user", ctx: Context = None) -> str:
+async def add_todo(description: str, project: str, priority: str = "initial", target_agent: str = "user", ctx: Context = None) -> str:
     """Add a new todo item to the database"""
     await mqtt_publish(f"status/{os.getenv('DeNa')}-mcp/add_todo",
-                       f"description: {description}, priority: {priority}, target_agent: {target_agent}", ctx)
+                       f"description={description}=:=project={project}=:=priority={priority}=:=target_agent={target_agent}", ctx)
     todo = {
         "id": str(uuid.uuid4()),
         "description": description,
+        "project": project,
         "priority": priority,
         "source_agent": "mcp-server",
         "target_agent": target_agent,
