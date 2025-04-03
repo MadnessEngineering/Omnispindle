@@ -49,22 +49,31 @@ async def sample_data(test_collections):
         {
             "id": str(uuid.uuid4()),
             "description": "Implement search functionality for todos",
+            "project": "search_project",
             "priority": "high",
             "source_agent": "test",
             "target_agent": "user",
             "status": "pending",
             "created_at": int(datetime.now(UTC).timestamp()),
-            "completed_at": None
+            "completed_at": None,
+            "metadata": {
+                "github_repo": "https://github.com/example/todo-server",
+                "related_ticket": "SRCH-123"
+            }
         },
         {
             "id": str(uuid.uuid4()),
             "description": "Create documentation for the API",
+            "project": "docs_project",
             "priority": "medium",
             "source_agent": "test",
             "target_agent": "dev-team",
             "status": "pending",
             "created_at": int(datetime.now(UTC).timestamp()),
-            "completed_at": None
+            "completed_at": None,
+            "metadata": {
+                "doc_url": "https://example.com/api-docs"
+            }
         }
     ]
     

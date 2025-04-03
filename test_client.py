@@ -42,7 +42,7 @@ class TodoClient:
             logger.error(f"Failed to connect: {str(e)}", exc_info=True)
             return False
 
-    async def add_todo(self, description: str, priority: str = "high", target_agent: str = "test_client") -> dict:
+    async def add_todo(self, description: str, project: str, priority: str = "high", target_agent: str = "test_client", metadata: dict = None) -> dict:
         """Add a new todo item"""
         if not self.client:
             raise RuntimeError("Client not connected")
@@ -50,9 +50,15 @@ class TodoClient:
         try:
             args = {
                 "description": description,
+                "project": project,
                 "priority": priority,
                 "target_agent": target_agent
             }
+            
+            # Add metadata if provided
+            if metadata:
+                args["metadata"] = metadata
+                
             logger.debug(f"Adding todo with args: {args}")
 
             result = await self.client.call_tool("add_todo", args)
@@ -99,6 +105,7 @@ async def run_tests():
         logger.info("\nTest 1: Adding todo")
         result = await client.add_todo(
             description="Test todo from client",
+            project="test_project",
             priority="high",
             target_agent="test_client"
         )

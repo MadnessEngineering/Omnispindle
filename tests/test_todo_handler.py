@@ -62,6 +62,7 @@ def mongo_client():
 async def test_add_todo_success(todo_server):
     # Test data
     description = "Test todo"
+    project = "test_project"
     priority = "high"
     target_agent = "test_agent"
 
@@ -70,6 +71,7 @@ async def test_add_todo_success(todo_server):
         "add_todo",
         {
             "description": description,
+            "project": project,
             "priority": priority,
             "target_agent": target_agent
         }
@@ -87,12 +89,14 @@ async def test_add_todo_success(todo_server):
 async def test_add_todo_with_defaults(todo_server):
     # Test with minimal data
     description = "Test todo"
+    project = "test_project"
 
     # Call handler through FastMCP
     response = await todo_server.server.call_tool(
         "add_todo",
         {
-            "description": description
+            "description": description,
+            "project": project
         }
     )
 
@@ -108,6 +112,7 @@ async def test_add_todo_with_defaults(todo_server):
 async def test_add_todo_with_error(todo_server):
     # Test data
     description = "Test todo"
+    project = "test_project"
     error_message = "Database error"
 
     # Mock error response
@@ -117,7 +122,8 @@ async def test_add_todo_with_error(todo_server):
     response = await todo_server.server.call_tool(
         "add_todo",
         {
-            "description": description
+            "description": description,
+            "project": project
         }
     )
 
@@ -484,6 +490,7 @@ async def test_list_lessons_success(todo_server):
 async def test_integration_add_todo(integration_todo_server):
     # Test data
     description = "Integration test todo"
+    project = "test_project"
     priority = "high"
     target_agent = "test_agent"
 
@@ -492,6 +499,7 @@ async def test_integration_add_todo(integration_todo_server):
         "add_todo",
         {
             "description": description,
+            "project": project,
             "priority": priority,
             "target_agent": target_agent
         }
@@ -512,14 +520,16 @@ async def test_integration_add_todo(integration_todo_server):
     client.close()
 
     # Debugging output
-    print(f"Expected: {description}, {priority}, {target_agent}")
-    print(f"Actual: {todo['description']}, {todo['priority']}, {todo['target_agent']}")
+    print(f"Expected: {description}, {project}, {priority}, {target_agent}")
+    print(f"Actual: {todo['description']}, {todo['project']}, {todo['priority']}, {todo['target_agent']}")
 
     assert todo is not None
     assert todo["description"] == description
+    assert todo["project"] == project
     assert todo["priority"] == priority
     assert todo["target_agent"] == target_agent
     assert todo["status"] == "pending"
+    assert "metadata" in todo
 
     # Optionally, you can assert that the _id is present
     assert "_id" in todo
@@ -528,12 +538,14 @@ async def test_integration_add_todo(integration_todo_server):
 async def test_integration_add_todo_with_defaults(integration_todo_server):
     # Test with minimal data
     description = "Integration test todo with defaults"
+    project = "test_project"
 
     # Call handler through FastMCP
     response = await integration_todo_server.server.call_tool(
         "add_todo",
         {
-            "description": description
+            "description": description,
+            "project": project
         }
     )
 
@@ -553,9 +565,11 @@ async def test_integration_add_todo_with_defaults(integration_todo_server):
 
     assert todo is not None
     assert todo["description"] == description
-    assert todo["priority"] == "inital"  # Default value
+    assert todo["project"] == project
+    assert todo["priority"] == "initial"  # Default value
     assert todo["target_agent"] == "user"  # Default value
     assert todo["status"] == "pending"
+    assert "metadata" in todo
 
 @pytest.mark.asyncio
 async def test_integration_delete_todo(integration_todo_server, mongo_client):
@@ -564,12 +578,14 @@ async def test_integration_delete_todo(integration_todo_server, mongo_client):
     todo = {
         "id": todo_id,
         "description": "Integration test todo",
+        "project": "test_project",
         "priority": "high",
         "source_agent": "fastmcp",
         "target_agent": "test_agent",
         "status": "pending",
         "created_at": int(datetime.now(UTC).timestamp()),
-        "completed_at": None
+        "completed_at": None,
+        "metadata": {}
     }
     db = mongo_client[TEST_MONGODB_DB]
     collection = db[TEST_MONGODB_COLLECTION]
@@ -600,12 +616,14 @@ async def test_integration_get_todo(integration_todo_server, mongo_client):
     todo = {
         "id": todo_id,
         "description": "Integration test todo",
+        "project": "test_project",
         "priority": "high",
         "source_agent": "fastmcp",
         "target_agent": "test_agent",
         "status": "pending",
         "created_at": int(datetime.now(UTC).timestamp()),
-        "completed_at": None
+        "completed_at": None,
+        "metadata": {}
     }
     db = mongo_client[TEST_MONGODB_DB]
     collection = db[TEST_MONGODB_COLLECTION]
@@ -640,12 +658,14 @@ async def test_integration_mark_todo_complete(integration_todo_server, mongo_cli
     todo = {
         "id": todo_id,
         "description": "Integration test todo",
+        "project": "test_project",
         "priority": "high",
         "source_agent": "fastmcp",
         "target_agent": "test_agent",
         "status": "pending",
         "created_at": int(datetime.now(UTC).timestamp()),
-        "completed_at": None
+        "completed_at": None,
+        "metadata": {}
     }
     db = mongo_client[TEST_MONGODB_DB]
     collection = db[TEST_MONGODB_COLLECTION]
