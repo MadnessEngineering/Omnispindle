@@ -96,8 +96,8 @@ def register_tool_once(tool_func):
 
 
 @register_tool_once
-async def add_todo_tool(description: str, priority: str = "initial", target_agent: str = "user", ctx: Context = None) -> str:
-    result = await add_todo(description, priority, target_agent, ctx)
+async def add_todo_tool(description: str, project: str, priority: str = "initial", target_agent: str = "user", metadata: dict = None, ctx: Context = None) -> str:
+    result = await add_todo(description, project, priority, target_agent, metadata, ctx)
     return json.dumps(result)
 
 

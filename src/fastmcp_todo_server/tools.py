@@ -24,8 +24,8 @@ MONGODB_DB = os.getenv("MONGODB_DB", "swarmonomicon")
 MONGODB_COLLECTION = os.getenv("MONGODB_COLLECTION", "todos")
 
 # MQTT configuration
-MQTT_HOST = os.getenv("MQTT_HOST", "localhost")
-MQTT_PORT = os.getenv("MQTT_PORT", 3003)
+MQTT_HOST = os.getenv("AWSIP", "localhost")
+MQTT_PORT = os.getenv("AWSPORT", 3003)
 
 # Create MongoDB connection at module level
 mongo_client = MongoClient(MONGODB_URI)
@@ -43,7 +43,7 @@ def create_response(success: bool, data: Any = None, message: str = None) -> str
         response["message"] = message
     return json.dumps(response)
 
-async def add_todo(description: str, project: str, priority: str = "initial", target_agent: str = "user", ctx: Context = None) -> str:
+async def add_todo(description: str, project: str, priority: str = "initial", target_agent: str = "user", metadata: dict = None, ctx: Context = None) -> str:
     """Add a new todo item to the database"""
     await mqtt_publish(f"status/{os.getenv('DeNa')}-mcp/add_todo",
                        f"description={description}=:=project={project}=:=priority={priority}=:=target_agent={target_agent}", ctx)
@@ -52,11 +52,12 @@ async def add_todo(description: str, project: str, priority: str = "initial", ta
         "description": description,
         "project": project,
         "priority": priority,
-        "source_agent": "mcp-server",
+        "source_agent": "Omnispi",
         "target_agent": target_agent,
         "status": "pending",
         "created_at": int(datetime.now(UTC).timestamp()),
-        "completed_at": None
+        "completed_at": None,
+        "metadata": metadata or {}
     }
 
     collection.insert_one(todo)
@@ -164,7 +165,8 @@ async def get_todo(todo_id: str) -> str:
         "project": todo["project"],
         "status": todo["status"],
         "priority": todo["priority"],
-        "created": datetime.fromtimestamp(todo["created_at"], UTC).strftime("%Y-%m-%d")
+        "created": datetime.fromtimestamp(todo["created_at"], UTC).strftime("%Y-%m-%d"),
+        "metadata": todo.get("metadata", {})
     }
 
     if todo.get("completed_at"):
