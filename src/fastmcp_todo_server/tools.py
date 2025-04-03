@@ -52,7 +52,7 @@ async def add_todo(description: str, project: str, priority: str = "initial", ta
         "description": description,
         "project": project,
         "priority": priority,
-        "source_agent": "Omnispi",
+        "source_agent": "Omnispindle",
         "target_agent": target_agent,
         "status": "pending",
         "created_at": int(datetime.now(UTC).timestamp()),
