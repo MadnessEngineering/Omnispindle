@@ -33,7 +33,7 @@ from ai_assistant import get_specific_suggestions
 from scheduler import suggest_deadline
 from scheduler import suggest_time_slot
 from scheduler import generate_daily_schedule
-from .tools import deploy_nodered_flow, publish_to_dashboard
+from tools import deploy_nodered_flow, publish_to_dashboard
 
 # Load environment variables
 load_dotenv()
