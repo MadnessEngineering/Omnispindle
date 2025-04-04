@@ -269,11 +269,6 @@ async def generate_daily_schedule_tool(date: Optional[str] = None) -> str:
     return await generate_daily_schedule(date)
 
 
-# Add Node-RED dashboard tools
-server.register_tool(deploy_nodered_flow, name="deploy_nodered_dashboard_tool", description="Deploy a Node-RED dashboard for the todo application")
-server.register_tool(publish_to_dashboard, name="publish_to_dashboard_tool", description="Publish data to the Node-RED dashboard")
-
-
 async def run_server() -> Callable:
     """
     Run the FastMCP server.
