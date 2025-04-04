@@ -12,9 +12,8 @@ import json
 import logging
 import os
 from datetime import datetime, timedelta, UTC
-from typing import Dict, List, Optional, Tuple, Any
+from typing import Dict, List, Any
 
-import numpy as np
 from pymongo import MongoClient
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.cluster import DBSCAN
