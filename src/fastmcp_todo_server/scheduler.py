@@ -19,7 +19,8 @@ from collections import defaultdict
 
 from pymongo import MongoClient
 from ai_assistant import assistant as todo_assistant
-from tools import mqtt_publish
+from fastmcp_todo_server.tools import mqtt_publish
+
 
 # Configure logger
 logger = logging.getLogger(__name__)
