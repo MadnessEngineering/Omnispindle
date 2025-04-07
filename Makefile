@@ -11,6 +11,10 @@ install:
 run:
 	python -m src.fastmcp_todo_server
 
+# deploy
+deploy:
+	ssh eaws "cd /home/ubuntu/fastmcp-todo-server && git pull && pm2 restart 2 && pm2 lgos 2"
+
 # Run tests
 test:
 	pytest tests/
