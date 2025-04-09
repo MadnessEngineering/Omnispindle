@@ -45,20 +45,29 @@ def create_response(success: bool, data: Any = None, message: str = None) -> str
 
 async def mqtt_publish(topic: str, message: str, ctx: Context = None) -> bool:
     """Publish a message to the specified MQTT topic"""
-    mqtt_client = mqtt.Client()
-    print(f"{MQTT_HOST}, {MQTT_PORT}")
-    mqtt_client.connect(MQTT_HOST, MQTT_PORT, 60)  # Using constant for keepalive
+    # mqtt_client = mqtt.Client()
+    # print(f"{MQTT_HOST}, {MQTT_PORT}")
+    # mqtt_client.connect(MQTT_HOST, MQTT_PORT, 60)  # Using constant for keepalive
 
-    if isinstance(message, str):
-        payload = message
-    else:
-        payload = json.dumps(message)
+    # if isinstance(message, str):
+    #     payload = message
+    # else:
+    #     payload = json.dumps(message)
 
-    result = mqtt_client.publish(topic, payload)
-    result.wait_for_publish(timeout=5)
-    mqtt_client.disconnect()
+    # result = mqtt_client.publish(topic, payload)
+    # result.wait_for_publish(timeout=5)
+    # mqtt_client.disconnect()
 
-    return result.is_published()
+    # return result.is_published()
+    try:
+        cmd = ["mosquitto_pub", "-h", MQTT_HOST, "-p", str(MQTT_PORT), "-t", topic, "-m", str(message)]
+        if retain:
+            cmd.append("-r")
+        subprocess.run(cmd, check=True)
+        return True
+    except subprocess.SubprocessError as e:
+        print(f"Failed to publish MQTT message: {str(e)}")
+        return False
 
 async def add_todo(description: str, project: str, priority: str = "initial", target_agent: str = "user", metadata: dict = None, ctx: Context = None) -> str:
     """Add a new todo item to the database"""
@@ -79,7 +88,7 @@ async def add_todo(description: str, project: str, priority: str = "initial", ta
         collection.insert_one(todo)
     except Exception as e:
         return create_response(False, message=f"Failed to insert todo: {str(e)}")
-    
+
     # MQTT publish as confirmation after the database operation - completely non-blocking
     try:
         mqtt_message = f"description: {description}, project: {project}, priority: {priority}, target_agent: {target_agent}"
@@ -93,7 +102,7 @@ async def add_todo(description: str, project: str, priority: str = "initial", ta
     except Exception as e:
         # Catch absolutely any errors in the MQTT process
         print(f"MQTT processing error (non-fatal): {str(e)}")
-    
+
     # Always return success if database operation succeeded, regardless of MQTT status
     return create_response(True, {"todo_id": todo["id"]})
 
