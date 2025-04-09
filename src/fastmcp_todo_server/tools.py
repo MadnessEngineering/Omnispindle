@@ -71,7 +71,7 @@ async def add_todo(description: str, project: str, priority: str = "initial", ta
 
 async def query_todos(filter: dict = None, projection: dict = None, limit: int = 100, ctx=None) -> str:
     """Query todos with optional filtering and projection"""
-    await mqtt_publish(f"status/{os.getenv('DeNa')}-mcp/query_todos",
+    await mqtt_publish(f"status/{os.getenv('DeNa')}/todo-server/query_todos",
                        f"filter: {json.dumps(filter)}, projection: {json.dumps(projection)}, limit: {limit}", ctx)
 
     # Find matching todos
@@ -102,7 +102,7 @@ async def query_todos(filter: dict = None, projection: dict = None, limit: int =
 
 async def update_todo(todo_id: str, updates: dict, ctx: Context = None) -> str:
     """Update an existing todo by ID"""
-    await mqtt_publish(f"status/{os.getenv('DeNa')}-mcp/update_todo", f"todo_id: {todo_id}, updates: {json.dumps(updates)}", ctx)
+    await mqtt_publish(f"status/{os.getenv('DeNa')}/todo-server/update_todo", f"todo_id: {todo_id}, updates: {json.dumps(updates)}", ctx)
     result = collection.update_one({"id": todo_id}, {"$set": updates})
 
     if result.modified_count == 0:
@@ -142,7 +142,7 @@ async def mqtt_publish(topic: str, message: str, ctx: Context = None) -> str:
 
 async def delete_todo(todo_id: str, ctx: Context = None) -> str:
     """Delete a todo by ID"""
-    await mqtt_publish(f"status/{os.getenv('DeNa')}-mcp/delete_todo", f"todo_id: {todo_id}", ctx)
+    await mqtt_publish(f"status/{os.getenv('DeNa')}/todo-server/delete_todo", f"todo_id: {todo_id}", ctx)
     result = collection.delete_one({"id": todo_id})
 
     if result.deleted_count == 0:
@@ -158,7 +158,7 @@ async def delete_todo(todo_id: str, ctx: Context = None) -> str:
 
 async def get_todo(todo_id: str) -> str:
     """Get a specific todo by ID"""
-    await mqtt_publish(f"status/{os.getenv('DeNa')}-mcp/get_todo", f"todo_id: {todo_id}")
+    await mqtt_publish(f"status/{os.getenv('DeNa')}/todo-server/get_todo", f"todo_id: {todo_id}")
     todo = collection.find_one({"id": todo_id})
 
     if todo is None:
@@ -182,7 +182,7 @@ async def get_todo(todo_id: str) -> str:
 
 async def mark_todo_complete(todo_id: str, ctx: Context = None) -> str:
     """Mark a todo as completed"""
-    await mqtt_publish(f"status/{os.getenv('DeNa')}-mcp/mark_todo_complete", f"todo_id: {todo_id}", ctx)
+    await mqtt_publish(f"status/{os.getenv('DeNa')}/todo-server/mark_todo_complete", f"todo_id: {todo_id}", ctx)
     completed_time = int(datetime.now(UTC).timestamp())
 
     result = collection.update_one(
@@ -206,7 +206,7 @@ async def mark_todo_complete(todo_id: str, ctx: Context = None) -> str:
 
 async def list_todos_by_status(status: str, limit: int = 100) -> str:
     """List todos by their status"""
-    await mqtt_publish(f"status/{os.getenv('DeNa')}-mcp/list_todos_by_status", f"status: {status}, limit: {limit}")
+    await mqtt_publish(f"status/{os.getenv('DeNa')}/todo-server/list_todos_by_status", f"status: {status}, limit: {limit}")
     cursor = collection.find(
         {"status": status},
         limit=limit
@@ -233,7 +233,7 @@ async def list_todos_by_status(status: str, limit: int = 100) -> str:
 
 async def add_lesson(language: str, topic: str, lesson_learned: str, tags: list = None, ctx: Context = None) -> str:
     """Add a lesson learned"""
-    await mqtt_publish(f"status/{os.getenv('DeNa')}-mcp/add_lesson",
+    await mqtt_publish(f"status/{os.getenv('DeNa')}/todo-server/add_lesson",
                      f"language: {language}, topic: {topic}, tags: {tags}", ctx)
 
     lesson = {
@@ -250,7 +250,7 @@ async def add_lesson(language: str, topic: str, lesson_learned: str, tags: list 
 
 async def get_lesson(lesson_id: str) -> str:
     """Get a specific lesson by ID"""
-    await mqtt_publish(f"status/{os.getenv('DeNa')}-mcp/get_lesson", f"lesson_id: {lesson_id}")
+    await mqtt_publish(f"status/{os.getenv('DeNa')}/todo-server/get_lesson", f"lesson_id: {lesson_id}")
     lesson = lessons_collection.find_one({"id": lesson_id})
 
     if lesson is None:
@@ -270,7 +270,7 @@ async def get_lesson(lesson_id: str) -> str:
 
 async def update_lesson(lesson_id: str, updates: dict, ctx: Context = None) -> str:
     """Update an existing lesson by ID"""
-    await mqtt_publish(f"status/{os.getenv('DeNa')}-mcp/update_lesson",
+    await mqtt_publish(f"status/{os.getenv('DeNa')}/todo-server/update_lesson",
                      f"lesson_id: {lesson_id}, updates: {json.dumps(updates)}", ctx)
 
     result = lessons_collection.update_one({"id": lesson_id}, {"$set": updates})
@@ -281,7 +281,7 @@ async def update_lesson(lesson_id: str, updates: dict, ctx: Context = None) -> s
 
 async def delete_lesson(lesson_id: str, ctx: Context = None) -> str:
     """Delete a lesson by ID"""
-    await mqtt_publish(f"status/{os.getenv('DeNa')}-mcp/delete_lesson", f"lesson_id: {lesson_id}", ctx)
+    await mqtt_publish(f"status/{os.getenv('DeNa')}/todo-server/delete_lesson", f"lesson_id: {lesson_id}", ctx)
     result = lessons_collection.delete_one({"id": lesson_id})
 
     if result.deleted_count == 0:
@@ -291,7 +291,7 @@ async def delete_lesson(lesson_id: str, ctx: Context = None) -> str:
 
 async def list_lessons(limit: int = 100) -> str:
     """List all lessons learned"""
-    await mqtt_publish(f"status/{os.getenv('DeNa')}-mcp/list_lessons", f"limit: {limit}", ctx=None)
+    await mqtt_publish(f"status/{os.getenv('DeNa')}/todo-server/list_lessons", f"limit: {limit}", ctx=None)
     cursor = lessons_collection.find(limit=limit)
     results = list(cursor)
 
@@ -315,7 +315,7 @@ async def list_lessons(limit: int = 100) -> str:
 
 async def search_todos(query: str, fields: list = None, limit: int = 100) -> str:
     """Search todos using text search on specified fields"""
-    await mqtt_publish(f"status/{os.getenv('DeNa')}-mcp/search_todos",
+    await mqtt_publish(f"status/{os.getenv('DeNa')}/todo-server/search_todos",
                       f"query: {query}, fields: {fields}, limit: {limit}", ctx=None)
 
     if not fields:
@@ -355,7 +355,7 @@ async def search_todos(query: str, fields: list = None, limit: int = 100) -> str
 
 async def search_lessons(query: str, fields: list = None, limit: int = 100) -> str:
     """Search lessons using text search on specified fields"""
-    await mqtt_publish(f"status/{os.getenv('DeNa')}-mcp/search_lessons",
+    await mqtt_publish(f"status/{os.getenv('DeNa')}/todo-server/search_lessons",
                      f"query: {query}, fields: {fields}, limit: {limit}", ctx=None)
 
     if not fields:
