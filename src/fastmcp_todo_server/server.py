@@ -32,7 +32,7 @@ class Omnispindle(FastMCP):
 
         try:
             hostname = os.getenv("DeNa", os.uname().nodename)
-            topic = f"status/{hostname}-mcp/alive"
+            topic = f"status/{hostname}/todo-server/alive"
             logger.debug(f"Publishing online status to topic: {topic}")
             publish_mqtt_status(topic, "1")
 
