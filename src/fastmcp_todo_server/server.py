@@ -160,7 +160,7 @@ class Omnispindle(FastMCP):
             # Publish offline status with retain flag in case of error
             try:
                 hostname = os.getenv("HOSTNAME", os.uname().nodename)
-                topic = f"status/{hostname}/alive"
+                topic = f"status/{hostname}/todo-server/alive"
                 logger.info(f"Publishing offline status to {topic} (retained)")
                 publish_mqtt_status(topic, "0", retain=True)
                 logger.debug(f"Published offline status to {topic} (retained)")

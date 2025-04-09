@@ -46,7 +46,7 @@ def create_response(success: bool, data: Any = None, message: str = None) -> str
 async def add_todo(description: str, project: str, priority: str = "initial", target_agent: str = "user", metadata: dict = None, ctx: Context = None) -> str:
     """Add a new todo item to the database"""
     await mqtt_publish(f"status/{os.getenv('DeNa')}-mcp/add_todo",
-                       f"description={description}=:=project={project}=:=priority={priority}=:=target_agent={target_agent}", ctx)
+                       f"description: {description}, project: {project}, priority: {priority}, target_agent: {target_agent}", ctx)
     todo = {
         "id": str(uuid.uuid4()),
         "description": description,
