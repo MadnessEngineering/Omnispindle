@@ -43,6 +43,22 @@ def create_response(success: bool, data: Any = None, message: str = None) -> str
         response["message"] = message
     return json.dumps(response)
 
+async def mqtt_publish(topic: str, message: str, ctx: Context = None) -> bool:
+    """Publish a message to the specified MQTT topic"""
+    mqtt_client = mqtt.Client()
+    mqtt_client.connect(MQTT_HOST, MQTT_PORT, 60)  # Using constant for keepalive
+
+    if isinstance(message, str):
+        payload = message
+    else:
+        payload = json.dumps(message)
+
+    result = mqtt_client.publish(topic, payload)
+    result.wait_for_publish()
+    mqtt_client.disconnect()
+
+    return result.is_published()
+
 async def add_todo(description: str, project: str, priority: str = "initial", target_agent: str = "user", metadata: dict = None, ctx: Context = None) -> str:
     """Add a new todo item to the database"""
     todo = {
@@ -62,19 +78,27 @@ async def add_todo(description: str, project: str, priority: str = "initial", ta
         collection.insert_one(todo)
     except Exception as e:
         return create_response(False, message=f"Failed to insert todo: {str(e)}")
+    
+    # MQTT publish as confirmation after the database operation - completely non-blocking
     try:
-        await mqtt_publish(f"status/{os.getenv('DeNa')}/todo-server/add_todo",
-                               f"description: {description}, project: {project}, priority: {priority}, target_agent: {target_agent}", ctx)
+        mqtt_message = f"description: {description}, project: {project}, priority: {priority}, target_agent: {target_agent}"
+        # Use a separate try/except to catch any issues with mqtt_publish itself
+        try:
+            publish_success = await mqtt_publish(f"status/{os.getenv('DeNa')}/todo-server/add_todo", mqtt_message, ctx)
+            if not publish_success:
+                print(f"Warning: MQTT publish returned False for todo {todo['id']}")
+        except Exception as mqtt_err:
+            print(f"MQTT publish function error: {str(mqtt_err)}")
     except Exception as e:
-        return create_response(False, message=f"Failed to publish MQTT message: {str(e)}")
+        # Catch absolutely any errors in the MQTT process
+        print(f"MQTT processing error (non-fatal): {str(e)}")
+    
+    # Always return success if database operation succeeded, regardless of MQTT status
     return create_response(True, {"todo_id": todo["id"]})
 
 async def query_todos(filter: dict = None, projection: dict = None, limit: int = 100, ctx=None) -> str:
     """Query todos with optional filtering and projection"""
-    await mqtt_publish(f"status/{os.getenv('DeNa')}/todo-server/query_todos",
-                       f"filter: {json.dumps(filter)}, projection: {json.dumps(projection)}, limit: {limit}", ctx)
-
-    # Find matching todos
+    # Find matching todos first
     cursor = collection.find(
         filter or {},
         projection=projection,
@@ -98,11 +122,18 @@ async def query_todos(filter: dict = None, projection: dict = None, limit: int =
             "priority": todo["priority"]
         })
 
+    # MQTT publish as confirmation after the database query
+    try:
+        mqtt_message = f"filter: {json.dumps(filter)}, projection: {json.dumps(projection)}, limit: {limit}"
+        await mqtt_publish(f"status/{os.getenv('DeNa')}/todo-server/query_todos", mqtt_message, ctx)
+    except Exception as e:
+        # Log the error but don't fail the entire operation
+        print(f"MQTT publish error (non-fatal): {str(e)}")
+
     return create_response(True, summary)
 
 async def update_todo(todo_id: str, updates: dict, ctx: Context = None) -> str:
     """Update an existing todo by ID"""
-    await mqtt_publish(f"status/{os.getenv('DeNa')}/todo-server/update_todo", f"todo_id: {todo_id}, updates: {json.dumps(updates)}", ctx)
     result = collection.update_one({"id": todo_id}, {"$set": updates})
 
     if result.modified_count == 0:
@@ -114,35 +145,18 @@ async def update_todo(todo_id: str, updates: dict, ctx: Context = None) -> str:
         except ValueError:
             pass
 
+    # MQTT publish as confirmation after the database update
+    try:
+        mqtt_message = f"todo_id: {todo_id}, updates: {json.dumps(updates)}"
+        await mqtt_publish(f"status/{os.getenv('DeNa')}/todo-server/update_todo", mqtt_message, ctx)
+    except Exception as e:
+        # Log the error but don't fail the entire operation
+        print(f"MQTT publish error (non-fatal): {str(e)}")
+
     return create_response(True, message=f"Todo {todo_id} updated successfully")
-
-async def mqtt_publish(topic: str, message: str, ctx: Context = None) -> str:
-    """Publish a message to the specified MQTT topic"""
-    mqtt_client = mqtt.Client()
-    mqtt_client.connect(MQTT_HOST, MQTT_PORT, 60)  # Using constant for keepalive
-
-    if isinstance(message, str):
-        payload = message
-    else:
-        payload = json.dumps(message)
-
-    result = mqtt_client.publish(topic, payload)
-    result.wait_for_publish()
-    mqtt_client.disconnect()
-
-    if result.is_published():
-        if ctx is not None:
-            try:
-                ctx.info(f"Published to {topic}")
-            except ValueError:
-                pass
-        return create_response(True, {"topic": topic})
-    else:
-        return create_response(False, message="Message not published")
 
 async def delete_todo(todo_id: str, ctx: Context = None) -> str:
     """Delete a todo by ID"""
-    await mqtt_publish(f"status/{os.getenv('DeNa')}/todo-server/delete_todo", f"todo_id: {todo_id}", ctx)
     result = collection.delete_one({"id": todo_id})
 
     if result.deleted_count == 0:
@@ -154,11 +168,18 @@ async def delete_todo(todo_id: str, ctx: Context = None) -> str:
         except ValueError:
             pass
 
+    # MQTT publish as confirmation after the database deletion
+    try:
+        mqtt_message = f"todo_id: {todo_id}"
+        await mqtt_publish(f"status/{os.getenv('DeNa')}/todo-server/delete_todo", mqtt_message, ctx)
+    except Exception as e:
+        # Log the error but don't fail the entire operation
+        print(f"MQTT publish error (non-fatal): {str(e)}")
+
     return create_response(True, message=f"Todo {todo_id} deleted")
 
 async def get_todo(todo_id: str) -> str:
     """Get a specific todo by ID"""
-    await mqtt_publish(f"status/{os.getenv('DeNa')}/todo-server/get_todo", f"todo_id: {todo_id}")
     todo = collection.find_one({"id": todo_id})
 
     if todo is None:
@@ -178,11 +199,18 @@ async def get_todo(todo_id: str) -> str:
     if todo.get("completed_at"):
         formatted_todo["completed"] = datetime.fromtimestamp(todo["completed_at"], UTC).strftime("%Y-%m-%d")
 
+    # MQTT publish as confirmation after retrieving the todo
+    try:
+        mqtt_message = f"todo_id: {todo_id}"
+        await mqtt_publish(f"status/{os.getenv('DeNa')}/todo-server/get_todo", mqtt_message)
+    except Exception as e:
+        # Log the error but don't fail the entire operation
+        print(f"MQTT publish error (non-fatal): {str(e)}")
+
     return create_response(True, formatted_todo)
 
 async def mark_todo_complete(todo_id: str, ctx: Context = None) -> str:
     """Mark a todo as completed"""
-    await mqtt_publish(f"status/{os.getenv('DeNa')}/todo-server/mark_todo_complete", f"todo_id: {todo_id}", ctx)
     completed_time = int(datetime.now(UTC).timestamp())
 
     result = collection.update_one(
@@ -199,6 +227,14 @@ async def mark_todo_complete(todo_id: str, ctx: Context = None) -> str:
         except ValueError:
             pass
 
+    # MQTT publish as confirmation after marking todo complete
+    try:
+        mqtt_message = f"todo_id: {todo_id}"
+        await mqtt_publish(f"status/{os.getenv('DeNa')}/todo-server/mark_todo_complete", mqtt_message, ctx)
+    except Exception as e:
+        # Log the error but don't fail the entire operation
+        print(f"MQTT publish error (non-fatal): {str(e)}")
+
     return create_response(True, {
         "todo_id": todo_id,
         "completed_at": datetime.fromtimestamp(completed_time, UTC).strftime("%Y-%m-%d %H:%M")
@@ -206,7 +242,6 @@ async def mark_todo_complete(todo_id: str, ctx: Context = None) -> str:
 
 async def list_todos_by_status(status: str, limit: int = 100) -> str:
     """List todos by their status"""
-    await mqtt_publish(f"status/{os.getenv('DeNa')}/todo-server/list_todos_by_status", f"status: {status}, limit: {limit}")
     cursor = collection.find(
         {"status": status},
         limit=limit
@@ -229,13 +264,18 @@ async def list_todos_by_status(status: str, limit: int = 100) -> str:
             "priority": todo["priority"]
         })
 
+    # MQTT publish as confirmation after listing todos
+    try:
+        mqtt_message = f"status: {status}, limit: {limit}"
+        await mqtt_publish(f"status/{os.getenv('DeNa')}/todo-server/list_todos_by_status", mqtt_message)
+    except Exception as e:
+        # Log the error but don't fail the entire operation
+        print(f"MQTT publish error (non-fatal): {str(e)}")
+
     return create_response(True, summary)
 
 async def add_lesson(language: str, topic: str, lesson_learned: str, tags: list = None, ctx: Context = None) -> str:
     """Add a lesson learned"""
-    await mqtt_publish(f"status/{os.getenv('DeNa')}/todo-server/add_lesson",
-                     f"language: {language}, topic: {topic}, tags: {tags}", ctx)
-
     lesson = {
         "id": str(uuid.uuid4()),
         "language": language,
@@ -246,11 +286,19 @@ async def add_lesson(language: str, topic: str, lesson_learned: str, tags: list 
     }
 
     lessons_collection.insert_one(lesson)
+
+    # MQTT publish as confirmation after adding lesson
+    try:
+        mqtt_message = f"language: {language}, topic: {topic}, tags: {tags}"
+        await mqtt_publish(f"status/{os.getenv('DeNa')}/todo-server/add_lesson", mqtt_message, ctx)
+    except Exception as e:
+        # Log the error but don't fail the entire operation
+        print(f"MQTT publish error (non-fatal): {str(e)}")
+
     return create_response(True, {"lesson_id": lesson["id"], "topic": topic})
 
 async def get_lesson(lesson_id: str) -> str:
     """Get a specific lesson by ID"""
-    await mqtt_publish(f"status/{os.getenv('DeNa')}/todo-server/get_lesson", f"lesson_id: {lesson_id}")
     lesson = lessons_collection.find_one({"id": lesson_id})
 
     if lesson is None:
@@ -266,32 +314,51 @@ async def get_lesson(lesson_id: str) -> str:
         "created": datetime.fromtimestamp(lesson["created_at"], UTC).strftime("%Y-%m-%d")
     }
 
+    # MQTT publish as confirmation after getting lesson
+    try:
+        mqtt_message = f"lesson_id: {lesson_id}"
+        await mqtt_publish(f"status/{os.getenv('DeNa')}/todo-server/get_lesson", mqtt_message)
+    except Exception as e:
+        # Log the error but don't fail the entire operation
+        print(f"MQTT publish error (non-fatal): {str(e)}")
+
     return create_response(True, formatted_lesson)
 
 async def update_lesson(lesson_id: str, updates: dict, ctx: Context = None) -> str:
     """Update an existing lesson by ID"""
-    await mqtt_publish(f"status/{os.getenv('DeNa')}/todo-server/update_lesson",
-                     f"lesson_id: {lesson_id}, updates: {json.dumps(updates)}", ctx)
-
     result = lessons_collection.update_one({"id": lesson_id}, {"$set": updates})
     if result.modified_count == 0:
         return create_response(False, message="Lesson not found")
+
+    # MQTT publish as confirmation after updating lesson
+    try:
+        mqtt_message = f"lesson_id: {lesson_id}, updates: {json.dumps(updates)}"
+        await mqtt_publish(f"status/{os.getenv('DeNa')}/todo-server/update_lesson", mqtt_message, ctx)
+    except Exception as e:
+        # Log the error but don't fail the entire operation
+        print(f"MQTT publish error (non-fatal): {str(e)}")
 
     return create_response(True, message=f"Lesson {lesson_id} updated successfully")
 
 async def delete_lesson(lesson_id: str, ctx: Context = None) -> str:
     """Delete a lesson by ID"""
-    await mqtt_publish(f"status/{os.getenv('DeNa')}/todo-server/delete_lesson", f"lesson_id: {lesson_id}", ctx)
     result = lessons_collection.delete_one({"id": lesson_id})
 
     if result.deleted_count == 0:
         return create_response(False, message="Lesson not found")
 
+    # MQTT publish as confirmation after deleting lesson
+    try:
+        mqtt_message = f"lesson_id: {lesson_id}"
+        await mqtt_publish(f"status/{os.getenv('DeNa')}/todo-server/delete_lesson", mqtt_message, ctx)
+    except Exception as e:
+        # Log the error but don't fail the entire operation
+        print(f"MQTT publish error (non-fatal): {str(e)}")
+
     return create_response(True, message=f"Lesson {lesson_id} deleted")
 
 async def list_lessons(limit: int = 100) -> str:
     """List all lessons learned"""
-    await mqtt_publish(f"status/{os.getenv('DeNa')}/todo-server/list_lessons", f"limit: {limit}", ctx=None)
     cursor = lessons_collection.find(limit=limit)
     results = list(cursor)
 
@@ -311,13 +378,18 @@ async def list_lessons(limit: int = 100) -> str:
             "preview": lesson["lesson_learned"][:40] + ("..." if len(lesson["lesson_learned"]) > 40 else "")
         })
 
+    # MQTT publish as confirmation after listing lessons
+    try:
+        mqtt_message = f"limit: {limit}"
+        await mqtt_publish(f"status/{os.getenv('DeNa')}/todo-server/list_lessons", mqtt_message, ctx=None)
+    except Exception as e:
+        # Log the error but don't fail the entire operation
+        print(f"MQTT publish error (non-fatal): {str(e)}")
+
     return create_response(True, summary)
 
 async def search_todos(query: str, fields: list = None, limit: int = 100) -> str:
     """Search todos using text search on specified fields"""
-    await mqtt_publish(f"status/{os.getenv('DeNa')}/todo-server/search_todos",
-                      f"query: {query}, fields: {fields}, limit: {limit}", ctx=None)
-
     if not fields:
         fields = ["description"]
 
@@ -351,13 +423,18 @@ async def search_todos(query: str, fields: list = None, limit: int = 100) -> str
             "status": todo["status"]
         })
 
+    # MQTT publish as confirmation after searching todos
+    try:
+        mqtt_message = f"query: {query}, fields: {fields}, limit: {limit}"
+        await mqtt_publish(f"status/{os.getenv('DeNa')}/todo-server/search_todos", mqtt_message, ctx=None)
+    except Exception as e:
+        # Log the error but don't fail the entire operation
+        print(f"MQTT publish error (non-fatal): {str(e)}")
+
     return create_response(True, summary)
 
 async def search_lessons(query: str, fields: list = None, limit: int = 100) -> str:
     """Search lessons using text search on specified fields"""
-    await mqtt_publish(f"status/{os.getenv('DeNa')}/todo-server/search_lessons",
-                     f"query: {query}, fields: {fields}, limit: {limit}", ctx=None)
-
     if not fields:
         fields = ["topic", "lesson_learned"]
 
@@ -391,6 +468,14 @@ async def search_lessons(query: str, fields: list = None, limit: int = 100) -> s
             "preview": lesson["lesson_learned"][:40] + ("..." if len(lesson["lesson_learned"]) > 40 else ""),
             "tags": lesson.get("tags", [])
         })
+
+    # MQTT publish as confirmation after searching lessons
+    try:
+        mqtt_message = f"query: {query}, fields: {fields}, limit: {limit}"
+        await mqtt_publish(f"status/{os.getenv('DeNa')}/todo-server/search_lessons", mqtt_message, ctx=None)
+    except Exception as e:
+        # Log the error but don't fail the entire operation
+        print(f"MQTT publish error (non-fatal): {str(e)}")
 
     return create_response(True, summary)
 
