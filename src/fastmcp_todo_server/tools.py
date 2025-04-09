@@ -46,6 +46,7 @@ def create_response(success: bool, data: Any = None, message: str = None) -> str
 async def mqtt_publish(topic: str, message: str, ctx: Context = None) -> bool:
     """Publish a message to the specified MQTT topic"""
     mqtt_client = mqtt.Client()
+    print(f"{MQTT_HOST}, {MQTT_PORT}")
     mqtt_client.connect(MQTT_HOST, MQTT_PORT, 60)  # Using constant for keepalive
 
     if isinstance(message, str):
@@ -54,7 +55,7 @@ async def mqtt_publish(topic: str, message: str, ctx: Context = None) -> bool:
         payload = json.dumps(message)
 
     result = mqtt_client.publish(topic, payload)
-    result.wait_for_publish()
+    result.wait_for_publish(timeout=5)
     mqtt_client.disconnect()
 
     return result.is_published()
