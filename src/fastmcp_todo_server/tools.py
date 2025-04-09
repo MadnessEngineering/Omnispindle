@@ -45,8 +45,6 @@ def create_response(success: bool, data: Any = None, message: str = None) -> str
 
 async def add_todo(description: str, project: str, priority: str = "initial", target_agent: str = "user", metadata: dict = None, ctx: Context = None) -> str:
     """Add a new todo item to the database"""
-    await mqtt_publish(f"status/{os.getenv('DeNa')}-mcp/add_todo",
-                       f"description: {description}, project: {project}, priority: {priority}, target_agent: {target_agent}", ctx)
     todo = {
         "id": str(uuid.uuid4()),
         "description": description,
@@ -60,7 +58,15 @@ async def add_todo(description: str, project: str, priority: str = "initial", ta
         "metadata": metadata or {}
     }
 
-    collection.insert_one(todo)
+    try:
+        collection.insert_one(todo)
+    except Exception as e:
+        return create_response(False, message=f"Failed to insert todo: {str(e)}")
+    try:
+        await mqtt_publish(f"status/{os.getenv('DeNa')}/todo-server/add_todo",
+                               f"description: {description}, project: {project}, priority: {priority}, target_agent: {target_agent}", ctx)
+    except Exception as e:
+        return create_response(False, message=f"Failed to publish MQTT message: {str(e)}")
     return create_response(True, {"todo_id": todo["id"]})
 
 async def query_todos(filter: dict = None, projection: dict = None, limit: int = 100, ctx=None) -> str:
