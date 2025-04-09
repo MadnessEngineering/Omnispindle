@@ -25,7 +25,7 @@ MONGODB_COLLECTION = os.getenv("MONGODB_COLLECTION", "todos")
 
 # MQTT configuration
 MQTT_HOST = os.getenv("AWSIP", "localhost")
-MQTT_PORT = os.getenv("AWSPORT", 3003)
+MQTT_PORT = int(os.getenv("AWSPORT", 3003))
 
 # Create MongoDB connection at module level
 mongo_client = MongoClient(MONGODB_URI)
