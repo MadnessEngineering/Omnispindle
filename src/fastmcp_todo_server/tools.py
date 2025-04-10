@@ -10,7 +10,6 @@ from typing import Any, Dict, List, Optional
 
 import aiohttp
 import logging
-import paho.mqtt.client as mqtt
 from dotenv import load_dotenv
 from fastmcp import Context
 from pymongo import MongoClient
@@ -43,22 +42,8 @@ def create_response(success: bool, data: Any = None, message: str = None) -> str
         response["message"] = message
     return json.dumps(response)
 
-async def mqtt_publish(topic: str, message: str, ctx: Context = None) -> bool:
+async def mqtt_publish(topic: str, message: str, ctx: Context = None, retain: bool = False) -> bool:
     """Publish a message to the specified MQTT topic"""
-    # mqtt_client = mqtt.Client()
-    # print(f"{MQTT_HOST}, {MQTT_PORT}")
-    # mqtt_client.connect(MQTT_HOST, MQTT_PORT, 60)  # Using constant for keepalive
-
-    # if isinstance(message, str):
-    #     payload = message
-    # else:
-    #     payload = json.dumps(message)
-
-    # result = mqtt_client.publish(topic, payload)
-    # result.wait_for_publish(timeout=5)
-    # mqtt_client.disconnect()
-
-    # return result.is_published()
     try:
         cmd = ["mosquitto_pub", "-h", MQTT_HOST, "-p", str(MQTT_PORT), "-t", topic, "-m", str(message)]
         if retain:
@@ -68,6 +53,17 @@ async def mqtt_publish(topic: str, message: str, ctx: Context = None) -> bool:
     except subprocess.SubprocessError as e:
         print(f"Failed to publish MQTT message: {str(e)}")
         return False
+
+async def mqtt_get(topic: str) -> str:
+    """Get a message from the specified MQTT topic"""
+    try:
+        cmd = ["mosquitto_sub", "-h", MQTT_HOST, "-p", str(MQTT_PORT), "-t", topic, "-C", "1"]
+        result = subprocess.run(cmd, check=True, capture_output=True, text=True)
+        return result.stdout.strip()
+    except subprocess.SubprocessError as e:
+        print(f"Failed to get MQTT message: {str(e)}")
+        return None
+
 
 async def add_todo(description: str, project: str, priority: str = "initial", target_agent: str = "user", metadata: dict = None, ctx: Context = None) -> str:
     """Add a new todo item to the database"""

@@ -20,6 +20,7 @@ from tools import list_lessons
 from tools import list_todos_by_status
 from tools import mark_todo_complete
 from tools import mqtt_publish
+from tools import mqtt_get
 from tools import query_todos
 from tools import search_lessons
 from tools import search_todos
@@ -118,8 +119,18 @@ async def update_todo_tool(todo_id: str, updates: dict, ctx: Context = None) -> 
 
 
 @register_tool_once
-async def mqtt_publish_tool(topic: str, message: str, ctx: Context = None) -> str:
-    return await mqtt_publish(topic, message, ctx)
+async def mqtt_publish_tool(topic: str, message: str, ctx: Context = None, retain: bool = False) -> str:
+    return await mqtt_publish(topic, message, ctx, retain)
+
+
+@register_tool_once
+async def mqtt_get_tool(topic: str) -> str:
+    result = await mqtt_get(topic)
+    return json.dumps({
+        "success": result is not None,
+        "data": result,
+        "message": None if result is not None else "Failed to get MQTT message"
+    })
 
 
 @register_tool_once
