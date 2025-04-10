@@ -8,9 +8,7 @@ import subprocess
 # logger = logging.getLogger(__name__)
 
 def main():
-    """Main entry point"""
-    # logger.info("Starting Todo Server")
-    print("Starting Todo Server")
+    logger.info("Omnispindle beginning spin")
 
     # Print a warning if mosquitto_pub is not available
     if not MOSQUITTO_PUB_AVAILABLE:
