@@ -6,10 +6,11 @@
 install:
 	uv pip install -r requirements.txt
 	uv pip install -r requirements-dev.txt
+	uv 
 
 # Run the FastMCP server
 run:
-	python -m src.fastmcp_todo_server
+	python3.11 -m src.fastmcp_todo_server
 
 # deploy
 deploy:
@@ -17,11 +18,11 @@ deploy:
 
 # Run tests
 test:
-	pytest tests/
+	python3.11 -m pytest tests/
 
 # Run tests with coverage
 coverage:
-	pytest --cov=src tests/
+	python3.11 -m pytest --cov=src tests/
 
 # Clean up __pycache__ directories
 clean:

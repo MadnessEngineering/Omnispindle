@@ -93,7 +93,7 @@ The fallback to mosquitto_pub via subprocess in __init__.py  adds an external de
 #### Dependencies (requirements.txt ):
 The requirements.txt file is very large and includes many libraries that might not be directly used by this specific server (e.g., jupyterlab, matplotlib, pandas, testing frameworks like pytest which are usually dev dependencies). Prune unused dependencies.
 Pinning exact versions is good for reproducibility, but consider using a tool like pip-tools (pip-compile) to manage dependencies and their transitive versions, separating direct dependencies from full pinned versions. Include development dependencies (like pytest, black, flake8) in a separate file (e.g., requirements-dev.txt).
-The line -e git+https://github.com/DanEdens/fastmcp-todo-server.git@...#egg=fastmcp_todo_server  installs the project itself in editable mode. This is typically used for development, not deployment.
+The line -e git+https://github.com/DanEdens/fastmcp-todo-server.git@...#egg=Omnispindle  installs the project itself in editable mode. This is typically used for development, not deployment.
 
 #### Testing:
 test_search.py  provides a good start with fixtures for database setup. Expand test coverage to include other tools in tools.py, the AI assistant logic in ai_assistant.py, and the scheduler in scheduler.py.

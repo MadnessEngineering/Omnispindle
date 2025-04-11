@@ -53,7 +53,7 @@ A FastMCP-based Todo Server for the [Swarmonomicon](https://github.com/DanEdens/
 
 1. Start the FastMCP server:
    ```bash
-   python -m src.fastmcp_todo_server
+   python -m src.Omnispindle
    ```
 
 ### Adding Todos

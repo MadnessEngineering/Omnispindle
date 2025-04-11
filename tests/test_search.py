@@ -4,12 +4,16 @@ Tests for the search functionality in the FastMCP Todo Server
 import json
 import pytest
 import asyncio
-from fastmcp_todo_server.tools import search_todos, search_lessons
-from pymongo import MongoClient
+import sys
 import os
-from dotenv import load_dotenv
 import uuid
 from datetime import datetime, UTC
+from pymongo import MongoClient
+from dotenv import load_dotenv
+
+# Add src directory to Python path
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../src')))
+from fastmcp_todo_server.tools import search_todos, search_lessons
 
 # Load environment variables
 load_dotenv()

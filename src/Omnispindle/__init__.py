@@ -8,8 +8,7 @@ from dotenv import load_dotenv
 # Import FastMCP
 from fastmcp import Context
 # Import the Omnispindle class from the server module
-from fastmcp_todo_server.server import Omnispindle
-
+from server import Omnispindle
 from tools import add_lesson
 # Import the tool functions from the tools module
 from tools import add_todo
@@ -43,6 +42,7 @@ load_dotenv()
 # MongoDB configuration
 MONGODB_URI = os.getenv("MONGODB_URI", "mongodb://localhost:27017")
 MONGODB_DB = os.getenv("MONGODB_DB", "todo_app")
+MONGODB_COLLECTION = os.getenv("MONGODB_COLLECTION", "todos")
 
 # MQTT configuration
 MQTT_HOST = os.getenv("MQTT_HOST", "localhost")
@@ -52,7 +52,7 @@ MQTT_KEEPALIVE = 60
 # Create MongoDB connection at module level
 mongo_client = MongoClient(MONGODB_URI)
 db = mongo_client[MONGODB_DB]
-todos_collection = db["todos"]
+collection = db[MONGODB_COLLECTION]
 lessons_collection = db["lessons_learned"]
 server = Omnispindle()
 MOSQUITTO_PUB_AVAILABLE = shutil.which("mosquitto_pub") is not None
