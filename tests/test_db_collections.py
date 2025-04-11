@@ -1,5 +1,13 @@
 import os
+import sys
 from pymongo import MongoClient
+from dotenv import load_dotenv
+
+# Add src directory to Python path
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../src')))
+
+# Load environment variables
+load_dotenv()
 
 # MongoDB configuration
 MONGODB_URI = os.getenv("MONGODB_URI", "mongodb://localhost:27017")

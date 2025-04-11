@@ -3,7 +3,11 @@ import asyncio
 import logging
 import json
 import sys
+import os
 from typing import Optional
+
+# Add src directory to Python path
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../src')))
 
 # Configure logging
 logging.basicConfig(
