@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "fastmcp-todo-server"
+name = "Omnispindle"
 version = "0.1.0"
 description = "A FastMCP-based todo list server"
 requires-python = ">=3.11"

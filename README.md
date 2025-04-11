@@ -13,8 +13,8 @@ A FastMCP-based Todo Server for the [Swarmonomicon](https://github.com/DanEdens/
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/DanEdens/fastmcp-todo-server.git
-   cd fastmcp-todo-server
+   git clone https://github.com/DanEdens/Omnispindle.git
+   cd Omnispindle
    ```
 
 2. Install uv (if not already installed):

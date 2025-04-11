@@ -6,7 +6,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../s
 
 # Try importing our collections
 try:
-    from fastmcp_todo_server.tools import todos_collection, lessons_collection, db, mongo_client
+    from Omnispindle.tools import todos_collection, lessons_collection, db, mongo_client
     print(f"MongoDB connection successful")
     print(f"Database: {db.name}")
     print(f"Collections:")
