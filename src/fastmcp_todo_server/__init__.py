@@ -42,7 +42,6 @@ load_dotenv()
 # MongoDB configuration
 MONGODB_URI = os.getenv("MONGODB_URI", "mongodb://localhost:27017")
 MONGODB_DB = os.getenv("MONGODB_DB", "todo_app")
-MONGODB_COLLECTION = os.getenv("MONGODB_COLLECTION", "todos")
 
 # MQTT configuration
 MQTT_HOST = os.getenv("MQTT_HOST", "localhost")
@@ -52,7 +51,7 @@ MQTT_KEEPALIVE = 60
 # Create MongoDB connection at module level
 mongo_client = MongoClient(MONGODB_URI)
 db = mongo_client[MONGODB_DB]
-collection = db[MONGODB_COLLECTION]
+todos_collection = db["todos"]
 lessons_collection = db["lessons_learned"]
 server = Omnispindle()
 MOSQUITTO_PUB_AVAILABLE = shutil.which("mosquitto_pub") is not None
