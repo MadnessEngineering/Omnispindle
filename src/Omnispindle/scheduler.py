@@ -19,7 +19,7 @@ from collections import defaultdict
 
 from pymongo import MongoClient
 from ai_assistant import assistant as todo_assistant
-from fastmcp_todo_server.tools import mqtt_publish
+from Omnispindle.tools import mqtt_publish
 
 
 # Configure logger

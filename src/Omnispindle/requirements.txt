@@ -69,7 +69,7 @@ executing==2.0.1
 fastapi==0.115.7
 fastjsonschema==2.19.1
 fastmcp==0.4.1
--e git+https://github.com/DanEdens/fastmcp-todo-server.git@c219d2490887cd69357cd62e6f884902f0fee3a7#egg=fastmcp_todo_server
+-e git+https://github.com/DanEdens/fastmcp-todo-server.git@c219d2490887cd69357cd62e6f884902f0fee3a7#egg=Omnispindle
 filelock==3.17.0
 flake8==7.0.0
 flatbuffers==25.1.21

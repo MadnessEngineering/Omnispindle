@@ -14,4 +14,4 @@ dependencies = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/fastmcp_todo_server"]
+packages = ["src/Omnispindle"]
