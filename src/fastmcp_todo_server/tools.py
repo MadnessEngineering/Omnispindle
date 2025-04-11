@@ -17,19 +17,19 @@ from pymongo import MongoClient
 # Load environment variables
 load_dotenv()
 
-# MongoDB configuration
-MONGODB_URI = os.getenv("MONGODB_URI", "mongodb://localhost:27017")
-MONGODB_DB = os.getenv("MONGODB_DB", "swarmonomicon")
-MONGODB_COLLECTION = os.getenv("MONGODB_COLLECTION", "todos")
-
+# Configuration
 # MQTT configuration
 MQTT_HOST = os.getenv("AWSIP", "localhost")
 MQTT_PORT = int(os.getenv("AWSPORT", 3003))
 
+# MongoDB configuration
+MONGODB_URI = os.getenv("MONGODB_URI", f"mongodb://{MQTT_HOST}:27017")
+MONGODB_DB = os.getenv("MONGODB_DB", "swarmonomicon")
+
 # Create MongoDB connection at module level
 mongo_client = MongoClient(MONGODB_URI)
 db = mongo_client[MONGODB_DB]
-collection = db[MONGODB_COLLECTION]
+todos_collection = db["todos"]
 lessons_collection = db["lessons_learned"]
 
 # Helper function to create standardized responses
@@ -81,7 +81,7 @@ async def add_todo(description: str, project: str, priority: str = "initial", ta
     }
 
     try:
-        collection.insert_one(todo)
+        todos_collection.insert_one(todo)
     except Exception as e:
         return create_response(False, message=f"Failed to insert todo: {str(e)}")
 
@@ -105,7 +105,7 @@ async def add_todo(description: str, project: str, priority: str = "initial", ta
 async def query_todos(filter: dict = None, projection: dict = None, limit: int = 100, ctx=None) -> str:
     """Query todos with optional filtering and projection"""
     # Find matching todos first
-    cursor = collection.find(
+    cursor = todos_collection.find(
         filter or {},
         projection=projection,
         limit=limit
@@ -140,7 +140,7 @@ async def query_todos(filter: dict = None, projection: dict = None, limit: int =
 
 async def update_todo(todo_id: str, updates: dict, ctx: Context = None) -> str:
     """Update an existing todo by ID"""
-    result = collection.update_one({"id": todo_id}, {"$set": updates})
+    result = todos_collection.update_one({"id": todo_id}, {"$set": updates})
 
     if result.modified_count == 0:
         return create_response(False, message="Todo not found")
@@ -163,7 +163,7 @@ async def update_todo(todo_id: str, updates: dict, ctx: Context = None) -> str:
 
 async def delete_todo(todo_id: str, ctx: Context = None) -> str:
     """Delete a todo by ID"""
-    result = collection.delete_one({"id": todo_id})
+    result = todos_collection.delete_one({"id": todo_id})
 
     if result.deleted_count == 0:
         return create_response(False, message="Todo not found")
@@ -186,7 +186,7 @@ async def delete_todo(todo_id: str, ctx: Context = None) -> str:
 
 async def get_todo(todo_id: str) -> str:
     """Get a specific todo by ID"""
-    todo = collection.find_one({"id": todo_id})
+    todo = todos_collection.find_one({"id": todo_id})
 
     if todo is None:
         return create_response(False, message="Todo not found")
@@ -219,7 +219,7 @@ async def mark_todo_complete(todo_id: str, ctx: Context = None) -> str:
     """Mark a todo as completed"""
     completed_time = int(datetime.now(UTC).timestamp())
 
-    result = collection.update_one(
+    result = todos_collection.update_one(
         {"id": todo_id},
         {"$set": {"status": "completed", "completed_at": completed_time}}
     )
@@ -248,7 +248,7 @@ async def mark_todo_complete(todo_id: str, ctx: Context = None) -> str:
 
 async def list_todos_by_status(status: str, limit: int = 100) -> str:
     """List todos by their status"""
-    cursor = collection.find(
+    cursor = todos_collection.find(
         {"status": status},
         limit=limit
     )
@@ -410,7 +410,7 @@ async def search_todos(query: str, fields: list = None, limit: int = 100) -> str
     search_query = {"$or": search_conditions}
 
     # Execute the search
-    cursor = collection.find(search_query, limit=limit)
+    cursor = todos_collection.find(search_query, limit=limit)
     results = list(cursor)
 
     # Create a compact summary of results
