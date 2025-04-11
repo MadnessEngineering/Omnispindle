@@ -8,7 +8,8 @@ from dotenv import load_dotenv
 # Import FastMCP
 from fastmcp import Context
 # Import the Omnispindle class from the server module
-from server import Omnispindle
+from fastmcp_todo_server.server import Omnispindle
+
 from tools import add_lesson
 # Import the tool functions from the tools module
 from tools import add_todo
