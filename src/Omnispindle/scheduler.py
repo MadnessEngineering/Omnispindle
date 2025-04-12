@@ -18,8 +18,8 @@ import calendar
 from collections import defaultdict
 
 from pymongo import MongoClient
-from ai_assistant import assistant as todo_assistant
-from Omnispindle.tools import mqtt_publish
+from .ai_assistant import assistant as todo_assistant
+from .tools import mqtt_publish
 
 
 # Configure logger

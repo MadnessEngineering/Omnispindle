@@ -8,32 +8,32 @@ from dotenv import load_dotenv
 # Import FastMCP
 from fastmcp import Context
 # Import the Omnispindle class from the server module
-from server import Omnispindle
-from tools import add_lesson
+from .server import Omnispindle
+from .tools import add_lesson
 # Import the tool functions from the tools module
-from tools import add_todo
-from tools import delete_lesson
-from tools import delete_todo
-from tools import get_lesson
-from tools import get_todo
-from tools import list_lessons
-from tools import list_todos_by_status
-from tools import mark_todo_complete
-from tools import mqtt_publish
-from tools import mqtt_get
-from tools import query_todos
-from tools import search_lessons
-from tools import search_todos
-from tools import update_lesson
-from tools import update_todo
+from .tools import add_todo
+from .tools import delete_lesson
+from .tools import delete_todo
+from .tools import get_lesson
+from .tools import get_todo
+from .tools import list_lessons
+from .tools import list_todos_by_status
+from .tools import mark_todo_complete
+from .tools import mqtt_publish
+from .tools import mqtt_get
+from .tools import query_todos
+from .tools import search_lessons
+from .tools import search_todos
+from .tools import update_lesson
+from .tools import update_todo
 from pymongo import MongoClient
 # Import the AI assistant functions
-from ai_assistant import get_todo_suggestions
-from ai_assistant import get_specific_suggestions
+from .ai_assistant import get_todo_suggestions
+from .ai_assistant import get_specific_suggestions
 # Import the scheduler functions
-from scheduler import suggest_deadline
-from scheduler import suggest_time_slot
-from scheduler import generate_daily_schedule
+from .scheduler import suggest_deadline
+from .scheduler import suggest_time_slot
+from .scheduler import generate_daily_schedule
 # from tools import deploy_nodered_flow, publish_to_dashboard
 
 # Load environment variables
