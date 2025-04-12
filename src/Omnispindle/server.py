@@ -2,6 +2,7 @@ import logging
 import os
 import signal
 import sys
+import asyncio
 from typing import Callable, Dict, Any, Optional
 from fastmcp.server import FastMCP
 import uvicorn
@@ -152,6 +153,55 @@ class Omnispindle(FastMCP):
                 logger.info("Fallback dummy app is now active")
             else:
                 logger.info("ASGI application successfully obtained from run_sse_async()")
+                
+                # Add a delay wrapper to ensure initialization is complete before handling requests
+                original_app = app
+                
+                async def initialization_delay_wrapper(scope: Dict[str, Any], receive: Callable, send: Callable) -> None:
+                    """
+                    Wrapper that adds a small delay to ensure server initialization is complete
+                    before processing any requests.
+                    """
+                    if scope["type"] == "http" and scope.get("path", "") == "/sse":
+                        logger.debug("Delaying SSE connection to ensure initialization is complete")
+                        # Add a small delay to ensure initialization is complete
+                        await asyncio.sleep(0.5)
+                    
+                    # Handle the request with error catch for initialization issues
+                    try:
+                        await original_app(scope, receive, send)
+                    except RuntimeError as e:
+                        if "Received request before initialization was complete" in str(e):
+                            logger.warning("Caught initialization error, returning 503 Service Unavailable")
+                            # Create a JSON response
+                            response = JSONResponse(
+                                status_code=503,
+                                content={
+                                    "error": "Service Temporarily Unavailable",
+                                    "message": "The server is still initializing. Please try again in a moment.",
+                                    "path": scope.get("path", "unknown")
+                                }
+                            )
+                            # Send response headers
+                            await send({
+                                "type": "http.response.start",
+                                "status": response.status_code,
+                                "headers": [
+                                    [b"content-type", b"application/json"],
+                                    [b"retry-after", b"2"]
+                                ]
+                            })
+                            # Send response body
+                            await send({
+                                "type": "http.response.body",
+                                "body": json.dumps(response.body).encode("utf-8"),
+                            })
+                        else:
+                            # Re-raise any other runtime errors
+                            raise
+                
+                app = initialization_delay_wrapper
+                logger.info("Added initialization delay wrapper to ASGI application")
 
             logger.info("Server startup complete, returning ASGI application")
             return app
