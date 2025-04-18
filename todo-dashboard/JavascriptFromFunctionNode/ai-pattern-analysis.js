@@ -11,37 +11,30 @@ completedTodos.sort((a, b) => (b.completed_at || 0) - (a.completed_at || 0));
 const recentCompleted = completedTodos.slice(0, 5);
 
 // Find patterns in similar tasks (simplified implementation)
-function findPatterns(todos)
-{
+function findPatterns(todos) {
     const patterns = [];
 
     // Group by words in description
     const taskGroups = {};
 
-    todos.forEach(todo =>
-    {
+    todos.forEach(todo => {
         const words = todo.description.toLowerCase().split(/\s+/).filter(w => w.length > 4);
 
-        words.forEach(word =>
-        {
-            if (!taskGroups[word])
-            {
+        words.forEach(word => {
+            if (!taskGroups[word]) {
                 taskGroups[word] = [];
             }
 
             // Only add if not already in the group
-            if (!taskGroups[word].find(t => t.id === todo.id))
-            {
+            if (!taskGroups[word].find(t => t.id === todo.id)) {
                 taskGroups[word].push(todo);
             }
         });
     });
 
     // Find patterns with at least 2 todos
-    Object.keys(taskGroups).forEach(word =>
-    {
-        if (taskGroups[word].length >= 2)
-        {
+    Object.keys(taskGroups).forEach(word => {
+        if (taskGroups[word].length >= 2) {
             patterns.push({
                 pattern_id: `pattern-${patterns.length + 1}`,
                 keyword: word,
@@ -57,18 +50,15 @@ function findPatterns(todos)
 }
 
 // Generate simple recommendations
-function generateRecommendations(todos)
-{
+function generateRecommendations(todos) {
     const recommendations = [];
 
     // Find pending todos similar to completed todos
     const pendingTodos = global.get("pendingTodos") || [];
 
     // For demo, just recommend high priority for first few todos
-    pendingTodos.slice(0, 2).forEach(todo =>
-    {
-        if (todo.priority !== "high")
-        {
+    pendingTodos.slice(0, 2).forEach(todo => {
+        if (todo.priority !== "high") {
             recommendations.push({
                 todo_id: todo.id,
                 description: todo.description,
@@ -92,6 +82,11 @@ const aiSuggestions = {
     },
     completed: recentCompleted
 };
+
+// Debug output
+node.warn("Publishing AI suggestions with " + aiSuggestions.automation_suggestions.length + " automation suggestions");
+node.warn("Publishing " + aiSuggestions.priority_recommendations.length + " priority recommendations");
+node.warn("Including " + recentCompleted.length + " recently completed todos");
 
 return {
     payload: aiSuggestions,
