@@ -1,0 +1,95 @@
+version: '3.8'
+
+services:
+  # MongoDB for task storage
+  mongodb:
+    image: mongo:6
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    environment:
+      - MONGO_INITDB_DATABASE=swarmonomicon
+    healthcheck:
+      test: ["CMD", "mongo", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '1'
+
+  # Mosquitto MQTT broker for messaging
+  mosquitto:
+    image: eclipse-mosquitto:2
+    restart: unless-stopped
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    volumes:
+      - ./config/mosquitto.conf:/mosquitto/config/mosquitto.conf
+      - mosquitto_data:/mosquitto/data
+      - mosquitto_log:/mosquitto/log
+    healthcheck:
+      test: ["CMD-SHELL", "mosquitto_sub -p 1883 -t '$$SYS/#' -C 1 | grep -v Error || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.5'
+
+  # MCP Todo Server (Omnispindle)
+  mcp-todo-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: omnispindle/mcp-todo-server:latest
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - MONGODB_URI=mongodb://mongodb:27017
+      - MONGODB_DB=swarmonomicon
+      - MONGODB_COLLECTION=todos
+      - AWSIP=mongodb
+      - AWSPORT=27017
+      - MQTT_HOST=mosquitto
+      - MQTT_PORT=1883
+      - DeNa=omnispindle
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      mosquitto:
+        condition: service_healthy
+
+  # Todo Dashboard (optional web UI)
+  todo-dashboard:
+    build:
+      context: ./todo-dashboard
+      dockerfile: Dockerfile
+    image: omnispindle/todo-dashboard:latest
+    restart: unless-stopped
+    ports:
+      - "3001:80"
+    environment:
+      - API_URL=http://mcp-todo-server:8080
+    depends_on:
+      - mcp-todo-server
+
+volumes:
+  mongodb_data:
+  mosquitto_data:
+  mosquitto_log: 
