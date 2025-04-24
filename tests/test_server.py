@@ -10,7 +10,7 @@ import logging
 # Add src to path so we can import server
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../src')))
 
-from fastmcp_todo_server.server import Omnispindle
+from Omnispindle.server import Omnispindle
 
 
 class TestOmnispindle:

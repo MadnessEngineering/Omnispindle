@@ -548,4 +548,4 @@ async def deploy_nodered_flow(flow_json_name: str) -> str:
         return create_response(False, message=f"Deployment error: {str(e)}")
 
 if __name__ == "__main__":
-    deploy_nodered_flow("fastmcp-todo-server.json")
+    deploy_nodered_flow("Omnispindle.json")

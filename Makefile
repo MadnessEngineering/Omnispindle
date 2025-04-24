@@ -6,22 +6,23 @@
 install:
 	uv pip install -r requirements.txt
 	uv pip install -r requirements-dev.txt
+	uv
 
 # Run the FastMCP server
 run:
-	python -m src.fastmcp_todo_server
+	python3.11 -m src.Omnispindle
 
 # deploy
 deploy:
-	ssh eaws "cd /home/ubuntu/fastmcp-todo-server && git pull && pm2 restart 2 && pm2 lgos 2"
+	ssh eaws "cd /home/ubuntu/Omnispindle && git pull && pm2 restart 2 && pm2 lgos 2"
 
 # Run tests
 test:
-	pytest tests/
+	python3.11 -m pytest tests/
 
 # Run tests with coverage
 coverage:
-	pytest --cov=src tests/
+	python3.11 -m pytest --cov=src tests/
 
 # Clean up __pycache__ directories
 clean:
