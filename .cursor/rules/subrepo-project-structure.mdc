@@ -1,0 +1,11 @@
+---
+description: explains the layout of the Todomill_projetorium subrepo
+globs: 
+alwaysApply: false
+---
+This is a project for Node-RED. It is a sub-repository of the larger Omnispindle repository.
+The project is a dashboard for a todo list tool that runs on the same EC2 instance as Node-RED. Omnispindle is a python MCP server allowing AI agents to interact with the mongoDB todo list.
+The code for this project has to be written for Node-Red Javascript nodes, and HTML template nodes.
+The .json files in ExportedNodeRedTabs are the exported Node-Red tabs for the project. They define the links between the nodes. This is the source of truth for the code, The .js and .html in JavascriptFromFunctionNode and HTMLFromTemplateNode are derived from them via the Node-Red editor. Edit the .json file directly can become complex, so changes can be made in the .js and .html files instead and the user can copy them back to the GUI, then reexport the .json file.
+Only edit the .json file to link the nodes. Comments can be added to the .json file to explain the assumed .js and .html files.
+The first dashboard tab has a sidebar with a list of projects. The second dashboard tab is an Item Editor for the todo list. The third dashboard tab has a list of smart suggestions for the user to reduce redundancy in the todo list. Under these 3 tabs is a dashboard control panel that can set project filters, and refresh the todo list.
