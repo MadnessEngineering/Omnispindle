@@ -81,7 +81,7 @@ class TodoClient:
         try:
             args = {
                 "filter": filter or {},
-                "projection": projection,
+                "project": projection,
                 "limit": limit
             }
             logger.debug(f"Querying todos with args: {args}")

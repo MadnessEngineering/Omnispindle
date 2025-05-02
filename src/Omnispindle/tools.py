@@ -1,17 +1,17 @@
 import json
-import logging
 import os
 import ssl
 import subprocess
 import uuid
-from datetime import datetime, UTC, timedelta
-from typing import Any, Dict, List, Optional
+from datetime import datetime, UTC
 
-import aiohttp
 import logging
 from dotenv import load_dotenv
 from fastmcp import Context
 from pymongo import MongoClient
+from src.Omnispindle import mqtt_publish
+from src.Omnispindle.utils import _format_duration
+from src.Omnispindle.utils import create_response
 
 # Load environment variables
 load_dotenv()
@@ -21,124 +21,14 @@ MONGODB_URI = os.getenv("MONGODB_URI", "mongodb://localhost:27017")
 MONGODB_DB = os.getenv("MONGODB_DB", "swarmonomicon")
 MONGODB_COLLECTION = os.getenv("MONGODB_COLLECTION", "todos")
 
-# MQTT configuration
-MQTT_HOST = os.getenv("AWSIP", "localhost")
-MQTT_PORT = int(os.getenv("AWSPORT", 3003))
-
 # Create MongoDB connection at module level
 mongo_client = MongoClient(MONGODB_URI)
 db = mongo_client[MONGODB_DB]
 collection = db[MONGODB_COLLECTION]
 lessons_collection = db["lessons_learned"]
 
-# Helper function to create standardized responses
-def create_response(success: bool, data: Any = None, message: str = None) -> str:
-    """Create a standardized JSON response with context-rich information for AI agents"""
-    response = {
-        "success": success,
-        "timestamp": datetime.now(UTC).isoformat(),
-        "agent_context": {
-            "tool_name": _get_caller_function_name(),
-            "result_type": _infer_result_type(data)
-        }
-    }
 
-    if data is not None:
-        response["data"] = data
-
-        # Add contextual information based on the data type
-        if isinstance(data, dict) and "todo_id" in data:
-            response["agent_context"]["entity_type"] = "todo"
-            response["agent_context"]["entity_id"] = data["todo_id"]
-        elif isinstance(data, dict) and "lesson_id" in data:
-            response["agent_context"]["entity_type"] = "lesson"
-            response["agent_context"]["entity_id"] = data["lesson_id"]
-        elif isinstance(data, dict) and "items" in data and isinstance(data["items"], list):
-            response["agent_context"]["collection_size"] = len(data["items"])
-            response["agent_context"]["collection_type"] = _infer_collection_type(data["items"])
-
-    if message is not None:
-        response["message"] = message
-
-    return json.dumps(response)
-
-def _get_caller_function_name() -> str:
-    """Get the name of the calling function for context"""
-    import inspect
-    stack = inspect.stack()
-    # Look for the first frame that's not this function or create_response
-    for frame in stack[1:]:
-        if frame.function not in ["create_response", "_get_caller_function_name"]:
-            return frame.function
-    return "unknown_function"
-
-def _infer_result_type(data: Any) -> str:
-    """Infer the type of result for better AI understanding"""
-    if data is None:
-        return "null"
-    elif isinstance(data, dict):
-        if "todo_id" in data:
-            return "todo"
-        elif "lesson_id" in data:
-            return "lesson"
-        elif "items" in data and isinstance(data["items"], list):
-            if len(data["items"]) > 0:
-                if "description" in data["items"][0]:
-                    return "todo_collection"
-                elif "lesson_learned" in data["items"][0] or "topic" in data["items"][0]:
-                    return "lesson_collection"
-            return "collection"
-        elif "suggested_deadline" in data:
-            return "deadline_suggestion"
-        elif "time_slot" in data:
-            return "time_slot_suggestion"
-        return "object"
-    elif isinstance(data, list):
-        return "array"
-    elif isinstance(data, str):
-        return "string"
-    elif isinstance(data, (int, float)):
-        return "number"
-    elif isinstance(data, bool):
-        return "boolean"
-    return type(data).__name__
-
-def _infer_collection_type(items: List[Dict]) -> str:
-    """Infer the type of collection based on its items"""
-    if not items:
-        return "empty_collection"
-
-    sample = items[0]
-    if "description" in sample and "project" in sample:
-        return "todos"
-    elif "topic" in sample and ("lesson_learned" in sample or "preview" in sample):
-        return "lessons"
-    return "generic_collection"
-
-async def mqtt_publish(topic: str, message: str, ctx: Context = None, retain: bool = False) -> bool:
-    """Publish a message to the specified MQTT topic"""
-    try:
-        cmd = ["mosquitto_pub", "-h", MQTT_HOST, "-p", str(MQTT_PORT), "-t", topic, "-m", str(message)]
-        if retain:
-            cmd.append("-r")
-        subprocess.run(cmd, check=True)
-        return True
-    except subprocess.SubprocessError as e:
-        print(f"Failed to publish MQTT message: {str(e)}")
-        return False
-
-async def mqtt_get(topic: str) -> str:
-    """Get a message from the specified MQTT topic"""
-    try:
-        cmd = ["mosquitto_sub", "-h", MQTT_HOST, "-p", str(MQTT_PORT), "-t", topic, "-C", "1"]
-        result = subprocess.run(cmd, check=True, capture_output=True, text=True)
-        return result.stdout.strip()
-    except subprocess.SubprocessError as e:
-        print(f"Failed to get MQTT message: {str(e)}")
-        return None
-
-
-async def add_todo(description: str, project: str, priority: str = "initial", target_agent: str = "user", metadata: dict = None, ctx: Context = None) -> str:
+async def add_todo(description: str, project: str, priority: str = "Medium", target_agent: str = "user", metadata: dict = None, ctx: Context = None) -> str:
     """Add a new todo item to the database"""
     todo = {
         "id": str(uuid.uuid4()),
@@ -163,7 +53,7 @@ async def add_todo(description: str, project: str, priority: str = "initial", ta
         mqtt_message = f"description: {description}, project: {project}, priority: {priority}, target_agent: {target_agent}"
         # Use a separate try/except to catch any issues with mqtt_publish itself
         try:
-            publish_success = await mqtt_publish(f"status/{os.getenv('DeNa')}/todo-server/add_todo", mqtt_message, ctx)
+            publish_success = await mqtt_publish(f"status/{os.getenv('DeNa')}/omnispindle/add_todo", mqtt_message, ctx)
             if not publish_success:
                 print(f"Warning: MQTT publish returned False for todo {todo['id']}")
         except Exception as mqtt_err:
@@ -172,26 +62,23 @@ async def add_todo(description: str, project: str, priority: str = "initial", ta
         # Catch absolutely any errors in the MQTT process
         print(f"MQTT processing error (non-fatal): {str(e)}")
 
-    # Return enhanced response with more complete todo information for AI agents
+    # Return optimized response with essentials only
+    # Description is truncated to save context tokens while still being identifiable
+    truncated_desc = description[:30] + ("..." if len(description) > 30 else "")
+
     return create_response(True, {
         "todo_id": todo["id"],
-        "description": description,
+        "description": truncated_desc,
         "project": project,
-        "priority": priority,
-        "status": "pending",
-        "target_agent": target_agent,
-        "created_at": todo["created_at"],
-        "created_at_formatted": datetime.fromtimestamp(todo["created_at"], UTC).strftime("%Y-%m-%d %H:%M"),
-        "action": "created",
-        "possible_next_actions": ["update_todo", "mark_todo_complete", "get_todo", "suggest_deadline"]
+        "next_actions": ["get_todo", "update", "complete"]
     })
 
-async def query_todos(filter: dict = None, projection: dict = None, limit: int = 100, ctx=None) -> str:
-    """Query todos with optional filtering and projection"""
+async def query_todos(filter: dict = None, project: dict = None, limit: int = 100, ctx=None) -> str:
+    """Query todos with optional filtering and project"""
     # Find matching todos first
     cursor = collection.find(
         filter or {},
-        projection=projection,
+        projection=project,
         limit=limit
     )
     results = list(cursor)
@@ -213,12 +100,9 @@ async def query_todos(filter: dict = None, projection: dict = None, limit: int =
         })
 
     # MQTT publish as confirmation after the database query
-    try:
-        mqtt_message = f"filter: {json.dumps(filter)}, projection: {json.dumps(projection)}, limit: {limit}"
-        await mqtt_publish(f"status/{os.getenv('DeNa')}/todo-server/query_todos", mqtt_message, ctx)
-    except Exception as e:
-        # Log the error but don't fail the entire operation
-        print(f"MQTT publish error (non-fatal): {str(e)}")
+
+    mqtt_message = f"filter: {json.dumps(filter)}, project: {json.dumps(project)}, limit: {limit}"
+    await mqtt_publish(f"status/{os.getenv('DeNa')}/omnispindle/query_todos", mqtt_message, ctx)
 
     return create_response(True, summary)
 
@@ -238,7 +122,7 @@ async def update_todo(todo_id: str, updates: dict, ctx: Context = None) -> str:
     # MQTT publish as confirmation after the database update
     try:
         mqtt_message = f"todo_id: {todo_id}, updates: {json.dumps(updates)}"
-        await mqtt_publish(f"status/{os.getenv('DeNa')}/todo-server/update_todo", mqtt_message, ctx)
+        await mqtt_publish(f"status/{os.getenv('DeNa')}/omnispindle/update_todo", mqtt_message, ctx)
     except Exception as e:
         # Log the error but don't fail the entire operation
         print(f"MQTT publish error (non-fatal): {str(e)}")
@@ -261,7 +145,7 @@ async def delete_todo(todo_id: str, ctx: Context = None) -> str:
     # MQTT publish as confirmation after the database deletion
     try:
         mqtt_message = f"todo_id: {todo_id}"
-        await mqtt_publish(f"status/{os.getenv('DeNa')}/todo-server/delete_todo", mqtt_message, ctx)
+        await mqtt_publish(f"status/{os.getenv('DeNa')}/omnispindle/delete_todo", mqtt_message, ctx)
     except Exception as e:
         # Log the error but don't fail the entire operation
         print(f"MQTT publish error (non-fatal): {str(e)}")
@@ -275,42 +159,27 @@ async def get_todo(todo_id: str) -> str:
     if todo is None:
         return create_response(False, message="Todo not found")
 
-    # Format todo with rich information for AI agents
+    # Format todo with optimized information - keeping essentials and removing verbosity
     formatted_todo = {
         "id": todo["id"],
         "description": todo["description"],
         "project": todo["project"],
         "status": todo["status"],
         "priority": todo["priority"],
-        "target_agent": todo.get("target_agent", "user"),
-        "source_agent": todo.get("source_agent", "unknown"),
-        "created_at": todo["created_at"],
-        "created_at_formatted": datetime.fromtimestamp(todo["created_at"], UTC).strftime("%Y-%m-%d %H:%M"),
-        "metadata": todo.get("metadata", {})
+        "target": todo.get("target_agent", "user"),
+        "created": todo["created_at"]
     }
 
-    # Add completion information if available
+    # Add completion information if available (using compact format)
     if todo.get("completed_at"):
-        formatted_todo["completed_at"] = todo["completed_at"]
-        formatted_todo["completed_at_formatted"] = datetime.fromtimestamp(todo["completed_at"], UTC).strftime("%Y-%m-%d %H:%M")
-        formatted_todo["duration_seconds"] = todo["completed_at"] - todo["created_at"]
-        formatted_todo["duration_formatted"] = _format_duration(todo["completed_at"] - todo["created_at"])
+        formatted_todo["completed"] = todo["completed_at"]
+        # Only add duration when completed
+        duration_seconds = todo["completed_at"] - todo["created_at"]
+        formatted_todo["duration"] = _format_duration(duration_seconds)
 
-    # Add possible next actions based on todo status
-    if todo["status"] == "pending":
-        formatted_todo["possible_next_actions"] = ["update_todo", "mark_todo_complete", "delete_todo",
-                                               "get_specific_todo_suggestions", "suggest_deadline"]
-    else:
-        formatted_todo["possible_next_actions"] = ["delete_todo"]
-
-    # MQTT publish as confirmation after retrieving the todo
-    try:
-        mqtt_message = f"todo_id: {todo_id}"
-        await mqtt_publish(f"status/{os.getenv('DeNa')}/todo-server/get_todo", mqtt_message)
-    except Exception as e:
-        # Log the error but don't fail the entire operation
-        print(f"MQTT publish error (non-fatal): {str(e)}")
-
+    # MQTT publish without try/except to reduce code verbosity
+    await mqtt_publish(f"status/{os.getenv('DeNa')}/omnispindle/get_todo", f"todo_id: {todo_id}")
+    
     return create_response(True, formatted_todo)
 
 async def mark_todo_complete(todo_id: str, ctx: Context = None) -> str:
@@ -334,7 +203,7 @@ async def mark_todo_complete(todo_id: str, ctx: Context = None) -> str:
     # MQTT publish as confirmation after marking todo complete
     try:
         mqtt_message = f"todo_id: {todo_id}"
-        await mqtt_publish(f"status/{os.getenv('DeNa')}/todo-server/mark_todo_complete", mqtt_message, ctx)
+        await mqtt_publish(f"status/{os.getenv('DeNa')}/omnispindle/mark_todo_complete", mqtt_message, ctx)
     except Exception as e:
         # Log the error but don't fail the entire operation
         print(f"MQTT publish error (non-fatal): {str(e)}")
@@ -352,67 +221,35 @@ async def list_todos_by_status(status: str, limit: int = 100) -> str:
     )
     results = list(cursor)
 
-    # Create a detailed summary with more context for AI
+    # Create an optimized summary with only essential data
     summary = {
         "count": len(results),
         "status": status,
-        "limit": limit,
-        "items": [],
-        "projects": set(),  # Track unique projects
-        "priorities": {     # Track priority distribution
-            "high": 0,
-            "medium": 0,
-            "low": 0,
-            "initial": 0
-        }
+        "items": []
     }
+    
+    # Track unique projects (often useful for AI agents)
+    unique_projects = set()
 
-    # Add todo items with useful information
+    # Add todo items with minimal but useful information
     for todo in results:
-        # Track statistics
         project = todo.get("project", "unspecified")
-        priority = todo.get("priority", "initial")
-        summary["projects"].add(project)
-        if priority in summary["priorities"]:
-            summary["priorities"][priority] += 1
-
-        # Format created_at date if available
-        created_at_formatted = None
-        if "created_at" in todo:
-            try:
-                created_at_formatted = datetime.fromtimestamp(todo["created_at"], UTC).strftime("%Y-%m-%d")
-            except (TypeError, ValueError):
-                pass
-
-        # Add formatted todo to items
+        unique_projects.add(project)
+        
+        # Use concise format for list items to save tokens
         summary["items"].append({
             "id": todo["id"],
-            "description": todo["description"],
-            "project": project,
-            "priority": priority,
-            "created_at_formatted": created_at_formatted
+            "desc": todo["description"][:40] + ("..." if len(todo["description"]) > 40 else ""),
+            "project": project
         })
 
-    # Convert projects set to list for JSON serialization
-    summary["projects"] = list(summary["projects"])
-
-    # Add possible next action hints
-    summary["possible_next_actions"] = {
-        "for_collection": ["query_todos", "search_todos"],
-        "for_individual_todos": ["get_todo", "update_todo"]
-    }
-
-    if status == "pending":
-        summary["possible_next_actions"]["for_individual_todos"].extend(["mark_todo_complete", "suggest_deadline"])
-        summary["possible_next_actions"]["for_collection"].append("get_todo_suggestions")
-
-    # MQTT publish as confirmation after listing todos
-    try:
-        mqtt_message = f"status: {status}, limit: {limit}"
-        await mqtt_publish(f"status/{os.getenv('DeNa')}/todo-server/list_todos_by_status", mqtt_message)
-    except Exception as e:
-        # Log the error but don't fail the entire operation
-        print(f"MQTT publish error (non-fatal): {str(e)}")
+    # Only add projects if there are multiple (otherwise it's not useful info)
+    if len(unique_projects) > 1:
+        summary["projects"] = list(unique_projects)
+        
+    # Publish MQTT status with minimal error handling
+    await mqtt_publish(f"status/{os.getenv('DeNa')}/omnispindle/list_todos_by_status", 
+                      f"status: {status}, limit: {limit}, found: {len(results)}")
 
     return create_response(True, summary)
 
@@ -432,7 +269,7 @@ async def add_lesson(language: str, topic: str, lesson_learned: str, tags: list 
     # MQTT publish as confirmation after adding lesson
     try:
         mqtt_message = f"language: {language}, topic: {topic}, tags: {tags}"
-        await mqtt_publish(f"status/{os.getenv('DeNa')}/todo-server/add_lesson", mqtt_message, ctx)
+        await mqtt_publish(f"status/{os.getenv('DeNa')}/omnispindle/add_lesson", mqtt_message, ctx)
     except Exception as e:
         # Log the error but don't fail the entire operation
         print(f"MQTT publish error (non-fatal): {str(e)}")
@@ -459,7 +296,7 @@ async def get_lesson(lesson_id: str) -> str:
     # MQTT publish as confirmation after getting lesson
     try:
         mqtt_message = f"lesson_id: {lesson_id}"
-        await mqtt_publish(f"status/{os.getenv('DeNa')}/todo-server/get_lesson", mqtt_message)
+        await mqtt_publish(f"status/{os.getenv('DeNa')}/omnispindle/get_lesson", mqtt_message)
     except Exception as e:
         # Log the error but don't fail the entire operation
         print(f"MQTT publish error (non-fatal): {str(e)}")
@@ -475,7 +312,7 @@ async def update_lesson(lesson_id: str, updates: dict, ctx: Context = None) -> s
     # MQTT publish as confirmation after updating lesson
     try:
         mqtt_message = f"lesson_id: {lesson_id}, updates: {json.dumps(updates)}"
-        await mqtt_publish(f"status/{os.getenv('DeNa')}/todo-server/update_lesson", mqtt_message, ctx)
+        await mqtt_publish(f"status/{os.getenv('DeNa')}/omnispindle/update_lesson", mqtt_message, ctx)
     except Exception as e:
         # Log the error but don't fail the entire operation
         print(f"MQTT publish error (non-fatal): {str(e)}")
@@ -492,7 +329,7 @@ async def delete_lesson(lesson_id: str, ctx: Context = None) -> str:
     # MQTT publish as confirmation after deleting lesson
     try:
         mqtt_message = f"lesson_id: {lesson_id}"
-        await mqtt_publish(f"status/{os.getenv('DeNa')}/todo-server/delete_lesson", mqtt_message, ctx)
+        await mqtt_publish(f"status/{os.getenv('DeNa')}/omnispindle/delete_lesson", mqtt_message, ctx)
     except Exception as e:
         # Log the error but don't fail the entire operation
         print(f"MQTT publish error (non-fatal): {str(e)}")
@@ -523,7 +360,7 @@ async def list_lessons(limit: int = 100) -> str:
     # MQTT publish as confirmation after listing lessons
     try:
         mqtt_message = f"limit: {limit}"
-        await mqtt_publish(f"status/{os.getenv('DeNa')}/todo-server/list_lessons", mqtt_message, ctx=None)
+        await mqtt_publish(f"status/{os.getenv('DeNa')}/omnispindle/list_lessons", mqtt_message, ctx=None)
     except Exception as e:
         # Log the error but don't fail the entire operation
         print(f"MQTT publish error (non-fatal): {str(e)}")
@@ -568,7 +405,7 @@ async def search_todos(query: str, fields: list = None, limit: int = 100) -> str
     # MQTT publish as confirmation after searching todos
     try:
         mqtt_message = f"query: {query}, fields: {fields}, limit: {limit}"
-        await mqtt_publish(f"status/{os.getenv('DeNa')}/todo-server/search_todos", mqtt_message, ctx=None)
+        await mqtt_publish(f"status/{os.getenv('DeNa')}/omnispindle/search_todos", mqtt_message, ctx=None)
     except Exception as e:
         # Log the error but don't fail the entire operation
         print(f"MQTT publish error (non-fatal): {str(e)}")
@@ -614,7 +451,7 @@ async def search_lessons(query: str, fields: list = None, limit: int = 100) -> s
     # MQTT publish as confirmation after searching lessons
     try:
         mqtt_message = f"query: {query}, fields: {fields}, limit: {limit}"
-        await mqtt_publish(f"status/{os.getenv('DeNa')}/todo-server/search_lessons", mqtt_message, ctx=None)
+        await mqtt_publish(f"status/{os.getenv('DeNa')}/omnispindle/search_lessons", mqtt_message, ctx=None)
     except Exception as e:
         # Log the error but don't fail the entire operation
         print(f"MQTT publish error (non-fatal): {str(e)}")
@@ -682,150 +519,3 @@ async def deploy_nodered_flow(flow_json_name: str) -> str:
     except Exception as e:
         logging.exception("Unhandled exception")
         return create_response(False, message=f"Deployment error: {str(e)}")
-
-def _format_duration(seconds: int) -> str:
-    """Format a duration in seconds to a human-readable string"""
-    if seconds < 60:
-        return f"{seconds} seconds"
-    elif seconds < 3600:
-        minutes = seconds // 60
-        return f"{minutes} minute{'s' if minutes != 1 else ''}"
-    elif seconds < 86400:
-        hours = seconds // 3600
-        return f"{hours} hour{'s' if hours != 1 else ''}"
-    else:
-        days = seconds // 86400
-        return f"{days} day{'s' if days != 1 else ''}"
-
-async def suggest_deadline(todo_id: str) -> str:
-    """
-    Suggest an optimal deadline for a specific todo based on priority and content analysis.
-    
-    This tool analyzes a todo's priority and description to suggest a reasonable deadline:
-    1. High priority tasks get shorter deadlines
-    2. Keywords like "urgent" or "tomorrow" influence the suggestion
-    3. The deadline always falls on a working day
-    
-    Args:
-        todo_id: ID of the todo to suggest a deadline for
-        
-    Returns:
-        A JSON string containing the deadline suggestion with reasoning
-    """
-    # First get the todo
-    todo_response = await get_todo(todo_id)
-    todo_data = json.loads(todo_response)
-
-    if not todo_data.get("success"):
-        return create_response(False, message=f"Failed to get todo: {todo_data.get('message', 'Unknown error')}")
-
-    todo = todo_data.get("data", {})
-
-    # Define deadline recommendations based on priority
-    priority_deadlines = {
-        "high": {"days": 2, "explanation": "High priority tasks should be completed quickly"},
-        "medium": {"days": 5, "explanation": "Medium priority tasks can be scheduled within a week"},
-        "low": {"days": 10, "explanation": "Low priority tasks can be scheduled within two weeks"},
-        "initial": {"days": 7, "explanation": "Tasks with initial priority are assumed to be medium importance"}
-    }
-
-    # Extract relevant information
-    priority = todo.get("priority", "initial")
-    description = todo.get("description", "")
-
-    # Start with the base deadline from priority
-    base_days = priority_deadlines.get(priority, {"days": 7, "explanation": "Default deadline for unknown priority"})
-    deadline_days = base_days["days"]
-    reasoning = [base_days["explanation"]]
-
-    # Analyze description for keywords that might affect deadline
-    deadline_modifiers = []
-
-    # Check for urgency indicators
-    urgency_keywords = {
-        "urgent": {"modifier": -1, "explanation": "Task description indicates urgency"},
-        "asap": {"modifier": -2, "explanation": "ASAP indicator suggests highest urgency"},
-        "emergency": {"modifier": -3, "explanation": "Emergency tasks require immediate attention"},
-        "critical": {"modifier": -2, "explanation": "Critical tasks need prompt attention"},
-        "immediate": {"modifier": -2, "explanation": "Immediate action required"}
-    }
-
-    for keyword, info in urgency_keywords.items():
-        if keyword in description.lower():
-            deadline_days = max(1, deadline_days + info["modifier"])
-            deadline_modifiers.append({"type": "urgency", "keyword": keyword, "days_changed": info["modifier"]})
-            reasoning.append(info["explanation"])
-
-    # Check for explicit timeframes
-    timeframe_patterns = {
-        "tomorrow": {"days": 1, "explanation": "Task explicitly mentions it's needed tomorrow"},
-        "next week": {"days": 7, "explanation": "Task is specifically scheduled for next week"},
-        "next month": {"days": 30, "explanation": "Task is scheduled for next month"},
-        "by end of week": {"days": 5, "explanation": "Task needs to be completed by the end of this week"},
-        "by end of day": {"days": 1, "explanation": "Task must be completed today"}
-    }
-
-    for phrase, info in timeframe_patterns.items():
-        if phrase in description.lower():
-            original_days = deadline_days
-            deadline_days = info["days"]
-            deadline_modifiers.append({
-                "type": "explicit_timeframe",
-                "keyword": phrase,
-                "days_changed": deadline_days - original_days
-            })
-            reasoning.append(info["explanation"])
-            # If we find an explicit timeframe, it overrides other considerations
-            break
-
-    # Calculate the deadline date
-    now = datetime.now(UTC)
-    deadline_date = now + timedelta(days=deadline_days)
-
-    # Ensure deadline falls on a working day (Mon-Fri)
-    weekend_adjustment = 0
-    if deadline_date.weekday() > 4:  # If it's a weekend
-        # Move to next Monday
-        days_to_monday = 7 - deadline_date.weekday()
-        deadline_date += timedelta(days=days_to_monday)
-        weekend_adjustment = days_to_monday
-        reasoning.append(f"Adjusted deadline to next business day (moved {days_to_monday} days forward)")
-
-    # Format for response
-    formatted_deadline = deadline_date.strftime("%Y-%m-%d")
-    timestamp_deadline = int(deadline_date.timestamp())
-
-    result = {
-        "todo_id": todo_id,
-        "todo_description": description[:100] + ("..." if len(description) > 100 else ""),
-        "todo_priority": priority,
-        "suggested_deadline": {
-            "date": formatted_deadline,
-            "day_of_week": deadline_date.strftime("%A"),
-            "timestamp": timestamp_deadline,
-            "days_from_now": deadline_days + weekend_adjustment
-        },
-        "reasoning": {
-            "summary": "; ".join(reasoning),
-            "base_deadline": {
-                "days": base_days["days"],
-                "explanation": base_days["explanation"]
-            },
-            "modifiers": deadline_modifiers,
-            "weekend_adjustment": weekend_adjustment
-        },
-        "possible_next_actions": ["update_todo", "mark_todo_complete", "suggest_time_slot"]
-    }
-
-    # MQTT publish as confirmation after generating a deadline suggestion
-    try:
-        mqtt_message = f"todo_id: {todo_id}, deadline: {formatted_deadline}"
-        await mqtt_publish(f"status/{os.getenv('DeNa')}/todo-server/suggest_deadline", mqtt_message)
-    except Exception as e:
-        # Log the error but don't fail the entire operation
-        print(f"MQTT publish error (non-fatal): {str(e)}")
-
-    return create_response(True, result)
-
-if __name__ == "__main__":
-    deploy_nodered_flow("Omnispindle.json")
