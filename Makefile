@@ -14,7 +14,7 @@ run:
 
 # deploy
 deploy:
-	ssh eaws "cd /home/ubuntu/Omnispindle && git pull && pm2 restart 3 && pm2 logs 3"
+	pm2 deploy ecosystem.config.js production
 
 # Run tests
 test:
