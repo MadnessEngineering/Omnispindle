@@ -22,8 +22,8 @@ module.exports = {
             ref: 'origin/prod',
             repo: 'git@github.com:danedens/omnispindle.git',
             path: '/home/ubuntu/Omnispindle',
-            'pre-deploy-local': '',
-            'post-deploy': 'realpath .',
+            'pre-deploy-local': 'whoami',
+            'post-deploy': 'pm2 restart 3 && pm2 ls',
             'pre-setup': ''
         },
         development: {
