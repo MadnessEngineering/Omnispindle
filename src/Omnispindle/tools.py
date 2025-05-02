@@ -64,8 +64,10 @@ async def add_todo(description: str, project: str, priority: str = "Medium", tar
 
     # Return optimized response with essentials only
     # Description is truncated to save context tokens while still being identifiable
-    truncated_desc = description[:30] + ("..." if len(description) > 30 else "")
-
+    if len(description) > 30:
+        truncated_desc = description[:15] + "..." + description[-15:]
+    else:
+        truncated_desc = description
     return create_response(True, {
         "todo_id": todo["id"],
         "description": truncated_desc,
