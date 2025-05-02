@@ -21,7 +21,7 @@ module.exports = {
             host: process.env.AWSIP || 'ENTER_AWS_IP_HERE',
             ref: 'origin/prod',
             repo: 'git@github.com:danedens/omnispindle.git',
-            path: '/home/ec2-user/omnispindle',
+            path: '/home/ubuntu/Omnispindle',
             'pre-deploy-local': '',
             'post-deploy': 'pip install -r requirements.txt && pm2 reload ecosystem.config.js --env production',
             'pre-setup': ''
