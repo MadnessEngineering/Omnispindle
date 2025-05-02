@@ -100,7 +100,33 @@ def register_tool_once(tool_func):
 async def add_todo_tool(description: str, project: str, priority: str = "initial", target_agent: str = "user", metadata: dict = None, ctx: Context = None) -> str:
     try:
         result = await add_todo(description, project, priority, target_agent, metadata, ctx)
-        return json.dumps(result)
+
+        # Enhance the result with AI agent hints
+        try:
+            data = json.loads(result)
+            if data.get("success") and "data" in data:
+                todo_data = data["data"]
+                # Add usage examples if not already present
+                if "ai_agent_hints" not in todo_data:
+                    todo_data["ai_agent_hints"] = {
+                        "explanation": f"Created a new '{priority}' priority todo item in project '{project}' targeted at {target_agent}.",
+                        "next_steps": [
+                            f"You can get details about this todo using get_todo_tool with todo_id: {todo_data.get('todo_id')}",
+                            f"You can suggest a deadline using suggest_deadline_tool with todo_id: {todo_data.get('todo_id')}",
+                            f"You can mark it complete using mark_todo_complete_tool with todo_id: {todo_data.get('todo_id')}"
+                        ],
+                        "response_formats": [
+                            f"I've added the task to your {project} project.",
+                            f"Your task has been created with ID: {todo_data.get('todo_id')}",
+                            f"Task added. Would you like me to suggest a deadline for this {priority} priority task?"
+                        ]
+                    }
+                data["data"] = todo_data
+                result = json.dumps(data)
+        except Exception as e:
+            print(f"Error enhancing add_todo response: {str(e)}")
+
+        return result
     except Exception as e:
         import traceback
         print(traceback.format_exc())
@@ -140,7 +166,61 @@ async def delete_todo_tool(todo_id: str, ctx: Context = None) -> str:
 
 @register_tool_once
 async def get_todo_tool(todo_id: str) -> str:
-    return await get_todo(todo_id)
+    """
+    Get detailed information about a specific todo by ID.
+    
+    The returned data includes:
+    - Todo details (description, project, priority, status)
+    - Creation and completion timestamps (if completed)
+    - Duration between creation and completion (if completed)
+    - Possible next actions based on current todo status
+    
+    Args:
+        todo_id: ID of the todo to retrieve
+        
+    Returns:
+        A JSON string containing detailed todo information with AI-friendly context
+    """
+    result = await get_todo(todo_id)
+
+    # Enhance the result with AI agent hints
+    try:
+        data = json.loads(result)
+        if data.get("success") and "data" in data:
+            todo_data = data["data"]
+
+            # Add usage examples if not already present
+            if "ai_agent_hints" not in todo_data:
+                status = todo_data.get("status", "unknown")
+                priority = todo_data.get("priority", "unknown")
+                response_formats = []
+
+                if status == "pending":
+                    response_formats = [
+                        f"This is a {priority} priority task in the {todo_data.get('project')} project. It's currently pending.",
+                        f"I found your task: \"{todo_data.get('description')}\". Would you like to mark it complete?",
+                        f"This task was created on {todo_data.get('created_at_formatted')} and is still pending."
+                    ]
+                elif status == "completed":
+                    response_formats = [
+                        f"This task was completed on {todo_data.get('completed_at_formatted')}.",
+                        f"The task took {todo_data.get('duration_formatted')} to complete from when it was created.",
+                        f"This was a {priority} priority task in the {todo_data.get('project')} project and has been completed."
+                    ]
+
+                todo_data["ai_agent_hints"] = {
+                    "explanation": f"Retrieved details for a {status} todo item with {priority} priority.",
+                    "entity_type": "todo",
+                    "status_context": "pending" if status == "pending" else "completed",
+                    "response_formats": response_formats
+                }
+
+                data["data"] = todo_data
+                result = json.dumps(data)
+    except Exception as e:
+        print(f"Error enhancing get_todo response: {str(e)}")
+
+    return result
 
 
 @register_tool_once
@@ -225,23 +305,53 @@ async def get_specific_todo_suggestions_tool(todo_id: str) -> str:
     return await get_specific_suggestions(todo_id)
 
 
-@register_tool_once
-async def suggest_deadline_tool(todo_id: str) -> str:
-    """
-    Suggest an optimal deadline for a specific todo based on priority and content analysis.
-    
-    This tool analyzes a todo's priority and description to suggest a reasonable deadline:
-    1. High priority tasks get shorter deadlines
-    2. Keywords like "urgent" or "tomorrow" influence the suggestion
-    3. The deadline always falls on a working day
-    
-    Args:
-        todo_id: ID of the todo to suggest a deadline for
-        
-    Returns:
-        A JSON string containing the deadline suggestion with reasoning
-    """
-    return await suggest_deadline(todo_id)
+# @register_tool_once
+# async def suggest_deadline_tool(todo_id: str) -> str:
+#     """
+#     Suggest an optimal deadline for a specific todo based on priority and content analysis.
+
+#     This tool analyzes a todo's priority and description to suggest a reasonable deadline:
+#     1. High priority tasks get shorter deadlines
+#     2. Keywords like "urgent" or "tomorrow" influence the suggestion
+#     3. The deadline always falls on a working day
+
+#     The returned data includes:
+#     - Suggested deadline date with reasoning
+#     - Adjustment factors that were considered
+#     - Possible next actions after setting a deadline
+
+#     Args:
+#         todo_id: ID of the todo to suggest a deadline for
+
+#     Returns:
+#         A JSON string containing the deadline suggestion with detailed reasoning
+#     """
+#     result = await suggest_deadline(todo_id)
+
+#     # Add tool-specific hints for AI agents to better understand response format
+#     try:
+#         data = json.loads(result)
+#         if data.get("success") and "data" in data:
+#             deadline_data = data["data"]
+#             # Add usage examples if not already present
+#             if "ai_agent_hints" not in deadline_data:
+#                 deadline_data["ai_agent_hints"] = {
+#                     "explanation": "This suggests a deadline of " +
+#                                   deadline_data.get("suggested_deadline", {}).get("date", "unknown") +
+#                                   " for the todo item, based on its priority and content analysis.",
+#                     "reasoning_breakdown": "The reasoning field explains how the deadline was determined, including base priority rules, keyword modifiers, and weekend adjustments.",
+#                     "response_formats": [
+#                         "I suggest completing this task by {suggested_deadline.date} ({suggested_deadline.day_of_week}), which is {suggested_deadline.days_from_now} days from now.",
+#                         "Based on this being a {todo_priority} priority task, I recommend a deadline of {suggested_deadline.date}.",
+#                         "The deadline of {suggested_deadline.date} was chosen because: {reasoning.summary}"
+#                     ]
+#                 }
+#             data["data"] = deadline_data
+#             result = json.dumps(data)
+#     except Exception as e:
+#         print(f"Error enhancing deadline response: {str(e)}")
+
+#     return result
 
 
 # @register_tool_once
