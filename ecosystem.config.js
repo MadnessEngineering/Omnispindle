@@ -23,7 +23,7 @@ module.exports = {
             repo: 'git@github.com:danedens/omnispindle.git',
             path: '/home/ubuntu/Omnispindle',
             'pre-deploy-local': '',
-            'post-deploy': 'pip install -r requirements.txt && pm2 reload ecosystem.config.js --env production',
+            'post-deploy': 'realpath .',
             'pre-setup': ''
         },
         development: {
