@@ -3,6 +3,7 @@ import logging
 from .__init__ import run_server
 
 import sys
+import shutil
 import subprocess
 
 logger = logging.getLogger(__name__)
