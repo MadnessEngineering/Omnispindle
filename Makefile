@@ -1,6 +1,6 @@
 # Makefile for FastMCP Todo Server
 
-.PHONY: install run test coverage clean
+.PHONY: install run test coverage clean status
 
 # Install dependencies
 install:
@@ -27,3 +27,9 @@ coverage:
 # Clean up __pycache__ directories
 clean:
 	find . -name "__pycache__" -exec rm -r {} +
+
+# Check status of submodules and remote PM2 processes
+status:
+	git submodule foreach "git status"
+	ssh eaws "pm2 ls"
+	ssh saws "pm2 ls"
