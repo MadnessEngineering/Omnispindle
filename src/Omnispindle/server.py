@@ -12,14 +12,39 @@ from starlette.responses import JSONResponse
 # Configure logger
 logger = logging.getLogger(__name__)
 
+
+def publish_mqtt_status(topic, message, retain=False):
+    """
+    Publish MQTT message using mosquitto_pub command line tool
+    Falls back to logging if mosquitto_pub is not available
+    
+    Args:
+        topic: MQTT topic to publish to
+        message: Message to publish (will be converted to string)
+        retain: Whether to set the retain flag
+    """
+    if not shutil.which("mosquitto_pub") is not None:
+        print(f"MQTT publishing not available - would publish {message} to {topic} (retain={retain})")
+        return False
+
+    try:
+        cmd = ["mosquitto_pub", "-h", MQTT_HOST, "-p", str(MQTT_PORT), "-t", topic, "-m", str(message)]
+        if retain:
+            cmd.append("-r")
+        subprocess.run(cmd, check=True)
+        return True
+    except subprocess.SubprocessError as e:
+        print(f"Failed to publish MQTT message: {str(e)}")
+        return False
+
+
 class Omnispindle(FastMCP):
     def __init__(self, name: str = "todo-server", server_type: str = "sse"):
         logger.info(f"Initializing Omnispindle server with name='{name}', server_type='{server_type}'")
         super().__init__(name=name, server_type=server_type)
         logger.debug("Omnispindle instance initialization complete")
-        # We don't need to create another server instance since we inherit from FastMCP
 
-    async def run_server(self, publish_mqtt_status: Callable) -> Callable:
+    async def run_server(self) -> Callable:
         """
         Run the FastMCP server and return an ASGI application.
         

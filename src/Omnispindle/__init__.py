@@ -9,8 +9,8 @@ from dotenv import load_dotenv
 from fastmcp import Context
 # Import the Omnispindle class from the server module
 from .server import Omnispindle
-from .tools import add_lesson
 # Import the tool functions from the tools module
+from .tools import add_lesson
 from .tools import add_todo
 from .tools import delete_lesson
 from .tools import delete_todo
@@ -19,13 +19,13 @@ from .tools import get_todo
 from .tools import list_lessons
 from .tools import list_todos_by_status
 from .tools import mark_todo_complete
-from .mqtt import mqtt_publish
-from .mqtt import mqtt_get
 from .tools import query_todos
 from .tools import search_lessons
 from .tools import search_todos
 from .tools import update_lesson
 from .tools import update_todo
+from .mqtt import mqtt_publish
+from .mqtt import mqtt_get
 from pymongo import MongoClient
 
 # Import the AI assistant functions (WIP)
@@ -56,32 +56,7 @@ db = mongo_client[MONGODB_DB]
 collection = db[MONGODB_COLLECTION]
 lessons_collection = db["lessons_learned"]
 server = Omnispindle()
-MOSQUITTO_PUB_AVAILABLE = shutil.which("mosquitto_pub") is not None
 
-
-def publish_mqtt_status(topic, message, retain=False):
-    """
-    Publish MQTT message using mosquitto_pub command line tool
-    Falls back to logging if mosquitto_pub is not available
-    
-    Args:
-        topic: MQTT topic to publish to
-        message: Message to publish (will be converted to string)
-        retain: Whether to set the retain flag
-    """
-    if not MOSQUITTO_PUB_AVAILABLE:
-        print(f"MQTT publishing not available - would publish {message} to {topic} (retain={retain})")
-        return False
-
-    try:
-        cmd = ["mosquitto_pub", "-h", MQTT_HOST, "-p", str(MQTT_PORT), "-t", topic, "-m", str(message)]
-        if retain:
-            cmd.append("-r")
-        subprocess.run(cmd, check=True)
-        return True
-    except subprocess.SubprocessError as e:
-        print(f"Failed to publish MQTT message: {str(e)}")
-        return False
 
 
 # Modify tool registration to prevent duplicates
@@ -387,4 +362,4 @@ async def run_server() -> Callable:
         will be returned that properly handles requests with appropriate error responses.
     """
     # Register all the tools with the server
-    return await server.run_server(publish_mqtt_status)
+    return await server.run_server()
