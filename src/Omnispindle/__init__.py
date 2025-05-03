@@ -99,16 +99,27 @@ def register_tool_once(tool_func):
 
 @register_tool_once
 async def add_todo_tool(description: str, project: str, priority: str = "Medium", target_agent: str = "user", metadata: dict = None, ctx: Context = None) -> str:
+    """
+    Create todo.
+    
+    description: Task description text
+    project: Category name
+    priority: "Low"|"Medium"|"High" (default: Medium)
+    target_agent: Who should complete this (default: user)
+    metadata: Optional extra data dict
+    
+    → Returns: {todo_id, description, project, next_actions}
+    """
     try:
         result = await add_todo(description, project, priority, target_agent, metadata, ctx)
-        
+
         # Enhance the result with minimal but effective AI agent hints
         try:
             data = json.loads(result)
             if data.get("success") and "data" in data:
                 todo_data = data["data"]
                 todo_id = todo_data.get("todo_id")
-                
+
                 # Add simplified agent hints directly in the data object
                 todo_data["ai_hints"] = {
                     "summary": f"Created {priority} task in {project}",
@@ -124,7 +135,7 @@ async def add_todo_tool(description: str, project: str, priority: str = "Medium"
                 result = json.dumps(data)
         except Exception as e:
             print(f"Error enhancing add_todo response: {str(e)}")
-        
+
         return result
     except Exception as e:
         import traceback
@@ -134,22 +145,55 @@ async def add_todo_tool(description: str, project: str, priority: str = "Medium"
 
 @register_tool_once
 async def query_todos_tool(filter: dict = None, projection: dict = None, limit: int = 100) -> str:
+    """
+    Query todos with filters.
+    
+    filter: MongoDB query dict (e.g. {"status": "pending"})
+    projection: Fields to include/exclude
+    limit: Max results (default: 100)
+    
+    → Returns: {count, items[{id, description, project, status, priority}]}
+    """
     result = await query_todos(filter, projection, limit)
     return json.dumps(result, default=str)
 
 
 @register_tool_once
 async def update_todo_tool(todo_id: str, updates: dict, ctx: Context = None) -> str:
+    """
+    Update todo.
+    
+    todo_id: ID of todo to update
+    updates: Fields to change {field: new_value}
+    
+    → Returns: {success, message}
+    """
     return await update_todo(todo_id, updates, ctx)
 
 
 @register_tool_once
 async def mqtt_publish_tool(topic: str, message: str, ctx: Context = None, retain: bool = False) -> str:
+    """
+    Publish MQTT message.
+    
+    topic: Topic path to publish to
+    message: Content to send
+    retain: Keep for new subscribers (default: false)
+    
+    → Returns: {success, message?}
+    """
     return await mqtt_publish(topic, message, ctx, retain)
 
 
 @register_tool_once
 async def mqtt_get_tool(topic: str) -> str:
+    """
+    Get latest MQTT message.
+    
+    topic: Topic to retrieve from
+    
+    → Returns: {success, data (or message if error)}
+    """
     result = await mqtt_get(topic)
     return json.dumps({
         "success": result is not None,
@@ -160,29 +204,37 @@ async def mqtt_get_tool(topic: str) -> str:
 
 @register_tool_once
 async def delete_todo_tool(todo_id: str, ctx: Context = None) -> str:
+    """
+    Delete todo.
+    
+    todo_id: ID of todo to remove
+    
+    → Returns: {success, message}
+    """
     return await delete_todo(todo_id, ctx)
 
 
 @register_tool_once
 async def get_todo_tool(todo_id: str) -> str:
     """
-    Get information about a specific todo by ID.
+    Get todo details.
     
-    Returns:
-        A JSON string containing todo information with minimal but effective AI context
+    todo_id: ID of todo to retrieve
+    
+    → Returns: {id, description, project, status, priority, target, created, [completed, duration]}
     """
     result = await get_todo(todo_id)
-    
+
     # Optimize the result with focused AI agent hints
     try:
         data = json.loads(result)
         if data.get("success") and "data" in data:
             todo_data = data["data"]
-            
+
             # Add compact AI hints
             status = todo_data.get("status", "unknown")
             priority = todo_data.get("priority", "unknown")
-            
+
             # Use a concise hint format
             todo_data["ai_hints"] = {
                 "status": status,
@@ -191,63 +243,133 @@ async def get_todo_tool(todo_id: str) -> str:
                     f"Task is {status}"
                 ]
             }
-            
+
             # Only add next actions if task is actionable
             if status in ["initial", "pending"]:
                 todo_data["next"] = ["update", "complete", "delete"]
-            
+
             data["data"] = todo_data
             result = json.dumps(data)
     except Exception as e:
         print(f"Error optimizing get_todo response: {str(e)}")
-    
+
     return result
 
 
 @register_tool_once
 async def mark_todo_complete_tool(todo_id: str, ctx: Context = None) -> str:
+    """
+    Complete todo.
+    
+    todo_id: ID of todo to mark completed
+    
+    → Returns: {todo_id, completed_at}
+    """
     return await mark_todo_complete(todo_id, ctx)
 
 
 @register_tool_once
 async def list_todos_by_status_tool(status: str, limit: int = 100) -> str:
+    """
+    List todos by status.
+    
+    status: Filter value ("initial"|"pending"|"completed")
+    limit: Max results (default: 100)
+    
+    → Returns: {count, status, items[{id, desc, project}], projects?}
+    """
     return await list_todos_by_status(status, limit)
 
 
 @register_tool_once
 async def add_lesson_tool(language: str, topic: str, lesson_learned: str, tags: list = None, ctx: Context = None) -> str:
+    """
+    Create lesson.
+    
+    language: Technology or language name
+    topic: Brief title/subject
+    lesson_learned: Full lesson content
+    tags: Optional categorization tags
+    
+    → Returns: {lesson_id, topic}
+    """
     return await add_lesson(language, topic, lesson_learned, tags, ctx)
 
 
 @register_tool_once
 async def get_lesson_tool(lesson_id: str) -> str:
+    """
+    Get lesson details.
+    
+    lesson_id: ID of lesson to retrieve
+    
+    → Returns: {id, language, topic, lesson_learned, tags, created}
+    """
     return await get_lesson(lesson_id)
 
 
 @register_tool_once
 async def update_lesson_tool(lesson_id: str, updates: dict, ctx: Context = None) -> str:
+    """
+    Update lesson.
+    
+    lesson_id: ID of lesson to update
+    updates: Fields to change {field: new_value}
+    
+    → Returns: {success, message}
+    """
     return await update_lesson(lesson_id, updates, ctx)
 
 
 @register_tool_once
 async def delete_lesson_tool(lesson_id: str, ctx: Context = None) -> str:
+    """
+    Delete lesson.
+    
+    lesson_id: ID of lesson to remove
+    
+    → Returns: {success, message}
+    """
     return await delete_lesson(lesson_id, ctx)
 
 
 @register_tool_once
 async def list_lessons_tool(limit: int = 100) -> str:
+    """
+    List all lessons.
+    
+    limit: Max results (default: 100)
+    
+    → Returns: {count, items[{id, language, topic, tags, preview}]}
+    """
     return await list_lessons(limit)
 
 
 @register_tool_once
 async def search_todos_tool(query: str, fields: list = None, limit: int = 100) -> str:
-    """Search todos with text search capabilities"""
+    """
+    Search todos by text.
+    
+    query: Text to search for
+    fields: Fields to search in (default: ["description"])
+    limit: Max results (default: 100)
+    
+    → Returns: {count, query, matches[{id, description, project, status}]}
+    """
     return await search_todos(query, fields, limit)
 
 
 @register_tool_once
 async def search_lessons_tool(query: str, fields: list = None, limit: int = 100) -> str:
-    """Search lessons with text search capabilities"""
+    """
+    Search lessons by text.
+    
+    query: Text to search for
+    fields: Fields to search in (default: ["topic", "lesson_learned"])
+    limit: Max results (default: 100)
+    
+    → Returns: {count, query, matches[{id, language, topic, preview, tags}]}
+    """
     return await search_lessons(query, fields, limit)
 
 

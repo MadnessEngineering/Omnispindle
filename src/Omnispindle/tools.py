@@ -29,7 +29,26 @@ lessons_collection = db["lessons_learned"]
 
 
 async def add_todo(description: str, project: str, priority: str = "Medium", target_agent: str = "user", metadata: dict = None, ctx: Context = None) -> str:
-    """Add a new todo item to the database"""
+    """
+    Create a new todo item.
+    
+    Creates a task in the specified project with the given priority and target agent.
+    Returns a compact representation of the created todo with an ID for reference.
+    
+    Parameters:
+        description: Content of the todo item (task description)
+        project: Project identifier (organizing category for the task)
+        priority: Priority level [Low, Medium, High] (default: Medium)
+        target_agent: Entity responsible for completing the task (default: user)
+        metadata: Optional additional structured data for the todo
+    
+    Returns:
+        JSON containing:
+        - todo_id: Unique identifier for the created todo
+        - description: Truncated task description
+        - project: The project name
+        - next_actions: Available actions for this todo
+    """
     todo = {
         "id": str(uuid.uuid4()),
         "description": description,
@@ -76,7 +95,23 @@ async def add_todo(description: str, project: str, priority: str = "Medium", tar
     })
 
 async def query_todos(filter: dict = None, project: dict = None, limit: int = 100, ctx=None) -> str:
-    """Query todos with optional filtering and project"""
+    """
+    Query todos with flexible filtering options.
+    
+    Searches the todo database using MongoDB-style query filters and projections.
+    Returns a collection of todos matching the filter criteria.
+    
+    Parameters:
+        filter: MongoDB-style query object to filter todos (e.g., {"status": "pending"})
+        project: Fields to include/exclude in results (e.g., {"description": 1})
+        limit: Maximum number of todos to return (default: 100)
+        
+    Returns:
+        JSON containing:
+        - count: Number of todos found
+        - items: Array of matching todos with essential fields
+        - projects: List of unique projects in the results (if multiple exist)
+    """
     # Find matching todos first
     cursor = collection.find(
         filter or {},
@@ -109,7 +144,20 @@ async def query_todos(filter: dict = None, project: dict = None, limit: int = 10
     return create_response(True, summary)
 
 async def update_todo(todo_id: str, updates: dict, ctx: Context = None) -> str:
-    """Update an existing todo by ID"""
+    """
+    Update an existing todo by ID.
+    
+    Modifies specified fields of a todo item. Common fields to update include 
+    status, priority, description, and project.
+    
+    Parameters:
+        todo_id: Unique identifier of the todo to update
+        updates: Dictionary of fields to update and their new values
+        ctx: Optional context for logging
+        
+    Returns:
+        JSON with success status and confirmation message
+    """
     result = collection.update_one({"id": todo_id}, {"$set": updates})
 
     if result.modified_count == 0:
@@ -132,7 +180,19 @@ async def update_todo(todo_id: str, updates: dict, ctx: Context = None) -> str:
     return create_response(True, message=f"Todo {todo_id} updated successfully")
 
 async def delete_todo(todo_id: str, ctx: Context = None) -> str:
-    """Delete a todo by ID"""
+    """
+    Delete a todo by ID.
+    
+    Permanently removes a todo item from the database.
+    This action cannot be undone.
+    
+    Parameters:
+        todo_id: Unique identifier of the todo to delete
+        ctx: Optional context for logging
+        
+    Returns:
+        JSON with success status and confirmation message
+    """
     result = collection.delete_one({"id": todo_id})
 
     if result.deleted_count == 0:
@@ -155,7 +215,27 @@ async def delete_todo(todo_id: str, ctx: Context = None) -> str:
     return create_response(True, message=f"Todo {todo_id} deleted")
 
 async def get_todo(todo_id: str) -> str:
-    """Get a specific todo by ID"""
+    """
+    Get a specific todo by ID.
+    
+    Retrieves detailed information about a todo item including its 
+    description, status, priority, and creation/completion information.
+    
+    Parameters:
+        todo_id: Unique identifier of the todo to retrieve
+        
+    Returns:
+        JSON containing the todo's details with fields:
+        - id: Unique identifier
+        - description: Full task description
+        - project: Project category 
+        - status: Current status (initial, pending, completed)
+        - priority: Task priority
+        - target: Entity responsible for the task
+        - created: Creation timestamp
+        - completed: Completion timestamp (if applicable)
+        - duration: Time between creation and completion (if applicable)
+    """
     todo = collection.find_one({"id": todo_id})
 
     if todo is None:
@@ -181,11 +261,26 @@ async def get_todo(todo_id: str) -> str:
 
     # MQTT publish without try/except to reduce code verbosity
     await mqtt_publish(f"status/{os.getenv('DeNa')}/omnispindle/get_todo", f"todo_id: {todo_id}")
-    
+
     return create_response(True, formatted_todo)
 
 async def mark_todo_complete(todo_id: str, ctx: Context = None) -> str:
-    """Mark a todo as completed"""
+    """
+    Mark a todo as completed.
+    
+    Updates a todo's status to 'completed' and records the completion timestamp.
+    This allows tracking of when tasks were completed and calculating the 
+    duration between creation and completion.
+    
+    Parameters:
+        todo_id: Unique identifier of the todo to mark as complete
+        ctx: Optional context for logging
+        
+    Returns:
+        JSON with success status and completion information:
+        - todo_id: The ID of the completed todo
+        - completed_at: Formatted timestamp of when the todo was marked complete
+    """
     completed_time = int(datetime.now(UTC).timestamp())
 
     result = collection.update_one(
@@ -216,7 +311,24 @@ async def mark_todo_complete(todo_id: str, ctx: Context = None) -> str:
     })
 
 async def list_todos_by_status(status: str, limit: int = 100) -> str:
-    """List todos by their status"""
+    """
+    List todos filtered by status.
+    
+    Retrieves a collection of todos with the specified status.
+    Common status values: 'initial', 'pending', 'completed'.
+    Results are formatted for efficiency with truncated descriptions.
+    
+    Parameters:
+        status: Status value to filter by
+        limit: Maximum number of todos to return (default: 100)
+        
+    Returns:
+        JSON containing:
+        - count: Number of todos found
+        - status: The status that was queried
+        - items: Array of matching todos (with truncated descriptions)
+        - projects: List of unique projects (only included if multiple exist)
+    """
     cursor = collection.find(
         {"status": status},
         limit=limit
@@ -229,7 +341,7 @@ async def list_todos_by_status(status: str, limit: int = 100) -> str:
         "status": status,
         "items": []
     }
-    
+
     # Track unique projects (often useful for AI agents)
     unique_projects = set()
 
@@ -237,7 +349,7 @@ async def list_todos_by_status(status: str, limit: int = 100) -> str:
     for todo in results:
         project = todo.get("project", "unspecified")
         unique_projects.add(project)
-        
+
         # Use concise format for list items to save tokens
         summary["items"].append({
             "id": todo["id"],
@@ -248,15 +360,30 @@ async def list_todos_by_status(status: str, limit: int = 100) -> str:
     # Only add projects if there are multiple (otherwise it's not useful info)
     if len(unique_projects) > 1:
         summary["projects"] = list(unique_projects)
-        
+
     # Publish MQTT status with minimal error handling
-    await mqtt_publish(f"status/{os.getenv('DeNa')}/omnispindle/list_todos_by_status", 
+    await mqtt_publish(f"status/{os.getenv('DeNa')}/omnispindle/list_todos_by_status",
                       f"status: {status}, limit: {limit}, found: {len(results)}")
 
     return create_response(True, summary)
 
 async def add_lesson(language: str, topic: str, lesson_learned: str, tags: list = None, ctx: Context = None) -> str:
-    """Add a lesson learned"""
+    """
+    Add a new lesson learned.
+    
+    Records knowledge or experiences in a structured format for future reference.
+    Lessons are used to document important discoveries, solutions, or techniques.
+    
+    Parameters:
+        language: Programming language or technology related to the lesson
+        topic: Brief subject/title of the lesson
+        lesson_learned: Detailed content describing what was learned
+        tags: Optional list of keyword tags for categorization
+        ctx: Optional context for logging
+        
+    Returns:
+        JSON with success status and the created lesson's ID and topic
+    """
     lesson = {
         "id": str(uuid.uuid4()),
         "language": language,
@@ -279,7 +406,24 @@ async def add_lesson(language: str, topic: str, lesson_learned: str, tags: list 
     return create_response(True, {"lesson_id": lesson["id"], "topic": topic})
 
 async def get_lesson(lesson_id: str) -> str:
-    """Get a specific lesson by ID"""
+    """
+    Get a specific lesson by ID.
+    
+    Retrieves detailed information about a previously recorded lesson.
+    Includes the full content of the lesson and all associated metadata.
+    
+    Parameters:
+        lesson_id: Unique identifier of the lesson to retrieve
+        
+    Returns:
+        JSON containing the lesson's details with fields:
+        - id: Unique identifier
+        - language: Programming language or technology 
+        - topic: Subject or title
+        - lesson_learned: Full content
+        - tags: Categorization tags
+        - created: Formatted creation date
+    """
     lesson = lessons_collection.find_one({"id": lesson_id})
 
     if lesson is None:
@@ -306,7 +450,20 @@ async def get_lesson(lesson_id: str) -> str:
     return create_response(True, formatted_lesson)
 
 async def update_lesson(lesson_id: str, updates: dict, ctx: Context = None) -> str:
-    """Update an existing lesson by ID"""
+    """
+    Update an existing lesson by ID.
+    
+    Modifies specified fields of a lesson. Common fields to update include
+    topic, lesson_learned content, and tags.
+    
+    Parameters:
+        lesson_id: Unique identifier of the lesson to update
+        updates: Dictionary of fields to update and their new values
+        ctx: Optional context for logging
+        
+    Returns:
+        JSON with success status and confirmation message
+    """
     result = lessons_collection.update_one({"id": lesson_id}, {"$set": updates})
     if result.modified_count == 0:
         return create_response(False, message="Lesson not found")
@@ -322,7 +479,19 @@ async def update_lesson(lesson_id: str, updates: dict, ctx: Context = None) -> s
     return create_response(True, message=f"Lesson {lesson_id} updated successfully")
 
 async def delete_lesson(lesson_id: str, ctx: Context = None) -> str:
-    """Delete a lesson by ID"""
+    """
+    Delete a lesson by ID.
+    
+    Permanently removes a lesson from the database.
+    This action cannot be undone.
+    
+    Parameters:
+        lesson_id: Unique identifier of the lesson to delete
+        ctx: Optional context for logging
+        
+    Returns:
+        JSON with success status and confirmation message
+    """
     result = lessons_collection.delete_one({"id": lesson_id})
 
     if result.deleted_count == 0:
@@ -339,7 +508,25 @@ async def delete_lesson(lesson_id: str, ctx: Context = None) -> str:
     return create_response(True, message=f"Lesson {lesson_id} deleted")
 
 async def list_lessons(limit: int = 100) -> str:
-    """List all lessons learned"""
+    """
+    List all lessons learned.
+    
+    Retrieves a collection of lessons with preview content.
+    Each lesson includes a truncated preview of its content to reduce response size.
+    
+    Parameters:
+        limit: Maximum number of lessons to return (default: 100)
+        
+    Returns:
+        JSON containing:
+        - count: Number of lessons found
+        - items: Array of lessons with preview content, including:
+          - id: Lesson identifier
+          - language: Programming language or technology
+          - topic: Subject or title
+          - tags: List of categorization tags
+          - preview: Truncated content preview
+    """
     cursor = lessons_collection.find(limit=limit)
     results = list(cursor)
 
@@ -370,7 +557,27 @@ async def list_lessons(limit: int = 100) -> str:
     return create_response(True, summary)
 
 async def search_todos(query: str, fields: list = None, limit: int = 100) -> str:
-    """Search todos using text search on specified fields"""
+    """
+    Search todos with text search capabilities.
+    
+    Performs a case-insensitive text search across specified fields in todos.
+    Uses regex pattern matching to find todos matching the query string.
+    
+    Parameters:
+        query: Text string to search for
+        fields: List of fields to search in (default: ["description"])
+        limit: Maximum number of todos to return (default: 100)
+        
+    Returns:
+        JSON containing:
+        - count: Number of matching todos
+        - query: The search query that was used
+        - matches: Array of todos matching the search criteria with fields:
+          - id: Todo identifier
+          - description: Truncated task description
+          - project: Project category
+          - status: Current status
+    """
     if not fields:
         fields = ["description"]
 
@@ -415,7 +622,28 @@ async def search_todos(query: str, fields: list = None, limit: int = 100) -> str
     return create_response(True, summary)
 
 async def search_lessons(query: str, fields: list = None, limit: int = 100) -> str:
-    """Search lessons using text search on specified fields"""
+    """
+    Search lessons with text search capabilities.
+    
+    Performs a case-insensitive text search across specified fields in lessons.
+    Uses regex pattern matching to find lessons matching the query string.
+    
+    Parameters:
+        query: Text string to search for
+        fields: List of fields to search in (default: ["topic", "lesson_learned"])
+        limit: Maximum number of lessons to return (default: 100)
+        
+    Returns:
+        JSON containing:
+        - count: Number of matching lessons
+        - query: The search query that was used
+        - matches: Array of lessons matching the search criteria with fields:
+          - id: Lesson identifier
+          - language: Programming language or technology 
+          - topic: Subject or title
+          - preview: Truncated content preview
+          - tags: Categorization tags
+    """
     if not fields:
         fields = ["topic", "lesson_learned"]
 
