@@ -7,6 +7,7 @@ from typing import Any
 from typing import Any
 from typing import Dict
 from typing import List
+from fastmcp import Context
 
 MQTT_HOST = os.getenv("AWSIP", "localhost")
 MQTT_PORT = int(os.getenv("AWSPORT", 3003))

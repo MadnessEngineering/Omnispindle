@@ -23,7 +23,7 @@ module.exports = {
             repo: 'git@github.com:danedens/omnispindle.git',
             path: '/home/ubuntu/Omnispindle',
             'pre-deploy-local': 'whoami',
-            'post-deploy': 'pm2 restart Omnispindle && post status/$DeNa/omnispindle/deploy $(git rev-parse HEAD)',
+            'post-deploy': 'pm2 restart Omnispindle',
             'pre-setup': ''
         },
         development: {
