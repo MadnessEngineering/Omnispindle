@@ -1,0 +1,106 @@
+---
+description:
+globs:
+alwaysApply: false
+---
+# Todomill Dashboard Code Patterns
+
+## UI Templates
+
+### HTML Template Structure
+UI Templates in this project combine HTML, JavaScript, and CSS in a single file:
+
+```html
+<div ng-init="init()">
+    <!-- HTML markup here -->
+</div>
+
+<script>
+    (function(scope) {
+        // JavaScript initialization and event handlers
+        scope.init = function() {
+            // Setup code
+        };
+
+        // Event handlers and utility functions
+    })(scope);
+</script>
+
+<style>
+    /* CSS styles */
+</style>
+```
+
+### Message Passing Pattern
+UI components communicate with Node-RED flows via `$scope.$emit`:
+
+```javascript
+scope.$emit('todo', {
+    topic: 'todo/action/update',
+    payload: {
+        id: todoId,
+        updates: changes
+    }
+});
+```
+
+## JavaScript Function Nodes
+
+Function nodes follow this pattern:
+
+```javascript
+// Comments explaining purpose
+const msg = RED.util.cloneMessage(msg);
+
+// Processing logic
+// ...
+
+// Sending multiple outputs (if needed)
+return [msg1, msg2]; // Or just return msg;
+```
+
+### MongoDB Integration
+MongoDB queries follow these patterns:
+
+1. **Find operation**:
+```javascript
+msg.operation = "find";
+msg.collection = "todos";
+msg.query = { status: "pending" };
+msg.options = {
+    sort: { created: -1 },
+    limit: 50
+};
+```
+
+2. **Update operation**:
+```javascript
+msg.operation = "update";
+msg.collection = "todos";
+msg.query = { _id: msg.payload.id };
+msg.update = {
+    $set: msg.payload.updates
+};
+msg.options = { returnUpdatedDocs: true };
+```
+
+### Message Routing
+Messages are routed based on topic:
+
+```
+todo/action/get -> Find specific todo
+todo/action/list -> List todos by criteria
+todo/action/update -> Update todo fields
+todo/action/create -> Create new todo
+todo/action/delete -> Delete a todo
+todo/action/complete -> Mark todo as completed
+```
+
+Response topics follow this pattern:
+```
+todo/dashboard/todo-list -> Updates the todo list view
+todo/dashboard/edit-view -> Updates the edit view
+todo/dashboard/notify -> Shows notification message
+```
+
+Remember that error handling is primarily done through try/catch blocks passing error messages in `msg.error` properties.
