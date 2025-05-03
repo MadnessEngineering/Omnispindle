@@ -9,9 +9,10 @@ import logging
 from dotenv import load_dotenv
 from fastmcp import Context
 from pymongo import MongoClient
-from src.Omnispindle import mqtt_publish
-from src.Omnispindle.utils import _format_duration
-from src.Omnispindle.utils import create_response
+
+from .mqtt import mqtt_publish
+from .utils import _format_duration
+from .utils import create_response
 
 # Load environment variables
 load_dotenv()
