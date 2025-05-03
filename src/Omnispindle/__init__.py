@@ -19,8 +19,8 @@ from .tools import get_todo
 from .tools import list_lessons
 from .tools import list_todos_by_status
 from .tools import mark_todo_complete
-from .utils import mqtt_publish
-from .utils import mqtt_get
+from .mqtt import mqtt_publish
+from .mqtt import mqtt_get
 from .tools import query_todos
 from .tools import search_lessons
 from .tools import search_todos
