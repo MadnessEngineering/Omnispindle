@@ -1,0 +1,192 @@
+---
+description:
+globs:
+alwaysApply: false
+---
+# MCP Todo Server Integration Guide
+
+## Overview
+
+This project integrates with an MCP (Master Control Program) Todo Server for task management. The MCP Todo Server provides a central repository for tasks and allows AI agents to interact with the task list.
+
+## Todo Item Structure
+
+Each todo item follows this structure:
+
+```python
+{
+    "todo_id": "unique-identifier",
+    "description": "Task description text",
+    "project": "Project category name",
+    "status": "initial" | "pending" | "completed",
+    "priority": "Low" | "Medium" | "High",
+    "created": timestamp,  # Unix timestamp of creation time
+    "completed": timestamp,  # Unix timestamp when completed (if applicable)
+    "target_agent": "user" | "AI assistant name",
+    "metadata": {  # Optional additional fields
+        "key": "value"
+    }
+}
+```
+
+## Using MCP Todo API
+
+### Python Client
+
+```python
+from omnispindle import mcp_todo_client
+
+# Create a new todo
+new_todo = mcp_todo_client.add_todo(
+    description="Implement new feature",
+    project="omnispindle",
+    priority="Medium",
+    target_agent="user"
+)
+
+# Get a todo by ID
+todo = mcp_todo_client.get_todo(todo_id="unique-identifier")
+
+# Update a todo
+mcp_todo_client.update_todo(
+    todo_id="unique-identifier",
+    updates={"status": "completed"}
+)
+
+# List todos by status
+pending_todos = mcp_todo_client.list_todos_by_status(status="pending")
+
+# Mark todo complete
+mcp_todo_client.mark_todo_complete(todo_id="unique-identifier")
+
+# Delete a todo
+mcp_todo_client.delete_todo(todo_id="unique-identifier")
+```
+
+### JavaScript Client (Node-RED)
+
+```javascript
+// Create a new todo
+msg.payload = {
+    description: "Implement new feature",
+    project: "omnispindle",
+    priority: "Medium",
+    target_agent: "user"
+};
+msg.topic = "mcp/todo/add";
+return msg;
+
+// Update a todo
+msg.payload = {
+    todo_id: "unique-identifier",
+    updates: {
+        status: "completed"
+    }
+};
+msg.topic = "mcp/todo/update";
+return msg;
+
+// Get a todo
+msg.payload = {
+    todo_id: "unique-identifier"
+};
+msg.topic = "mcp/todo/get";
+return msg;
+```
+
+## Development Workflow with MCP Todo
+
+### Creating Task-Driven Workflows
+
+1. **Create Todo Items for Features**:
+   ```bash
+   # CLI example
+   python -m omnispindle.cli todo add --description "Implement feature X" --project "omnispindle" --priority "High"
+   ```
+
+2. **Link Todos to Git Commits**:
+   ```bash
+   # Include todo ID in commit message
+   git commit -m "feat: Implement feature X (todo: abcd1234)"
+   ```
+
+3. **Update Todo Status During Development**:
+   ```python
+   # Mark as in-progress when starting
+   mcp_todo_client.update_todo(todo_id="abcd1234", updates={"status": "pending"})
+
+   # Mark as completed when done
+   mcp_todo_client.mark_todo_complete(todo_id="abcd1234")
+   ```
+
+### AI Assistance for Todos
+
+AI agents can:
+1. Create new todos for planned work
+2. Update todos as they make progress
+3. Complete todos when finished
+4. Add notes with implementation details
+
+Example AI-assisted workflow:
+```python
+# AI creates a todo
+todo_id = mcp_todo_client.add_todo(
+    description="Refactor authentication module",
+    project="omnispindle",
+    priority="Medium",
+    target_agent="GPT-4"
+)
+
+# AI updates the todo with implementation notes
+mcp_todo_client.update_todo(
+    todo_id=todo_id,
+    updates={
+        "notes": "Split authentication.py into auth_providers.py and auth_handlers.py"
+    }
+)
+
+# AI marks todo as complete when done
+mcp_todo_client.mark_todo_complete(todo_id=todo_id)
+```
+
+## Integrating with Other Systems
+
+### GitHub Issues Sync
+
+Sync MCP todos with GitHub issues:
+```python
+# Create GitHub issue from todo
+gh_issue = create_github_issue_from_todo(todo_id)
+
+# Update todo with GitHub issue number
+mcp_todo_client.update_todo(
+    todo_id=todo_id,
+    updates={"metadata": {"github_issue": gh_issue.number}}
+)
+```
+
+### Jira Integration
+
+Sync MCP todos with Jira tickets:
+```python
+# Create Jira ticket from todo
+jira_key = create_jira_ticket_from_todo(todo_id)
+
+# Update todo with Jira key
+mcp_todo_client.update_todo(
+    todo_id=todo_id,
+    updates={"metadata": {"jira_key": jira_key}}
+)
+```
+
+## Best Practices
+
+1. Always create a todo item before starting work on a feature
+2. Update todo status as you progress
+3. Include todo IDs in commit messages
+4. Use descriptive todo descriptions
+5. Assign todos to the appropriate target (human or AI)
+6. Add detailed notes to todos for complex tasks
+7. Regularly clean up completed todos
+
+Remember that the MCP Todo Server provides a single source of truth for development tasks and helps coordinate work between humans and AI agents.
