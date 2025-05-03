@@ -3,6 +3,9 @@ import os
 import signal
 import sys
 import asyncio
+import shutil
+import subprocess
+
 from typing import Callable, Dict, Any, Optional
 from fastmcp.server import FastMCP
 import uvicorn
