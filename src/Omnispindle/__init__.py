@@ -19,14 +19,14 @@ from .tools import get_todo
 from .tools import list_lessons
 from .tools import list_todos_by_status
 from .tools import mark_todo_complete
+from .utils import mqtt_publish
+from .utils import mqtt_get
 from .tools import query_todos
 from .tools import search_lessons
 from .tools import search_todos
 from .tools import update_lesson
 from .tools import update_todo
 from pymongo import MongoClient
-# Use mqtt_handler instead of utils for MQTT functions
-from .mqtt_handler import mqtt_publish, mqtt_get
 
 # Import the AI assistant functions (WIP)
 # from .ai_assistant import get_todo_suggestions
@@ -182,7 +182,6 @@ async def mqtt_publish_tool(topic: str, message: str, ctx: Context = None, retai
     
     → Returns: {success, message?}
     """
-    # Use the imported mqtt_publish function directly
     return await mqtt_publish(topic, message, ctx, retain)
 
 
@@ -195,7 +194,6 @@ async def mqtt_get_tool(topic: str) -> str:
     
     → Returns: {success, data (or message if error)}
     """
-    # Use the imported mqtt_get function directly
     result = await mqtt_get(topic)
     return json.dumps({
         "success": result is not None,

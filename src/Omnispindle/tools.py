@@ -9,7 +9,7 @@ import logging
 from dotenv import load_dotenv
 from fastmcp import Context
 from pymongo import MongoClient
-from .mqtt_handler import mqtt_publish
+from src.Omnispindle import mqtt_publish
 from src.Omnispindle.utils import _format_duration
 from src.Omnispindle.utils import create_response
 

@@ -7,6 +7,7 @@ from typing import Any
 from typing import Any
 from typing import Dict
 from typing import List
+from fastmcp import Context
 
 MQTT_HOST = os.getenv("AWSIP", "localhost")
 MQTT_PORT = int(os.getenv("AWSPORT", 3003))
@@ -145,7 +146,7 @@ def _should_add_context(data: Any) -> bool:
     return False
 
 
-async def mqtt_publish(topic: str, message: str, ctx=None, retain: bool = False) -> bool:
+async def mqtt_publish(topic: str, message: str, ctx: Context = None, retain: bool = False) -> bool:
     """Publish a message to the specified MQTT topic"""
     try:
         cmd = ["mosquitto_pub", "-h", MQTT_HOST, "-p", str(MQTT_PORT), "-t", topic, "-m", str(message)]
