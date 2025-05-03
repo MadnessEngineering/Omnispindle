@@ -1,9 +1,7 @@
 import asyncio
 import logging
-from .server import server
-from .__init__ import run_server, MOSQUITTO_PUB_AVAILABLE
 import sys
-import subprocess
+from .bootstrap import bootstrap, MOSQUITTO_PUB_AVAILABLE
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +17,7 @@ def main():
         print("  Windows: Download from https://mosquitto.org/download/")
 
     try:
-        asyncio.run(run_server())
+        asyncio.run(bootstrap())
     except KeyboardInterrupt:
         # KeyboardInterrupt will now be handled by the signal handler in run_server
         print("Shutting down server")
