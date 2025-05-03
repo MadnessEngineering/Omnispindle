@@ -14,6 +14,8 @@ from starlette.responses import JSONResponse
 
 # Configure logger
 logger = logging.getLogger(__name__)
+MQTT_HOST = os.getenv("MQTT_HOST", "localhost")
+MQTT_PORT = int(os.getenv("MQTT_PORT", 1883))
 
 
 def publish_mqtt_status(topic, message, retain=False):
