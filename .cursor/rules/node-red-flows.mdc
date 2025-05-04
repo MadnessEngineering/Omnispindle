@@ -1,12 +1,20 @@
 ---
-description:
-globs:
+description: 
+globs: 
 alwaysApply: false
 ---
 # Node-RED Flow Structure Guide
 
 ## Overview
 This project contains Node-RED flows that implement a Todo management dashboard with MongoDB integration. The flows are stored as JSON files in the `Todomill_projectorium/ExportedNodeRedTabs/` directory.
+
+## Working with the Codebase
+
+### Development Workflow
+- **Focus on HTML and JavaScript files**: Make changes only to the HTML (ui_template nodes) or JavaScript (function nodes) files in the `JavascriptFromFunctionNode/` and `HtmlFromTemplateNode/` directories
+- **Deployment process**: After code changes, the new code should be deployed through the Node-RED GUI
+- **JSON files are for verification**: The exported JSON files are only for verification purposes after changes are deployed
+- **Do not edit JSON directly**: Unless specifically asked, avoid editing the JSON flow files directly
 
 ## Key Components
 
@@ -37,7 +45,9 @@ UI Action → Router → Function Processor → MongoDB → Response Handler →
 ```
 
 ### Key Files
-- `todo-dash-masterfile.json`: Main dashboard flow
+- `JavascriptFromFunctionNode/*.js`: JavaScript code for function nodes
+- `HtmlFromTemplateNode/*.html`: HTML templates for UI components
+- `todo-dash-masterfile.json`: Main dashboard flow (for reference only)
 - `TodoEdit.html`: Template for editing todo items
 - `EditActions.js`: Routes edit actions to appropriate handlers
 
@@ -45,5 +55,11 @@ UI Action → Router → Function Processor → MongoDB → Response Handler →
 - Topics beginning with `todo/action/` trigger server-side operations
 - Topics beginning with `todo/dashboard/` send data to UI components
 - MongoDB operations use specific formatting based on mongodb4 node requirements
+
+## MongoDB Response Format Handling
+- The system is designed to handle both old and new MongoDB response formats
+- Old format: `{result: {ok: 1, nModified: 1, n: 1}}`
+- New format: `{acknowledged: true, modifiedCount: 1, matchedCount: 1}`
+- Response handlers check for both formats to ensure compatibility
 
 When working with this codebase, be aware that paths to resources are relative to the Node-RED instance, not the project structure.
