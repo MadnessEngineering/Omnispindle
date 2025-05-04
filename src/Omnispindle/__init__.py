@@ -248,7 +248,7 @@ async def list_todos_by_status_tool(status: str, limit: int = 100) -> str:
     """
     List todos by status.
     
-    status: Filter value ("initial"|"pending"|"completed")
+    status: Filter value ("initial"|"pending"|"completed"|"review")
     limit: Max results (default: 100)
     
     → Returns: {count, status, items[{id, desc, project}], projects?}

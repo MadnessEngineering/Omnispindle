@@ -286,7 +286,7 @@ async def mark_todo_complete(todo_id: str, ctx: Context = None) -> str:
 
     result = collection.update_one(
         {"id": todo_id},
-        {"$set": {"status": "completed", "completed_at": completed_time}}
+        {"$set": {"status": "review", "completed_at": completed_time}}
     )
 
     if result.modified_count == 0:
