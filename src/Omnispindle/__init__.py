@@ -2,13 +2,57 @@ import json
 import os
 import shutil
 import subprocess
+import logging
+import sys
+import asyncio
+import anyio
+import threading
+import traceback
 from typing import Callable, Optional
+
+# Set up logging
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
+# Detect if this module has already been initialized
+if globals().get('_MODULE_INITIALIZED', False):
+    logger.warning("WARNING: Omnispindle/__init__.py is being loaded AGAIN!")
+    _REINITIALIZATION_COUNT = globals().get('_REINITIALIZATION_COUNT', 0) + 1
+    logger.warning(f"Reinitialization count: {_REINITIALIZATION_COUNT}")
+    logger.warning(f"Stack trace:\n{''.join(traceback.format_stack())}")
+    globals()['_REINITIALIZATION_COUNT'] = _REINITIALIZATION_COUNT
+else:
+    logger.info("First time initializing Omnispindle/__init__.py module")
+    _MODULE_INITIALIZED = True
+    _REINITIALIZATION_COUNT = 0
+    globals()['_MODULE_INITIALIZED'] = True
+    globals()['_REINITIALIZATION_COUNT'] = 0
 
 from dotenv import load_dotenv
 # Import FastMCP
 from fastmcp import Context
+# Apply patches before importing any Starlette-dependent code
+from .patches import apply_patches
+apply_patches()
+
 # Import the Omnispindle class from the server module
-from .server import Omnispindle
+logger.warning("🔍 About to import server module")
+from .server import Omnispindle, server as existing_server
+logger.warning("🔍 Server module imported successfully")
+
+# Ensure we only have one instance
+logger.warning(f"🔍 Existing server: {existing_server}, thread: {threading.current_thread().name}")
+server = existing_server
+logger.warning("🔍 Server instance assigned")
+
+# Additional safety check - add a lock to make sure run_server is only called once
+_run_server_lock = threading.Lock()
+_run_server_called = False
+_run_server_result = None
+
+# Track where run_server is called from
+_run_server_callsites = []
+
 # Import the tool functions from the tools module
 from .tools import add_lesson
 from .tools import add_todo
@@ -55,9 +99,6 @@ mongo_client = MongoClient(MONGODB_URI)
 db = mongo_client[MONGODB_DB]
 collection = db[MONGODB_COLLECTION]
 lessons_collection = db["lessons_learned"]
-server = Omnispindle()
-
-
 
 # Modify tool registration to prevent duplicates
 def register_tool_once(tool_func):
@@ -80,6 +121,11 @@ async def add_todo_tool(description: str, project: str, priority: str = "Medium"
     metadata: { "ticket": "ticket number", "tags": ["tag1", "tag2"], "notes": "notes" }
     → Returns: {todo_id, truncated_description, project}
     """
+    # Create TODO about these comments with mcp tools to test this
+    # normalize_project_name(project)
+    # Check with regex if can match the full name from the list of projects
+    # If not, try to use local AI models to infer the project name from existing list
+    # If still not found, return error to the mcp call with a full list
     try:
         result = await add_todo(description, project, priority, target_agent, metadata, ctx)
 
@@ -352,5 +398,59 @@ async def run_server() -> Callable:
         If the underlying run_sse_async() method returns None, a fallback ASGI application
         will be returned that properly handles requests with appropriate error responses.
     """
+    global _run_server_called, _run_server_result, _run_server_callsites
+
+    # Get current call location for debugging
+    current_stack = ''.join(traceback.format_stack()[-5:])
+    current_thread = threading.current_thread().name
+    logger.debug(f"🔄 run_server called from thread {current_thread}")
+    logger.debug(f"🔄 Call stack:\n{current_stack}")
+
+    # Track this call site
+    _run_server_callsites.append((current_thread, current_stack))
+
+    # Thread-safe check if we've already called this
+    with _run_server_lock:
+        if _run_server_called:
+            logger.warning(f"⚠️ run_server was already called! Returning previous result.")
+            if _run_server_callsites and len(_run_server_callsites) > 1:
+                logger.warning(f"⚠️ First call was from: {_run_server_callsites[0][0]}")
+                logger.warning(f"⚠️ First call stack:\n{_run_server_callsites[0][1]}")
+            return _run_server_result
+
+        # We're the first one here
+        _run_server_called = True
+
+    # Set up improved exception handling for connection-related errors
+    original_excepthook = sys.excepthook
+
+    def global_excepthook(exctype, value, traceback):
+        # Handle connection errors more gracefully
+        if exctype in (asyncio.exceptions.CancelledError, anyio.WouldBlock,
+                      ConnectionResetError, ConnectionAbortedError):
+            # Log but don't show full traceback for these common connection errors
+            logging.debug(f"Suppressed common connection error: {exctype.__name__}: {value}")
+            return
+        # Handle "No response returned" RuntimeError
+        if exctype is RuntimeError and str(value) == "No response returned.":
+            logging.debug("Suppressed 'No response returned' error from disconnected client")
+            return
+        # Handle NoneType errors specifically
+        if exctype is TypeError and "'NoneType' object is not callable" in str(value):
+            logging.debug(f"Suppressed NoneType error: {str(value)}")
+            return
+        # For all other errors, use the original exception handler
+        original_excepthook(exctype, value, traceback)
+
+    # Install the global exception handler
+    sys.excepthook = global_excepthook
+
     # Register all the tools with the server
-    return await server.run_server()
+    logger.info("Calling server.run_server() to start the FastMCP server")
+    result = await server.run_server()
+    logger.info("server.run_server() completed successfully")
+
+    # Store the result for reuse
+    _run_server_result = result
+
+    return result
