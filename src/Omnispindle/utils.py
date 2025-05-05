@@ -15,12 +15,10 @@ MQTT_HOST = os.getenv("AWSIP", "localhost")
 MQTT_PORT = int(os.getenv("AWSPORT", 3003))
 
 
-def create_response(success: bool, data: Any = None, message: str = None) -> str:
+def create_response(success: bool, data: Any = None, message: str = None, return_context: bool = True) -> str:
     """Create a standardized JSON response with context-rich but efficient information for AI agents"""
     response = {
         "success": success,
-        # Use shorter timestamp format to save tokens
-        "timestamp": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S")
     }
 
     # Only add agent_context when it provides value
@@ -38,7 +36,7 @@ def create_response(success: bool, data: Any = None, message: str = None) -> str
                 entity_id = data["lesson_id"]
 
         # Only add minimal agent_context with actually useful information
-        if entity_type or _should_add_context(data):
+        if return_context and (entity_type or _should_add_context(data)):
             response["agent_context"] = {
                 "type": _infer_result_type(data)
             }

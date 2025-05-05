@@ -31,7 +31,6 @@ lessons_collection = db["lessons_learned"]
 
 async def add_todo(description: str, project: str, priority: str = "Medium", target_agent: str = "user", metadata: dict = None, ctx: Context = None) -> str:
     """
-    Create a new todo item.
     
     Creates a task in the specified project with the given priority and target agent.
     Returns a compact representation of the created todo with an ID for reference.
@@ -42,6 +41,8 @@ async def add_todo(description: str, project: str, priority: str = "Medium", tar
         priority: Priority level [Low, Medium, High] (default: Medium)
         target_agent: Entity responsible for completing the task (default: user)
         metadata: Optional additional structured data for the todo
+            { "ticket": "ticket number", "tags": ["tag1", "tag2"], "notes": "notes" }
+        ctx: Optional context for logging
     
     Returns:
         JSON containing:
@@ -49,6 +50,8 @@ async def add_todo(description: str, project: str, priority: str = "Medium", tar
         - description: Truncated task description
         - project: The project name
         - next_actions: Available actions for this todo
+        - target_agent: Who should complete this (default: user)
+        - metadata: Optional additional structured data for the todo
     """
     todo = {
         "id": str(uuid.uuid4()),
@@ -66,7 +69,12 @@ async def add_todo(description: str, project: str, priority: str = "Medium", tar
     try:
         collection.insert_one(todo)
     except Exception as e:
-        return create_response(False, message=f"Failed to insert todo: {str(e)}")
+        # collection and mongo stats
+        data = {
+            "collection": MONGODB_COLLECTION,
+            "mongo_stats": mongo_client.admin.command("dbstats")
+        }
+        return create_response(False, data, message=f"Failed to insert todo: {str(e)}", return_context=False)
 
     # MQTT publish as confirmation after the database operation - completely non-blocking
     try:
@@ -84,16 +92,18 @@ async def add_todo(description: str, project: str, priority: str = "Medium", tar
 
     # Return optimized response with essentials only
     # Description is truncated to save context tokens while still being identifiable
-    if len(description) > 30:
-        truncated_desc = description[:15] + "..." + description[-15:]
+    if len(description) > 10:
+        truncated_desc = description[:10] + "..." + description[-10:]
     else:
         truncated_desc = description
     return create_response(True, {
         "todo_id": todo["id"],
         "description": truncated_desc,
         "project": project,
-        "next_actions": ["get_todo", "update", "complete"]
-    })
+        "next_actions": ["get_todo_tool", "update_todo_tool", "mark_todo_complete_tool"],
+        "target_agent": target_agent,
+        "metadata": metadata
+    }, return_context=False)
 
 async def query_todos(filter: dict = None, project: dict = None, limit: int = 100, ctx=None) -> str:
     """

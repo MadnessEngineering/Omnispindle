@@ -74,16 +74,11 @@ def register_tool_once(tool_func):
 
 @register_tool_once
 async def add_todo_tool(description: str, project: str, priority: str = "Medium", target_agent: str = "user", metadata: dict = None, ctx: Context = None) -> str:
-    """
-    Create todo.
-    
-    description: Task description text
-    project: Category name
+    """    
+    project: [ Madness_interactive, Omnispindle, Swarmonomicon, todomill_projectorium, RegressionTestKit, Dirname, Repo_name ]
     priority: "Low"|"Medium"|"High" (default: Medium)
-    target_agent: Who should complete this (default: user)
-    metadata: Optional extra data dict
-    
-    → Returns: {todo_id, description, project, next_actions}
+    metadata: { "ticket": "ticket number", "tags": ["tag1", "tag2"], "notes": "notes" }
+    → Returns: {todo_id, truncated_description, project}
     """
     try:
         result = await add_todo(description, project, priority, target_agent, metadata, ctx)
@@ -94,24 +89,18 @@ async def add_todo_tool(description: str, project: str, priority: str = "Medium"
             if data.get("success") and "data" in data:
                 todo_data = data["data"]
                 todo_id = todo_data.get("todo_id")
+                todo_truncated_desc = todo_data.get("description")
+                todo_project = todo_data.get("project")
 
-                # Add simplified agent hints directly in the data object
-                todo_data["ai_hints"] = {
-                    "summary": f"Created {priority} task in {project}",
-                    "context": {
-                        "next": f"get_todo({todo_id}), mark_complete({todo_id})",
-                        "templates": [
-                            f"Task added to {project}",
-                            f"Created new task in {project}"
-                        ]
-                    }
+                data["data"] = {
+                    "todo_id": todo_id,
+                    "description": todo_truncated_desc,
+                    "project": todo_project,
                 }
-                data["data"] = todo_data
-                result = json.dumps(data)
+                return json.dumps(data)
         except Exception as e:
             print(f"Error enhancing add_todo response: {str(e)}")
 
-        return result
     except Exception as e:
         import traceback
         print(traceback.format_exc())
@@ -208,9 +197,9 @@ async def get_todo_tool(todo_id: str) -> str:
 
             # Add compact AI hints
             status = todo_data.get("status", "unknown")
+            ticket = todo_data.get("ticket", "unknown")
             priority = todo_data.get("priority", "unknown")
 
-            # Use a concise hint format
             todo_data["ai_hints"] = {
                 "status": status,
                 "templates": [
@@ -221,7 +210,9 @@ async def get_todo_tool(todo_id: str) -> str:
 
             # Only add next actions if task is actionable
             if status in ["initial", "pending"]:
-                todo_data["next"] = ["update", "complete", "delete"]
+                todo_data["next"] = ["update_todo_tool", "mark_todo_complete_tool", "delete_todo_tool"]
+            elif status == "completed":
+                todo_data["next"] = ["get_todo_tool", "update_todo_tool", "delete_todo_tool"]
 
             data["data"] = todo_data
             result = json.dumps(data)
