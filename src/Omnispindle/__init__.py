@@ -11,8 +11,15 @@ import traceback
 from typing import Callable, Optional
 
 # Set up logging
-logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+# logging.getLogger('pymongo').setLevel(logging.WARNING)
+# logging.getLogger('asyncio').setLevel(logging.WARNING)
+# logging.getLogger('uvicorn').setLevel(logging.INFO)
+# logging.getLogger('uvicorn.access').setLevel(logging.WARNING)
+# logging.getLogger('uvicorn.error').setLevel(logging.INFO)
+# logging.getLogger('uvicorn.protocols').setLevel(logging.WARNING)
 
 # Detect if this module has already been initialized
 if globals().get('_MODULE_INITIALIZED', False):
@@ -36,14 +43,14 @@ from .patches import apply_patches
 apply_patches()
 
 # Import the Omnispindle class from the server module
-logger.warning("🔍 About to import server module")
+logger.debug("About to import server module")
 from .server import Omnispindle, server as existing_server
-logger.warning("🔍 Server module imported successfully")
+logger.debug("Server module imported successfully")
 
 # Ensure we only have one instance
-logger.warning(f"🔍 Existing server: {existing_server}, thread: {threading.current_thread().name}")
+logger.debug(f"Existing server: {existing_server}, thread: {threading.current_thread().name}")
 server = existing_server
-logger.warning("🔍 Server instance assigned")
+logger.debug("Server instance assigned")
 
 # Additional safety check - add a lock to make sure run_server is only called once
 _run_server_lock = threading.Lock()
@@ -403,8 +410,7 @@ async def run_server() -> Callable:
     # Get current call location for debugging
     current_stack = ''.join(traceback.format_stack()[-5:])
     current_thread = threading.current_thread().name
-    logger.debug(f"🔄 run_server called from thread {current_thread}")
-    logger.debug(f"🔄 Call stack:\n{current_stack}")
+    logger.debug(f"run_server called from thread {current_thread}")
 
     # Track this call site
     _run_server_callsites.append((current_thread, current_stack))
@@ -412,10 +418,10 @@ async def run_server() -> Callable:
     # Thread-safe check if we've already called this
     with _run_server_lock:
         if _run_server_called:
-            logger.warning(f"⚠️ run_server was already called! Returning previous result.")
+            logger.warning(f"run_server was already called! Returning previous result.")
             if _run_server_callsites and len(_run_server_callsites) > 1:
-                logger.warning(f"⚠️ First call was from: {_run_server_callsites[0][0]}")
-                logger.warning(f"⚠️ First call stack:\n{_run_server_callsites[0][1]}")
+                logger.warning(f"First call was from: {_run_server_callsites[0][0]}")
+                logger.warning(f"First call stack:\n{_run_server_callsites[0][1]}")
             return _run_server_result
 
         # We're the first one here

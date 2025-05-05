@@ -48,16 +48,16 @@ class NoneTypeResponseMiddleware(BaseHTTPMiddleware):
             response = await call_next(request)
             if response is None:
                 # Log the path that returned None
-                logger.warning(f"Route handler for {request.url.path} returned None instead of a response object")
+                logger.debug(f"Route handler for {request.url.path} returned None instead of a response object")
                 # Return a generic 204 No Content response
                 return Response(status_code=204)
             return response
         except TypeError as exc:
             if "'NoneType' object is not callable" in str(exc):
-                logger.warning(f"Caught NoneType error in {request.url.path}: {str(exc)}")
-                return JSONResponse(
+                logger.debug(f"Caught NoneType error in {request.url.path}: {str(exc)}")
+                return Response(
                     status_code=204,
-                    content={"message": "No content available"}
+                    headers=[(b"content-type", b"text/plain")]
                 )
             raise
 
@@ -77,7 +77,7 @@ def create_asgi_error_handler(app):
             try:
                 await original_send(message)
             except Exception as e:
-                logger.warning(f"Error in send: {type(e).__name__}: {str(e)}")
+                logger.debug(f"Error in send: {type(e).__name__}: {str(e)}")
                 # Send a fallback response if possible
                 if message.get("type") == "http.response.start":
                     try:
@@ -92,14 +92,14 @@ def create_asgi_error_handler(app):
                             "more_body": False
                         })
                     except Exception as e2:
-                        logger.error(f"Failed to send fallback response: {str(e2)}")
+                        logger.debug(f"Failed to send fallback response: {str(e2)}")
         
         try:
             # Run the main application
             await app(scope, receive, patched_send)
         except TypeError as e:
             if "'NoneType' object is not callable" in str(e):
-                logger.warning(f"Caught NoneType error at ASGI level: {str(e)}")
+                logger.debug(f"Caught NoneType error at ASGI level: {str(e)}")
                 try:
                     # Send a fallback response
                     await send({
@@ -113,9 +113,9 @@ def create_asgi_error_handler(app):
                         "more_body": False
                     })
                 except Exception as e2:
-                    logger.error(f"Failed to send fallback response after NoneType error: {str(e2)}")
+                    logger.debug(f"Failed to send fallback response after NoneType error: {str(e2)}")
             else:
-                logger.error(f"Unhandled TypeError: {str(e)}")
+                logger.warning(f"Unhandled TypeError: {str(e)}")
                 # Try to send a 500 response
                 try:
                     await send({
@@ -134,7 +134,7 @@ def create_asgi_error_handler(app):
             logger.debug(f"Connection error: {type(e).__name__}")
             # These are common with client disconnections, so we just log and don't try to respond
         except Exception as e:
-            logger.error(f"Unhandled exception in ASGI app: {type(e).__name__}: {str(e)}")
+            logger.warning(f"Unhandled exception in ASGI app: {type(e).__name__}: {str(e)}")
             # Try to send a 500 response
             try:
                 await send({

@@ -10,8 +10,13 @@ import traceback
 import threading
 
 # Configure logger
-logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+
+# logging.getLogger('pymongo').setLevel(logging.WARNING)
+# logging.getLogger('asyncio').setLevel(logging.WARNING)
+# logging.getLogger('uvicorn.access').addFilter(NotTypeErrorFilter())
 
 # Detect if this module has already been initialized
 if globals().get('_MODULE_INITIALIZED', False):
@@ -78,11 +83,10 @@ class Omnispindle(FastMCP):
         global _init_counter, _init_stack_traces
         _init_counter += 1
         current_thread = threading.current_thread().name
-        stack = traceback.format_stack()
-        _init_stack_traces.append((current_thread, stack))
+        # stack = traceback.format_stack()
+        # _init_stack_traces.append((current_thread, stack))
 
         logger.warning(f"⚠️  Omnispindle initialization #{_init_counter} in thread {current_thread}")
-        logger.warning(f"⚠️  Call stack:\n{''.join(stack[-10:])}")
 
         logger.info(f"Initializing Omnispindle server with name='{name}', server_type='{server_type}'")
         super().__init__(name=name, server_type=server_type)
@@ -155,10 +159,10 @@ class Omnispindle(FastMCP):
 
             # Adjust specific loggers
             # Set SSE-related loggers to less verbose levels
-            logging.getLogger('sse_starlette').setLevel(logging.INFO)
-            logging.getLogger('uvicorn.protocols.http').setLevel(logging.WARNING)
+            # logging.getLogger('sse_starlette').setLevel(logging.INFO)
+            # logging.getLogger('uvicorn.protocols.http').setLevel(logging.WARNING)
             # But keep our own SSE handler at DEBUG level
-            logging.getLogger('Omnispindle.sse_handler').setLevel(logging.DEBUG)
+            # logging.getLogger('Omnispindle.sse_handler').setLevel(logging.DEBUG)
 
             # Run the server
             logger.info("Calling run_sse_async() to start the server")
@@ -305,18 +309,18 @@ class Omnispindle(FastMCP):
                 app = initialization_delay_wrapper
                 logger.info("Added initialization delay wrapper to ASGI application")
 
-                # Apply the middlewares to handle various errors
-                # First apply the NoneType middleware as it's the most common error
+                # Apply the middlewares to handle various errors - ORDER MATTERS!
+                # First apply the NoneType middleware as it's the most common error and should be first
                 app = NoneTypeResponseMiddleware(app)
                 logger.info("Added NoneTypeResponseMiddleware to handle None response errors")
-
-                # Then apply the connection errors middleware
-                app = ConnectionErrorsMiddleware(app)
-                logger.info("Added ConnectionErrorsMiddleware to handle disconnected requests")
 
                 # Apply the low-level ASGI error handler as a final safety net
                 app = create_asgi_error_handler(app)
                 logger.info("Added low-level ASGI error handler as final safety net")
+
+                # Then apply the connection errors middleware last so it handles any remaining issues
+                app = ConnectionErrorsMiddleware(app)
+                logger.info("Added ConnectionErrorsMiddleware to handle disconnected requests")
 
             logger.info("Server startup complete, returning ASGI application")
             return app
@@ -379,7 +383,7 @@ def get_server_instance(name: str = "todo-server", server_type: str = "sse") -> 
             if _instance is None:
                 current_thread = threading.current_thread().name
                 logger.warning(f"🔒 Creating new Omnispindle singleton instance in thread {current_thread}")
-                logger.warning(f"🔒 Call stack:\n{''.join(traceback.format_stack()[-10:])}")
+                # logger.warning(f"🔒 Call stack:\n{''.join(traceback.format_stack()[-10:])}")
 
                 logger.info(f"Creating new Omnispindle singleton instance with name='{name}', server_type='{server_type}'")
                 _instance = Omnispindle(name=name, server_type=server_type)
