@@ -1,18 +1,18 @@
 import json
-import logging
 import os
 import ssl
 import subprocess
 import uuid
-from datetime import datetime
-from datetime import UTC
-from typing import Any, Dict, List, Optional
+from datetime import datetime, UTC
 
-import aiohttp
 import logging
 from dotenv import load_dotenv
 from fastmcp import Context
 from pymongo import MongoClient
+
+from .mqtt import mqtt_publish
+from .utils import _format_duration
+from .utils import create_response
 
 # Load environment variables
 load_dotenv()
@@ -22,59 +22,45 @@ MONGODB_URI = os.getenv("MONGODB_URI", "mongodb://localhost:27017")
 MONGODB_DB = os.getenv("MONGODB_DB", "swarmonomicon")
 MONGODB_COLLECTION = os.getenv("MONGODB_COLLECTION", "todos")
 
-# MQTT configuration
-MQTT_HOST = os.getenv("AWSIP", "localhost")
-MQTT_PORT = int(os.getenv("AWSPORT", 3003))
-
 # Create MongoDB connection at module level
 mongo_client = MongoClient(MONGODB_URI)
 db = mongo_client[MONGODB_DB]
 collection = db[MONGODB_COLLECTION]
 lessons_collection = db["lessons_learned"]
 
-# Helper function to create standardized responses
-def create_response(success: bool, data: Any = None, message: str = None) -> str:
-    """Create a standardized JSON response with minimal footprint"""
-    response = {"success": success}
-    if data is not None:
-        response["data"] = data
-    if message is not None:
-        response["message"] = message
-    return json.dumps(response)
 
-async def mqtt_publish(topic: str, message: str, ctx: Context = None, retain: bool = False) -> bool:
-    """Publish a message to the specified MQTT topic"""
-    try:
-        cmd = ["mosquitto_pub", "-h", MQTT_HOST, "-p", str(MQTT_PORT), "-t", topic, "-m", str(message)]
-        if retain:
-            cmd.append("-r")
-        subprocess.run(cmd, check=True)
-        return True
-    except subprocess.SubprocessError as e:
-        print(f"Failed to publish MQTT message: {str(e)}")
-        return False
-
-async def mqtt_get(topic: str) -> str:
-    """Get a message from the specified MQTT topic"""
-    try:
-        cmd = ["mosquitto_sub", "-h", MQTT_HOST, "-p", str(MQTT_PORT), "-t", topic, "-C", "1"]
-        result = subprocess.run(cmd, check=True, capture_output=True, text=True)
-        return result.stdout.strip()
-    except subprocess.SubprocessError as e:
-        print(f"Failed to get MQTT message: {str(e)}")
-        return None
-
-
-async def add_todo(description: str, project: str, priority: str = "initial", target_agent: str = "user", metadata: dict = None, ctx: Context = None) -> str:
-    """Add a new todo item to the database"""
+async def add_todo(description: str, project: str, priority: str = "Medium", target_agent: str = "user", metadata: dict = None, ctx: Context = None) -> str:
+    """
+    
+    Creates a task in the specified project with the given priority and target agent.
+    Returns a compact representation of the created todo with an ID for reference.
+    
+    Parameters:
+        description: Content of the todo item (task description)
+        project: Project identifier (organizing category for the task)
+        priority: Priority level [Low, Medium, High] (default: Medium)
+        target_agent: Entity responsible for completing the task (default: user)
+        metadata: Optional additional structured data for the todo
+            { "ticket": "ticket number", "tags": ["tag1", "tag2"], "notes": "notes" }
+        ctx: Optional context for logging
+    
+    Returns:
+        JSON containing:
+        - todo_id: Unique identifier for the created todo
+        - description: Truncated task description
+        - project: The project name
+        - next_actions: Available actions for this todo
+        - target_agent: Who should complete this (default: user)
+        - metadata: Optional additional structured data for the todo
+    """
     todo = {
         "id": str(uuid.uuid4()),
         "description": description,
-        "project": project,
+        "project": project.lower(),
         "priority": priority,
         "source_agent": "Omnispindle",
         "target_agent": target_agent,
-        "status": "pending",
+        "status": "initial",
         "created_at": int(datetime.now(UTC).timestamp()),
         "completed_at": None,
         "metadata": metadata or {}
@@ -83,14 +69,19 @@ async def add_todo(description: str, project: str, priority: str = "initial", ta
     try:
         collection.insert_one(todo)
     except Exception as e:
-        return create_response(False, message=f"Failed to insert todo: {str(e)}")
+        # collection and mongo stats
+        data = {
+            "collection": MONGODB_COLLECTION,
+            "mongo_stats": mongo_client.admin.command("dbstats")
+        }
+        return create_response(False, data, message=f"Failed to insert todo: {str(e)}", return_context=False)
 
     # MQTT publish as confirmation after the database operation - completely non-blocking
     try:
         mqtt_message = f"description: {description}, project: {project}, priority: {priority}, target_agent: {target_agent}"
         # Use a separate try/except to catch any issues with mqtt_publish itself
         try:
-            publish_success = await mqtt_publish(f"status/{os.getenv('DeNa')}/todo-server/add_todo", mqtt_message, ctx)
+            publish_success = await mqtt_publish(f"status/{os.getenv('DeNa')}/omnispindle/add_todo", mqtt_message, ctx)
             if not publish_success:
                 print(f"Warning: MQTT publish returned False for todo {todo['id']}")
         except Exception as mqtt_err:
@@ -99,15 +90,43 @@ async def add_todo(description: str, project: str, priority: str = "initial", ta
         # Catch absolutely any errors in the MQTT process
         print(f"MQTT processing error (non-fatal): {str(e)}")
 
-    # Always return success if database operation succeeded, regardless of MQTT status
-    return create_response(True, {"todo_id": todo["id"]})
+    # Return optimized response with essentials only
+    # Description is truncated to save context tokens while still being identifiable
+    if len(description) > 10:
+        truncated_desc = description[:10] + "..." + description[-10:]
+    else:
+        truncated_desc = description
+    return create_response(True, {
+        "todo_id": todo["id"],
+        "description": truncated_desc,
+        "project": project,
+        "next_actions": ["get_todo_tool", "update_todo_tool", "mark_todo_complete_tool"],
+        "target_agent": target_agent,
+        "metadata": metadata
+    }, return_context=False)
 
-async def query_todos(filter: dict = None, projection: dict = None, limit: int = 100, ctx=None) -> str:
-    """Query todos with optional filtering and projection"""
+async def query_todos(filter: dict = None, project: dict = None, limit: int = 100, ctx=None) -> str:
+    """
+    Query todos with flexible filtering options.
+    
+    Searches the todo database using MongoDB-style query filters and projections.
+    Returns a collection of todos matching the filter criteria.
+    
+    Parameters:
+        filter: MongoDB-style query object to filter todos (e.g., {"status": "pending"})
+        project: Fields to include/exclude in results (e.g., {"description": 1})
+        limit: Maximum number of todos to return (default: 100)
+        
+    Returns:
+        JSON containing:
+        - count: Number of todos found
+        - items: Array of matching todos with essential fields
+        - projects: List of unique projects in the results (if multiple exist)
+    """
     # Find matching todos first
     cursor = collection.find(
         filter or {},
-        projection=projection,
+        projection=project,
         limit=limit
     )
     results = list(cursor)
@@ -129,17 +148,27 @@ async def query_todos(filter: dict = None, projection: dict = None, limit: int =
         })
 
     # MQTT publish as confirmation after the database query
-    try:
-        mqtt_message = f"filter: {json.dumps(filter)}, projection: {json.dumps(projection)}, limit: {limit}"
-        await mqtt_publish(f"status/{os.getenv('DeNa')}/todo-server/query_todos", mqtt_message, ctx)
-    except Exception as e:
-        # Log the error but don't fail the entire operation
-        print(f"MQTT publish error (non-fatal): {str(e)}")
+
+    mqtt_message = f"filter: {json.dumps(filter)}, project: {json.dumps(project)}, limit: {limit}"
+    await mqtt_publish(f"status/{os.getenv('DeNa')}/omnispindle/query_todos", mqtt_message, ctx)
 
     return create_response(True, summary)
 
 async def update_todo(todo_id: str, updates: dict, ctx: Context = None) -> str:
-    """Update an existing todo by ID"""
+    """
+    Update an existing todo by ID.
+    
+    Modifies specified fields of a todo item. Common fields to update include 
+    status, priority, description, and project.
+    
+    Parameters:
+        todo_id: Unique identifier of the todo to update
+        updates: Dictionary of fields to update and their new values
+        ctx: Optional context for logging
+        
+    Returns:
+        JSON with success status and confirmation message
+    """
     result = collection.update_one({"id": todo_id}, {"$set": updates})
 
     if result.modified_count == 0:
@@ -154,7 +183,7 @@ async def update_todo(todo_id: str, updates: dict, ctx: Context = None) -> str:
     # MQTT publish as confirmation after the database update
     try:
         mqtt_message = f"todo_id: {todo_id}, updates: {json.dumps(updates)}"
-        await mqtt_publish(f"status/{os.getenv('DeNa')}/todo-server/update_todo", mqtt_message, ctx)
+        await mqtt_publish(f"status/{os.getenv('DeNa')}/omnispindle/update_todo", mqtt_message, ctx)
     except Exception as e:
         # Log the error but don't fail the entire operation
         print(f"MQTT publish error (non-fatal): {str(e)}")
@@ -162,7 +191,19 @@ async def update_todo(todo_id: str, updates: dict, ctx: Context = None) -> str:
     return create_response(True, message=f"Todo {todo_id} updated successfully")
 
 async def delete_todo(todo_id: str, ctx: Context = None) -> str:
-    """Delete a todo by ID"""
+    """
+    Delete a todo by ID.
+    
+    Permanently removes a todo item from the database.
+    This action cannot be undone.
+    
+    Parameters:
+        todo_id: Unique identifier of the todo to delete
+        ctx: Optional context for logging
+        
+    Returns:
+        JSON with success status and confirmation message
+    """
     result = collection.delete_one({"id": todo_id})
 
     if result.deleted_count == 0:
@@ -177,7 +218,7 @@ async def delete_todo(todo_id: str, ctx: Context = None) -> str:
     # MQTT publish as confirmation after the database deletion
     try:
         mqtt_message = f"todo_id: {todo_id}"
-        await mqtt_publish(f"status/{os.getenv('DeNa')}/todo-server/delete_todo", mqtt_message, ctx)
+        await mqtt_publish(f"status/{os.getenv('DeNa')}/omnispindle/delete_todo", mqtt_message, ctx)
     except Exception as e:
         # Log the error but don't fail the entire operation
         print(f"MQTT publish error (non-fatal): {str(e)}")
@@ -185,43 +226,77 @@ async def delete_todo(todo_id: str, ctx: Context = None) -> str:
     return create_response(True, message=f"Todo {todo_id} deleted")
 
 async def get_todo(todo_id: str) -> str:
-    """Get a specific todo by ID"""
+    """
+    Get a specific todo by ID.
+    
+    Retrieves detailed information about a todo item including its 
+    description, status, priority, and creation/completion information.
+    
+    Parameters:
+        todo_id: Unique identifier of the todo to retrieve
+        
+    Returns:
+        JSON containing the todo's details with fields:
+        - id: Unique identifier
+        - description: Full task description
+        - project: Project category 
+        - status: Current status (initial, pending, completed)
+        - priority: Task priority
+        - target: Entity responsible for the task
+        - created: Creation timestamp
+        - completed: Completion timestamp (if applicable)
+        - duration: Time between creation and completion (if applicable)
+    """
     todo = collection.find_one({"id": todo_id})
 
     if todo is None:
         return create_response(False, message="Todo not found")
 
-    # Format todo for concise display
+    # Format todo with optimized information - keeping essentials and removing verbosity
     formatted_todo = {
         "id": todo["id"],
         "description": todo["description"],
         "project": todo["project"],
         "status": todo["status"],
         "priority": todo["priority"],
-        "created": datetime.fromtimestamp(todo["created_at"], UTC).strftime("%Y-%m-%d"),
-        "metadata": todo.get("metadata", {})
+        "target": todo.get("target_agent", "user"),
+        "created": todo["created_at"]
     }
 
+    # Add completion information if available (using compact format)
     if todo.get("completed_at"):
-        formatted_todo["completed"] = datetime.fromtimestamp(todo["completed_at"], UTC).strftime("%Y-%m-%d")
+        formatted_todo["completed"] = todo["completed_at"]
+        # Only add duration when completed
+        duration_seconds = todo["completed_at"] - todo["created_at"]
+        formatted_todo["duration"] = _format_duration(duration_seconds)
 
-    # MQTT publish as confirmation after retrieving the todo
-    try:
-        mqtt_message = f"todo_id: {todo_id}"
-        await mqtt_publish(f"status/{os.getenv('DeNa')}/todo-server/get_todo", mqtt_message)
-    except Exception as e:
-        # Log the error but don't fail the entire operation
-        print(f"MQTT publish error (non-fatal): {str(e)}")
+    # MQTT publish without try/except to reduce code verbosity
+    await mqtt_publish(f"status/{os.getenv('DeNa')}/omnispindle/get_todo", f"todo_id: {todo_id}")
 
     return create_response(True, formatted_todo)
 
 async def mark_todo_complete(todo_id: str, ctx: Context = None) -> str:
-    """Mark a todo as completed"""
+    """
+    Mark a todo as completed.
+    
+    Updates a todo's status to 'completed' and records the completion timestamp.
+    This allows tracking of when tasks were completed and calculating the 
+    duration between creation and completion.
+    
+    Parameters:
+        todo_id: Unique identifier of the todo to mark as complete
+        ctx: Optional context for logging
+        
+    Returns:
+        JSON with success status and completion information:
+        - todo_id: The ID of the completed todo
+        - completed_at: Formatted timestamp of when the todo was marked complete
+    """
     completed_time = int(datetime.now(UTC).timestamp())
 
     result = collection.update_one(
         {"id": todo_id},
-        {"$set": {"status": "completed", "completed_at": completed_time}}
+        {"$set": {"status": "review", "completed_at": completed_time}}
     )
 
     if result.modified_count == 0:
@@ -236,7 +311,7 @@ async def mark_todo_complete(todo_id: str, ctx: Context = None) -> str:
     # MQTT publish as confirmation after marking todo complete
     try:
         mqtt_message = f"todo_id: {todo_id}"
-        await mqtt_publish(f"status/{os.getenv('DeNa')}/todo-server/mark_todo_complete", mqtt_message, ctx)
+        await mqtt_publish(f"status/{os.getenv('DeNa')}/omnispindle/mark_todo_complete", mqtt_message, ctx)
     except Exception as e:
         # Log the error but don't fail the entire operation
         print(f"MQTT publish error (non-fatal): {str(e)}")
@@ -247,41 +322,79 @@ async def mark_todo_complete(todo_id: str, ctx: Context = None) -> str:
     })
 
 async def list_todos_by_status(status: str, limit: int = 100) -> str:
-    """List todos by their status"""
+    """
+    List todos filtered by status.
+    
+    Retrieves a collection of todos with the specified status.
+    Common status values: 'initial', 'pending', 'completed'.
+    Results are formatted for efficiency with truncated descriptions.
+    
+    Parameters:
+        status: Status value to filter by
+        limit: Maximum number of todos to return (default: 100)
+        
+    Returns:
+        JSON containing:
+        - count: Number of todos found
+        - status: The status that was queried
+        - items: Array of matching todos (with truncated descriptions)
+        - projects: List of unique projects (only included if multiple exist)
+    """
     cursor = collection.find(
         {"status": status},
         limit=limit
     )
     results = list(cursor)
 
-    # Create a summary format
+    # Create an optimized summary with only essential data
     summary = {
         "count": len(results),
         "status": status,
         "items": []
     }
 
-    # Add simplified todo items
+    # Track unique projects (often useful for AI agents)
+    unique_projects = set()
+
+    # Add todo items with minimal but useful information
     for todo in results:
+        project = todo.get("project", "unspecified")
+        unique_projects.add(project)
+
+        # Use concise format for list items to save tokens
         summary["items"].append({
             "id": todo["id"],
-            "description": todo["description"][:50] + ("..." if len(todo["description"]) > 50 else ""),
-            "project": todo["project"],
-            "priority": todo["priority"]
+            "desc": todo["description"][:40] + ("..." if len(todo["description"]) > 40 else ""),
+            "project": project
         })
 
-    # MQTT publish as confirmation after listing todos
-    try:
-        mqtt_message = f"status: {status}, limit: {limit}"
-        await mqtt_publish(f"status/{os.getenv('DeNa')}/todo-server/list_todos_by_status", mqtt_message)
-    except Exception as e:
-        # Log the error but don't fail the entire operation
-        print(f"MQTT publish error (non-fatal): {str(e)}")
+    # Only add projects if there are multiple (otherwise it's not useful info)
+    if len(unique_projects) > 1:
+        summary["projects"] = list(unique_projects)
+
+    # Publish MQTT status with minimal error handling
+    await mqtt_publish(f"status/{os.getenv('DeNa')}/omnispindle/list_todos_by_status",
+                      f"status: {status}, limit: {limit}, found: {len(results)}")
 
     return create_response(True, summary)
 
 async def add_lesson(language: str, topic: str, lesson_learned: str, tags: list = None, ctx: Context = None) -> str:
-    """Add a lesson learned"""
+    """
+    Add a new lesson learned.
+    
+    Records knowledge or experiences in a structured format for future reference.
+    Lessons are used to document important discoveries, solutions, or techniques.
+    
+    Parameters:
+        language: Programming language or technology related to the lesson
+        topic: Brief subject/title of the lesson
+        lesson_learned: Detailed content describing what was learned
+        tags: Optional list of keyword tags for categorization
+        ctx: Optional context for logging
+        
+    Returns:
+        JSON with success status and the created lesson's ID and topic
+    """
     lesson = {
         "id": str(uuid.uuid4()),
         "language": language,
@@ -296,7 +409,7 @@ async def add_lesson(language: str, topic: str, lesson_learned: str, tags: list 
     # MQTT publish as confirmation after adding lesson
     try:
         mqtt_message = f"language: {language}, topic: {topic}, tags: {tags}"
-        await mqtt_publish(f"status/{os.getenv('DeNa')}/todo-server/add_lesson", mqtt_message, ctx)
+        await mqtt_publish(f"status/{os.getenv('DeNa')}/omnispindle/add_lesson", mqtt_message, ctx)
     except Exception as e:
         # Log the error but don't fail the entire operation
         print(f"MQTT publish error (non-fatal): {str(e)}")
@@ -304,7 +417,24 @@ async def add_lesson(language: str, topic: str, lesson_learned: str, tags: list 
     return create_response(True, {"lesson_id": lesson["id"], "topic": topic})
 
 async def get_lesson(lesson_id: str) -> str:
-    """Get a specific lesson by ID"""
+    """
+    Get a specific lesson by ID.
+    
+    Retrieves detailed information about a previously recorded lesson.
+    Includes the full content of the lesson and all associated metadata.
+    
+    Parameters:
+        lesson_id: Unique identifier of the lesson to retrieve
+        
+    Returns:
+        JSON containing the lesson's details with fields:
+        - id: Unique identifier
+        - language: Programming language or technology 
+        - topic: Subject or title
+        - lesson_learned: Full content
+        - tags: Categorization tags
+        - created: Formatted creation date
+    """
     lesson = lessons_collection.find_one({"id": lesson_id})
 
     if lesson is None:
@@ -323,7 +453,7 @@ async def get_lesson(lesson_id: str) -> str:
     # MQTT publish as confirmation after getting lesson
     try:
         mqtt_message = f"lesson_id: {lesson_id}"
-        await mqtt_publish(f"status/{os.getenv('DeNa')}/todo-server/get_lesson", mqtt_message)
+        await mqtt_publish(f"status/{os.getenv('DeNa')}/omnispindle/get_lesson", mqtt_message)
     except Exception as e:
         # Log the error but don't fail the entire operation
         print(f"MQTT publish error (non-fatal): {str(e)}")
@@ -331,7 +461,20 @@ async def get_lesson(lesson_id: str) -> str:
     return create_response(True, formatted_lesson)
 
 async def update_lesson(lesson_id: str, updates: dict, ctx: Context = None) -> str:
-    """Update an existing lesson by ID"""
+    """
+    Update an existing lesson by ID.
+    
+    Modifies specified fields of a lesson. Common fields to update include
+    topic, lesson_learned content, and tags.
+    
+    Parameters:
+        lesson_id: Unique identifier of the lesson to update
+        updates: Dictionary of fields to update and their new values
+        ctx: Optional context for logging
+        
+    Returns:
+        JSON with success status and confirmation message
+    """
     result = lessons_collection.update_one({"id": lesson_id}, {"$set": updates})
     if result.modified_count == 0:
         return create_response(False, message="Lesson not found")
@@ -339,7 +482,7 @@ async def update_lesson(lesson_id: str, updates: dict, ctx: Context = None) -> s
     # MQTT publish as confirmation after updating lesson
     try:
         mqtt_message = f"lesson_id: {lesson_id}, updates: {json.dumps(updates)}"
-        await mqtt_publish(f"status/{os.getenv('DeNa')}/todo-server/update_lesson", mqtt_message, ctx)
+        await mqtt_publish(f"status/{os.getenv('DeNa')}/omnispindle/update_lesson", mqtt_message, ctx)
     except Exception as e:
         # Log the error but don't fail the entire operation
         print(f"MQTT publish error (non-fatal): {str(e)}")
@@ -347,7 +490,19 @@ async def update_lesson(lesson_id: str, updates: dict, ctx: Context = None) -> s
     return create_response(True, message=f"Lesson {lesson_id} updated successfully")
 
 async def delete_lesson(lesson_id: str, ctx: Context = None) -> str:
-    """Delete a lesson by ID"""
+    """
+    Delete a lesson by ID.
+    
+    Permanently removes a lesson from the database.
+    This action cannot be undone.
+    
+    Parameters:
+        lesson_id: Unique identifier of the lesson to delete
+        ctx: Optional context for logging
+        
+    Returns:
+        JSON with success status and confirmation message
+    """
     result = lessons_collection.delete_one({"id": lesson_id})
 
     if result.deleted_count == 0:
@@ -356,7 +511,7 @@ async def delete_lesson(lesson_id: str, ctx: Context = None) -> str:
     # MQTT publish as confirmation after deleting lesson
     try:
         mqtt_message = f"lesson_id: {lesson_id}"
-        await mqtt_publish(f"status/{os.getenv('DeNa')}/todo-server/delete_lesson", mqtt_message, ctx)
+        await mqtt_publish(f"status/{os.getenv('DeNa')}/omnispindle/delete_lesson", mqtt_message, ctx)
     except Exception as e:
         # Log the error but don't fail the entire operation
         print(f"MQTT publish error (non-fatal): {str(e)}")
@@ -364,7 +519,25 @@ async def delete_lesson(lesson_id: str, ctx: Context = None) -> str:
     return create_response(True, message=f"Lesson {lesson_id} deleted")
 
 async def list_lessons(limit: int = 100) -> str:
-    """List all lessons learned"""
+    """
+    List all lessons learned.
+    
+    Retrieves a collection of lessons with preview content.
+    Each lesson includes a truncated preview of its content to reduce response size.
+    
+    Parameters:
+        limit: Maximum number of lessons to return (default: 100)
+        
+    Returns:
+        JSON containing:
+        - count: Number of lessons found
+        - items: Array of lessons with preview content, including:
+          - id: Lesson identifier
+          - language: Programming language or technology
+          - topic: Subject or title
+          - tags: List of categorization tags
+          - preview: Truncated content preview
+    """
     cursor = lessons_collection.find(limit=limit)
     results = list(cursor)
 
@@ -387,7 +560,7 @@ async def list_lessons(limit: int = 100) -> str:
     # MQTT publish as confirmation after listing lessons
     try:
         mqtt_message = f"limit: {limit}"
-        await mqtt_publish(f"status/{os.getenv('DeNa')}/todo-server/list_lessons", mqtt_message, ctx=None)
+        await mqtt_publish(f"status/{os.getenv('DeNa')}/omnispindle/list_lessons", mqtt_message, ctx=None)
     except Exception as e:
         # Log the error but don't fail the entire operation
         print(f"MQTT publish error (non-fatal): {str(e)}")
@@ -395,7 +568,27 @@ async def list_lessons(limit: int = 100) -> str:
     return create_response(True, summary)
 
 async def search_todos(query: str, fields: list = None, limit: int = 100) -> str:
-    """Search todos using text search on specified fields"""
+    """
+    Search todos with text search capabilities.
+    
+    Performs a case-insensitive text search across specified fields in todos.
+    Uses regex pattern matching to find todos matching the query string.
+    
+    Parameters:
+        query: Text string to search for
+        fields: List of fields to search in (default: ["description"])
+        limit: Maximum number of todos to return (default: 100)
+        
+    Returns:
+        JSON containing:
+        - count: Number of matching todos
+        - query: The search query that was used
+        - matches: Array of todos matching the search criteria with fields:
+          - id: Todo identifier
+          - description: Truncated task description
+          - project: Project category
+          - status: Current status
+    """
     if not fields:
         fields = ["description"]
 
@@ -432,7 +625,7 @@ async def search_todos(query: str, fields: list = None, limit: int = 100) -> str
     # MQTT publish as confirmation after searching todos
     try:
         mqtt_message = f"query: {query}, fields: {fields}, limit: {limit}"
-        await mqtt_publish(f"status/{os.getenv('DeNa')}/todo-server/search_todos", mqtt_message, ctx=None)
+        await mqtt_publish(f"status/{os.getenv('DeNa')}/omnispindle/search_todos", mqtt_message, ctx=None)
     except Exception as e:
         # Log the error but don't fail the entire operation
         print(f"MQTT publish error (non-fatal): {str(e)}")
@@ -440,7 +633,28 @@ async def search_todos(query: str, fields: list = None, limit: int = 100) -> str
     return create_response(True, summary)
 
 async def search_lessons(query: str, fields: list = None, limit: int = 100) -> str:
-    """Search lessons using text search on specified fields"""
+    """
+    Search lessons with text search capabilities.
+    
+    Performs a case-insensitive text search across specified fields in lessons.
+    Uses regex pattern matching to find lessons matching the query string.
+    
+    Parameters:
+        query: Text string to search for
+        fields: List of fields to search in (default: ["topic", "lesson_learned"])
+        limit: Maximum number of lessons to return (default: 100)
+        
+    Returns:
+        JSON containing:
+        - count: Number of matching lessons
+        - query: The search query that was used
+        - matches: Array of lessons matching the search criteria with fields:
+          - id: Lesson identifier
+          - language: Programming language or technology 
+          - topic: Subject or title
+          - preview: Truncated content preview
+          - tags: Categorization tags
+    """
     if not fields:
         fields = ["topic", "lesson_learned"]
 
@@ -478,74 +692,9 @@ async def search_lessons(query: str, fields: list = None, limit: int = 100) -> s
     # MQTT publish as confirmation after searching lessons
     try:
         mqtt_message = f"query: {query}, fields: {fields}, limit: {limit}"
-        await mqtt_publish(f"status/{os.getenv('DeNa')}/todo-server/search_lessons", mqtt_message, ctx=None)
+        await mqtt_publish(f"status/{os.getenv('DeNa')}/omnispindle/search_lessons", mqtt_message, ctx=None)
     except Exception as e:
         # Log the error but don't fail the entire operation
         print(f"MQTT publish error (non-fatal): {str(e)}")
 
     return create_response(True, summary)
-
-async def deploy_nodered_flow(flow_json_name: str) -> str:
-    """Deploys a Node-RED flow to a Node-RED instance."""
-    try:
-        # Set up logging
-        logger = logging.getLogger(__name__)
-
-        # Set default Node-RED URL if not provided
-        node_red_url = os.getenv("NR_URL", "http://localhost:9191")
-        username = os.getenv("NR_USER", None)
-        password = os.getenv("NR_PASS", None)
-
-        logger.debug(f"Node-RED URL: {node_red_url}")
-
-        # Add local git pull
-        dashboard_dir = os.path.abspath(os.path.dirname(__file__))
-        try:
-            result = subprocess.run(['git', 'pull'], cwd=dashboard_dir, check=True, capture_output=True, text=True)
-        except subprocess.CalledProcessError as e:
-            logger.warning(f"Git pull failed: {e}")
-            # Continue even if git pull fails
-
-        flow_json_path = f"../../dashboard/{flow_json_name}"
-        flow_path = os.path.abspath(os.path.join(os.path.dirname(__file__), flow_json_path))
-
-        if not os.path.exists(flow_path):
-            return create_response(False, message=f"Flow file not found: {flow_json_name}")
-
-        # Read the JSON content from the file
-        try:
-            with open(flow_path, 'r') as file:
-                flow_data = json.load(file)
-        except json.JSONDecodeError as e:
-            return create_response(False, message=f"Invalid JSON: {str(e)}")
-        except Exception as e:
-            return create_response(False, message=f"Error reading file: {str(e)}")
-
-        # Validate flow_data is either a list or a dict
-        if not isinstance(flow_data, (list, dict)):
-            return create_response(False, message=f"Flow JSON must be a list or dict, got {type(flow_data).__name__}")
-
-        # If it's a single flow object, wrap it in a list
-        if isinstance(flow_data, dict):
-            flow_data = [flow_data]
-
-        # Create SSL context
-        ssl_context = ssl.create_default_context()
-        ssl_context.check_hostname = False
-        ssl_context.verify_mode = ssl.CERT_NONE
-
-        # The rest of the function remains largely the same but with simplified response
-        # ... (skipping the HTTP client code for brevity, but it would be updated to use create_response)
-
-        # At the end of successful deployment:
-        return create_response(True, {
-            "operation": "create",
-            "flow_name": flow_json_name
-        })
-
-    except Exception as e:
-        logging.exception("Unhandled exception")
-        return create_response(False, message=f"Deployment error: {str(e)}")
-
-if __name__ == "__main__":
-    deploy_nodered_flow("Omnispindle.json")

@@ -1,0 +1,183 @@
+---
+description:
+globs:
+alwaysApply: false
+---
+# Git Workflow Guide
+
+## Overview
+
+This project uses a standardized Git workflow integrated with GitHub for version control and Jira for issue tracking. The workflow includes branch naming conventions, commit message formats, and integration with tools like GitHub CLI (`gh`).
+
+## Jira Integration
+
+### Jira Board
+
+- **Board**: DVD
+- **Issue Types**: Story, Bug, Task, Epic
+- **Status Workflow**: To Do → In Progress → Review → Done
+
+### Jira Issue Keys
+
+- Issue keys follow the format: `DVD-123`
+- Always reference Jira issues in commit messages and branch names
+
+## Branch Strategy
+
+### Branch Naming Convention
+
+```
+<type>/<jira-key>-<short-description>
+```
+
+Examples:
+- `feature/DVD-123-add-search-functionality`
+- `bugfix/DVD-456-fix-login-error`
+- `hotfix/DVD-789-security-patch`
+- `docs/DVD-101-update-readme`
+
+### Branch Types
+
+- `feature/` - New features or significant enhancements
+- `bugfix/` - Bug fixes
+- `hotfix/` - Critical fixes for production
+- `docs/` - Documentation updates
+- `refactor/` - Code improvements without new features
+- `test/` - Adding or improving tests
+
+## Commit Guidelines
+
+### Commit Message Format
+
+```
+<type>(<scope>): <jira-key> <subject>
+
+<body>
+
+<footer>
+```
+
+Examples:
+- `feat(auth): DVD-123 Add OAuth2 authentication`
+- `fix(ui): DVD-456 Fix button alignment on mobile devices`
+- `docs(api): DVD-789 Update API documentation`
+
+### Commit Types
+
+- `feat` - A new feature
+- `fix` - A bug fix
+- `docs` - Documentation only changes
+- `style` - Changes that don't affect code meaning
+- `refactor` - Code change that neither fixes a bug nor adds a feature
+- `test` - Adding or correcting tests
+- `chore` - Changes to the build process or auxiliary tools
+
+## Pull Request Process
+
+1. Create a pull request (PR) with `gh pr create`
+2. Link the PR to the Jira issue
+3. Request reviews from team members
+4. Address review comments
+5. Merge when approved and CI passes
+
+### PR Title Format
+
+```
+<jira-key>: <descriptive title>
+```
+
+Example: `DVD-123: Implement user authentication system`
+
+## GitHub CLI Commands
+
+```bash
+# Clone the repository
+gh repo clone DanEdens/Omnispindle
+
+# Create a new branch
+git checkout -b feature/DVD-123-new-feature
+
+# Create a GitHub issue
+gh issue create --title "DVD-123: Implement new feature" --body "Description of the new feature"
+
+# Create a pull request
+gh pr create --title "DVD-123: Implement new feature" --body "This PR implements..." --base main
+
+# Check PR status
+gh pr view
+
+# Merge a PR
+gh pr merge
+```
+
+## Common Workflows
+
+### Starting a New Feature
+
+```bash
+# Update main branch
+git checkout main
+git pull
+
+# Create feature branch
+git checkout -b feature/DVD-123-new-feature
+
+# Make changes and commit
+git add .
+git commit -m "feat: DVD-123 Add new feature"
+
+# Push branch to remote
+git push -u origin feature/DVD-123-new-feature
+
+# Create PR
+gh pr create
+```
+
+### Fixing a Bug
+
+```bash
+# Update main branch
+git checkout main
+git pull
+
+# Create bugfix branch
+git checkout -b bugfix/DVD-456-fix-issue
+
+# Make changes and commit
+git add .
+git commit -m "fix: DVD-456 Fix issue description"
+
+# Push branch to remote
+git push -u origin bugfix/DVD-456-fix-issue
+
+# Create PR
+gh pr create
+```
+
+## Submodule Management
+
+Since this repo contains submodules, use these commands:
+
+```bash
+# Clone with submodules
+git clone --recurse-submodules git@github.com:DanEdens/Omnispindle.git
+
+# Update submodules
+git submodule update --init --recursive
+
+# Pull with submodule updates
+git pull --recurse-submodules
+
+# Commit submodule changes
+git add Todomill_projectorium
+git commit -m "chore: Update Todomill_projectorium submodule"
+```
+
+## Release Process
+
+1. Update version numbers in appropriate files
+2. Create a release branch `release/v1.0.0`
+3. Create a GitHub release using `gh release create v1.0.0`
+4. Add release notes that reference all Jira issues included
+
+Remember to always link your work to Jira issues and follow the established conventions for better project tracking.

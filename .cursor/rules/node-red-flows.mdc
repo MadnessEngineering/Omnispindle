@@ -1,0 +1,65 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# Node-RED Flow Structure Guide
+
+## Overview
+This project contains Node-RED flows that implement a Todo management dashboard with MongoDB integration. The flows are stored as JSON files in the `Todomill_projectorium/ExportedNodeRedTabs/` directory.
+
+## Working with the Codebase
+
+### Development Workflow
+- **Focus on HTML and JavaScript files**: Make changes only to the HTML (ui_template nodes) or JavaScript (function nodes) files in the `JavascriptFromFunctionNode/` and `HtmlFromTemplateNode/` directories
+- **Deployment process**: After code changes, the new code should be deployed through the Node-RED GUI
+- **JSON files are for verification**: The exported JSON files are only for verification purposes after changes are deployed
+- **Do not edit JSON directly**: Unless specifically asked, avoid editing the JSON flow files directly
+
+## Key Components
+
+### Node Types
+- `ui_template`: HTML/JS/CSS components that render the UI dashboard
+- `function`: JavaScript functions that process messages
+- `mongodb4`: Database operations against MongoDB
+- `switch`: Routes messages based on topic or properties
+- `link in/out`: Connects different parts of the flow together
+- `debug`: Used for flow debugging
+
+### Message Flow Pattern
+1. User actions in the UI generate messages with `topic` like `todo/action/X`
+2. These are routed through the `Route by Action` switch node
+3. Dedicated function nodes prepare database queries
+4. The mongodb4 nodes execute the operations
+5. Response handlers process the result
+6. Results are published back to the dashboard via `link out` nodes
+
+### Dashboard Structure
+- Todo List panel: Displays pending todos
+- Insights panel: Shows AI-generated suggestions
+- Editor panel: For editing todo details
+
+### Data Flow
+```
+UI Action → Router → Function Processor → MongoDB → Response Handler → Dashboard Update
+```
+
+### Key Files
+- `JavascriptFromFunctionNode/*.js`: JavaScript code for function nodes
+- `HtmlFromTemplateNode/*.html`: HTML templates for UI components
+- `todo-dash-masterfile.json`: Main dashboard flow (for reference only)
+- `TodoEdit.html`: Template for editing todo items
+- `EditActions.js`: Routes edit actions to appropriate handlers
+
+## Special Patterns
+- Topics beginning with `todo/action/` trigger server-side operations
+- Topics beginning with `todo/dashboard/` send data to UI components
+- MongoDB operations use specific formatting based on mongodb4 node requirements
+
+## MongoDB Response Format Handling
+- The system is designed to handle both old and new MongoDB response formats
+- Old format: `{result: {ok: 1, nModified: 1, n: 1}}`
+- New format: `{acknowledged: true, modifiedCount: 1, matchedCount: 1}`
+- Response handlers check for both formats to ensure compatibility
+
+When working with this codebase, be aware that paths to resources are relative to the Node-RED instance, not the project structure.

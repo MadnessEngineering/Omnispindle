@@ -1,11 +1,13 @@
 import asyncio
 import logging
-from .server import server
-from .__init__ import run_server, MOSQUITTO_PUB_AVAILABLE
+from .__init__ import run_server
+
 import sys
+import shutil
 import subprocess
 
 logger = logging.getLogger(__name__)
+MOSQUITTO_PUB_AVAILABLE = shutil.which("mosquitto_pub") is not None
 
 def main():
     logger.info("Omnispindle beginning spin")

@@ -19,8 +19,7 @@ from collections import defaultdict
 
 from pymongo import MongoClient
 from .ai_assistant import assistant as todo_assistant
-from .tools import mqtt_publish
-
+from . import mqtt_publish
 
 # Configure logger
 logger = logging.getLogger(__name__)
@@ -62,6 +61,133 @@ PRIORITY_DURATION = {
     "low": 60,  # 1 hour
     "initial": 90,  # 1.5 hours
 }
+
+
+
+# @register_tool_once
+# async def get_todo_suggestions_tool() -> str:
+#     """
+#     Get AI-powered suggestions for todos based on pattern analysis.
+
+#     This tool analyzes completed todos to identify patterns and makes suggestions for:
+#     1. Task automation opportunities
+#     2. Priority recommendations for pending todos
+#     3. Insights about task patterns
+
+#     Returns:
+#         A JSON string containing suggestions and analysis results
+#     """
+#     return await get_todo_suggestions()
+
+
+# @register_tool_once
+# async def get_specific_todo_suggestions_tool(todo_id: str) -> str:
+#     """
+#     Get AI-powered suggestions for a specific todo.
+
+#     This tool analyzes a specific todo and compares it with completed todos to provide:
+#     1. Priority recommendations based on similar completed todos
+#     2. Estimated completion time based on similar tasks
+#     3. List of similar completed todos for reference
+
+#     Args:
+#         todo_id: ID of the todo to get suggestions for
+
+#     Returns:
+#         A JSON string containing suggestions specific to the todo
+#     """
+#     return await get_specific_suggestions(todo_id)
+
+
+# @register_tool_once
+# async def suggest_deadline_tool(todo_id: str) -> str:
+#     """
+#     Suggest an optimal deadline for a specific todo based on priority and content analysis.
+
+#     This tool analyzes a todo's priority and description to suggest a reasonable deadline:
+#     1. High priority tasks get shorter deadlines
+#     2. Keywords like "urgent" or "tomorrow" influence the suggestion
+#     3. The deadline always falls on a working day
+
+#     The returned data includes:
+#     - Suggested deadline date with reasoning
+#     - Adjustment factors that were considered
+#     - Possible next actions after setting a deadline
+
+#     Args:
+#         todo_id: ID of the todo to suggest a deadline for
+
+#     Returns:
+#         A JSON string containing the deadline suggestion with detailed reasoning
+#     """
+#     result = await suggest_deadline(todo_id)
+
+#     # Add tool-specific hints for AI agents to better understand response format
+#     try:
+#         data = json.loads(result)
+#         if data.get("success") and "data" in data:
+#             deadline_data = data["data"]
+#             # Add usage examples if not already present
+#             if "ai_agent_hints" not in deadline_data:
+#                 deadline_data["ai_agent_hints"] = {
+#                     "explanation": "This suggests a deadline of " +
+#                                   deadline_data.get("suggested_deadline", {}).get("date", "unknown") +
+#                                   " for the todo item, based on its priority and content analysis.",
+#                     "reasoning_breakdown": "The reasoning field explains how the deadline was determined, including base priority rules, keyword modifiers, and weekend adjustments.",
+#                     "response_formats": [
+#                         "I suggest completing this task by {suggested_deadline.date} ({suggested_deadline.day_of_week}), which is {suggested_deadline.days_from_now} days from now.",
+#                         "Based on this being a {todo_priority} priority task, I recommend a deadline of {suggested_deadline.date}.",
+#                         "The deadline of {suggested_deadline.date} was chosen because: {reasoning.summary}"
+#                     ]
+#                 }
+#             data["data"] = deadline_data
+#             result = json.dumps(data)
+#     except Exception as e:
+#         print(f"Error enhancing deadline response: {str(e)}")
+
+#     return result
+
+
+# @register_tool_once
+# async def suggest_time_slot_tool(todo_id: str, date: Optional[str] = None) -> str:
+#     """
+#     Suggest an optimal time slot for completing a specific todo.
+
+#     This tool analyzes completed todos to find patterns in when similar tasks
+#     are typically completed, then suggests an optimal time slot:
+#     1. Based on historical completion patterns for similar tasks
+#     2. Considering the priority of the task (high priority = morning slots)
+#     3. Using appropriate duration based on task priority
+
+#     Args:
+#         todo_id: ID of the todo to schedule
+#         date: Optional specific date in YYYY-MM-DD format
+
+#     Returns:
+#         A JSON string containing the time slot suggestion with reasoning
+#     """
+#     return await suggest_time_slot(todo_id, date)
+
+
+# @register_tool_once
+# async def generate_daily_schedule_tool(date: Optional[str] = None) -> str:
+#     """
+#     Generate an optimized daily schedule based on pending todos.
+
+#     This tool creates a complete daily schedule by:
+#     1. Prioritizing tasks based on their importance
+#     2. Allocating appropriate time slots with breaks between tasks
+#     3. Ensuring the schedule respects working hours
+#     4. Limiting the number of tasks to a reasonable amount per day
+
+#     Args:
+#         date: Optional specific date in YYYY-MM-DD format (defaults to tomorrow)
+
+#     Returns:
+#         A JSON string containing the complete suggested schedule
+#     """
+#     return await generate_daily_schedule(date)
+
 
 
 class TodoScheduler:
@@ -440,6 +566,136 @@ class TodoScheduler:
 
 # Create singleton instance
 scheduler = TodoScheduler()
+
+# async def suggest_deadline(todo_id: str) -> str:
+#     """
+#     Suggest an optimal deadline for a specific todo based on priority and content analysis.
+#
+#     This tool analyzes a todo's priority and description to suggest a reasonable deadline:
+#     1. High priority tasks get shorter deadlines
+#     2. Keywords like "urgent" or "tomorrow" influence the suggestion
+#     3. The deadline always falls on a working day
+#
+#     Args:
+#         todo_id: ID of the todo to suggest a deadline for
+#
+#     Returns:
+#         A JSON string containing the deadline suggestion with reasoning
+#     """
+#     # First get the todo
+#     todo_response = await get_todo(todo_id)
+#     todo_data = json.loads(todo_response)
+#
+#     if not todo_data.get("success"):
+#         return create_response(False, message=f"Failed to get todo: {todo_data.get('message', 'Unknown error')}")
+#
+#     todo = todo_data.get("data", {})
+#
+#     # Define deadline recommendations based on priority
+#     priority_deadlines = {
+#         "high": {"days": 2, "explanation": "High priority tasks should be completed quickly"},
+#         "medium": {"days": 5, "explanation": "Medium priority tasks can be scheduled within a week"},
+#         "low": {"days": 10, "explanation": "Low priority tasks can be scheduled within two weeks"},
+#         "initial": {"days": 7, "explanation": "Tasks with initial priority are assumed to be medium importance"}
+#     }
+#
+#     # Extract relevant information
+#     priority = todo.get("priority", "initial")
+#     description = todo.get("description", "")
+#
+#     # Start with the base deadline from priority
+#     base_days = priority_deadlines.get(priority, {"days": 7, "explanation": "Default deadline for unknown priority"})
+#     deadline_days = base_days["days"]
+#     reasoning = [base_days["explanation"]]
+#
+#     # Analyze description for keywords that might affect deadline
+#     deadline_modifiers = []
+#
+#     # Check for urgency indicators
+#     urgency_keywords = {
+#         "urgent": {"modifier": -1, "explanation": "Task description indicates urgency"},
+#         "asap": {"modifier": -2, "explanation": "ASAP indicator suggests highest urgency"},
+#         "emergency": {"modifier": -3, "explanation": "Emergency tasks require immediate attention"},
+#         "critical": {"modifier": -2, "explanation": "Critical tasks need prompt attention"},
+#         "immediate": {"modifier": -2, "explanation": "Immediate action required"}
+#     }
+#
+#     for keyword, info in urgency_keywords.items():
+#         if keyword in description.lower():
+#             deadline_days = max(1, deadline_days + info["modifier"])
+#             deadline_modifiers.append({"type": "urgency", "keyword": keyword, "days_changed": info["modifier"]})
+#             reasoning.append(info["explanation"])
+#
+#     # Check for explicit timeframes
+#     timeframe_patterns = {
+#         "tomorrow": {"days": 1, "explanation": "Task explicitly mentions it's needed tomorrow"},
+#         "next week": {"days": 7, "explanation": "Task is specifically scheduled for next week"},
+#         "next month": {"days": 30, "explanation": "Task is scheduled for next month"},
+#         "by end of week": {"days": 5, "explanation": "Task needs to be completed by the end of this week"},
+#         "by end of day": {"days": 1, "explanation": "Task must be completed today"}
+#     }
+#
+#     for phrase, info in timeframe_patterns.items():
+#         if phrase in description.lower():
+#             original_days = deadline_days
+#             deadline_days = info["days"]
+#             deadline_modifiers.append({
+#                 "type": "explicit_timeframe",
+#                 "keyword": phrase,
+#                 "days_changed": deadline_days - original_days
+#             })
+#             reasoning.append(info["explanation"])
+#             # If we find an explicit timeframe, it overrides other considerations
+#             break
+#
+#     # Calculate the deadline date
+#     now = datetime.now(UTC)
+#     deadline_date = now + timedelta(days=deadline_days)
+#
+#     # Ensure deadline falls on a working day (Mon-Fri)
+#     weekend_adjustment = 0
+#     if deadline_date.weekday() > 4:  # If it's a weekend
+#         # Move to next Monday
+#         days_to_monday = 7 - deadline_date.weekday()
+#         deadline_date += timedelta(days=days_to_monday)
+#         weekend_adjustment = days_to_monday
+#         reasoning.append(f"Adjusted deadline to next business day (moved {days_to_monday} days forward)")
+#
+#     # Format for response
+#     formatted_deadline = deadline_date.strftime("%Y-%m-%d")
+#     timestamp_deadline = int(deadline_date.timestamp())
+#
+#     result = {
+#         "todo_id": todo_id,
+#         "todo_description": description[:100] + ("..." if len(description) > 100 else ""),
+#         "todo_priority": priority,
+#         "suggested_deadline": {
+#             "date": formatted_deadline,
+#             "day_of_week": deadline_date.strftime("%A"),
+#             "timestamp": timestamp_deadline,
+#             "days_from_now": deadline_days + weekend_adjustment
+#         },
+#         "reasoning": {
+#             "summary": "; ".join(reasoning),
+#             "base_deadline": {
+#                 "days": base_days["days"],
+#                 "explanation": base_days["explanation"]
+#             },
+#             "modifiers": deadline_modifiers,
+#             "weekend_adjustment": weekend_adjustment
+#         },
+#         "possible_next_actions": ["update_todo", "mark_todo_complete", "suggest_time_slot"]
+#     }
+#
+#     # MQTT publish as confirmation after generating a deadline suggestion
+#     try:
+#         mqtt_message = f"todo_id: {todo_id}, deadline: {formatted_deadline}"
+#         await mqtt_publish(f"status/{os.getenv('DeNa')}/omnispindle/suggest_deadline", mqtt_message)
+#     except Exception as e:
+#         # Log the error but don't fail the entire operation
+#         print(f"MQTT publish error (non-fatal): {str(e)}")
+#
+#     return create_response(True, result)
 
 
 async def suggest_deadline(todo_id: str) -> str:
