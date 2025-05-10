@@ -41,12 +41,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Set environment variables
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    MONGODB_URI=mongodb://mongodb:27017 \
+    MONGODB_URI=mongodb://mongo:27017 \
     MONGODB_DB=swarmonomicon \
     MONGODB_COLLECTION=todos \
-    AWSIP=mongodb \
+    AWSIP=mosquitto \
     AWSPORT=27017 \
-    DeNa=omnispindle
+    MQTT_HOST=mosquitto \
+    MQTT_PORT=1883 \
+    DeNa=omnispindle \
+    HOST=0.0.0.0 \
+    PORT=8000
 
 # Create non-root user
 RUN useradd -m -s /bin/bash appuser
@@ -62,15 +66,20 @@ USER appuser
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-  CMD python -c "import socket; socket.socket().connect(('localhost', 8080))" || exit 1
+  CMD python -c "import socket; socket.socket().connect(('localhost', 8000))" || exit 1
 
 # Expose the needed ports
-EXPOSE 8080
+EXPOSE 8080 8000 1883
 
 # Set the entrypoint
-CMD ["python", "-m", "src.fastmcp_todo_server"]
+CMD ["python", "-m", "src.Omnispindle"]
 
 # Add metadata
 LABEL maintainer="Danedens31@gmail.com"
 LABEL description="Omnispindle - MCP Todo Server implementation"
-LABEL version="0.1.0" 
+LABEL version="0.1.0"
+LABEL org.opencontainers.image.source="https://github.com/DanEdens/Omnispindle"
+LABEL org.opencontainers.image.licenses="MIT"
+LABEL org.opencontainers.image.vendor="Dan Edens"
+LABEL org.opencontainers.image.title="Omnispindle MCP Todo Server"
+LABEL org.opencontainers.image.description="FastMCP-based Todo Server for the Swarmonomicon project"
