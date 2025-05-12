@@ -48,7 +48,8 @@ def main():
             port=port,
             log_level="info",
             proxy_headers=True,  # Important for proper header handling in Docker
-            forwarded_allow_ips="*"  # Accept X-Forwarded-* headers from any IP
+            forwarded_allow_ips="*",  # Accept X-Forwarded-* headers from any IP
+            interface="asgi3"  # Force use of the newer ASGI interface
         )
     except Exception as e:
         logger.exception(f"Error starting Omnispindle: {str(e)}")

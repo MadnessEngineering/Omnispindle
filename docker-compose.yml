@@ -46,13 +46,13 @@ services:
     ports:
       - "8000:8000"  # Exposing the Uvicorn port for SSE connections
     environment:
-      - MONGODB_URI=mongodb://mongo:27017
+      - MONGODB_URI=mongodb://${AWSIP:-AWS_IP_ADDRESS}:27017
       - MONGODB_DB=swarmonomicon
       - MONGODB_COLLECTION=todos
-      - AWSIP=localhost
-      - AWSPORT=27017
-      - MQTT_HOST=mosquitto
-      - MQTT_PORT=1883
+      - AWSIP=${AWSIP:-AWS_IP_ADDRESS}
+      - AWSPORT=${AWSPORT:-1883}
+      - MQTT_HOST=${AWSIP:-AWS_IP_ADDRESS}
+      - MQTT_PORT=${AWSPORT:-1883}
       - DeNa=omnispindle
       - HOST=0.0.0.0
       - PORT=8000
