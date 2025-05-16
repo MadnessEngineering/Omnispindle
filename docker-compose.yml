@@ -15,7 +15,7 @@ services:
           memory: 1G
           cpus: '1'
     networks:
-      - omnispindle-network
+      - madness_network
 
   # Mosquitto MQTT broker for messaging
   mosquitto:
@@ -34,7 +34,7 @@ services:
           memory: 256M
           cpus: '0.5'
     networks:
-      - omnispindle-network
+      - madness_network
 
   # MCP Todo Server (Omnispindle)
   mcp-todo-server:
@@ -62,7 +62,7 @@ services:
           memory: 512M
           cpus: '0.5'
     networks:
-      - omnispindle-network
+      - madness_network
 
   # # Todo Dashboard (optional web UI)
   # todo-dashboard:
@@ -78,11 +78,13 @@ services:
   #   depends_on:
   #     - mcp-todo-server
   #   networks:
-  #     - omnispindle-network
+  #     - madness_network
 
 networks:
-  omnispindle-network:
+  madness_network:
     driver: bridge
+    name: madness_network
+    external: true
 
 volumes:
   mongodb_data:
