@@ -1,12 +1,17 @@
 import asyncio
 import logging
-from .__init__ import run_server
+import os
+import uvicorn
+from . import run_server
 
 import sys
 import shutil
 import subprocess
 
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
 MOSQUITTO_PUB_AVAILABLE = shutil.which("mosquitto_pub") is not None
 
 def main():
@@ -21,13 +26,36 @@ def main():
         print("  Windows: Download from https://mosquitto.org/download/")
 
     try:
-        asyncio.run(run_server())
-    except KeyboardInterrupt:
-        # KeyboardInterrupt will now be handled by the signal handler in run_server
-        print("Shutting down server")
+        # Get host and port from environment variables with proper defaults for containerization
+        # Force host to 0.0.0.0 for Docker compatibility - overriding any existing variables
+        host = "0.0.0.0"  # Force binding to all interfaces
+        port = int(os.getenv("PORT", 8000))
+
+        # Print binding information for debugging
+        logger.info(f"Starting Uvicorn server on {host}:{port}")
+
+        # Ensure we use asyncio to start the server
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+        # Get the ASGI app by running the server in the event loop
+        app = loop.run_until_complete(run_server())
+
+        # Run Uvicorn with the ASGI app
+        uvicorn.run(
+            app,
+            host=host,
+            port=port,
+            log_level="info",
+            proxy_headers=True,  # Important for proper header handling in Docker
+            forwarded_allow_ips="*",  # Accept X-Forwarded-* headers from any IP
+            interface="asgi3"  # Force use of the newer ASGI interface
+        )
     except Exception as e:
-        print(f"Error running server: {str(e)}")
-        sys.exit(1)
+        logger.exception(f"Error starting Omnispindle: {str(e)}")
+        raise
+    finally:
+        loop.close()
 
 if __name__ == "__main__":
     main()

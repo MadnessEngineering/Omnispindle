@@ -1,8 +1,6 @@
-version: '3.8'
-
 services:
   # MongoDB for task storage
-  mongodb:
+  mongo:
     image: mongo:6
     restart: unless-stopped
     ports:
@@ -11,17 +9,13 @@ services:
       - mongodb_data:/data/db
     environment:
       - MONGO_INITDB_DATABASE=swarmonomicon
-    healthcheck:
-      test: ["CMD", "mongo", "--eval", "db.adminCommand('ping')"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 5s
     deploy:
       resources:
         limits:
           memory: 1G
           cpus: '1'
+    networks:
+      - madness_network
 
   # Mosquitto MQTT broker for messaging
   mosquitto:
@@ -34,62 +28,65 @@ services:
       - ./config/mosquitto.conf:/mosquitto/config/mosquitto.conf
       - mosquitto_data:/mosquitto/data
       - mosquitto_log:/mosquitto/log
-    healthcheck:
-      test: ["CMD-SHELL", "mosquitto_sub -p 1883 -t '$$SYS/#' -C 1 | grep -v Error || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 5s
     deploy:
       resources:
         limits:
           memory: 256M
           cpus: '0.5'
+    networks:
+      - madness_network
 
   # MCP Todo Server (Omnispindle)
   mcp-todo-server:
     build:
       context: .
       dockerfile: Dockerfile
-    image: omnispindle/mcp-todo-server:latest
+    image: danedens31/omnispindle:latest
     restart: unless-stopped
     ports:
-      - "8080:8080"
+      - "8000:8000"  # Exposing the Uvicorn port for SSE connections
     environment:
-      - MONGODB_URI=mongodb://mongodb:27017
+      - MONGODB_URI=mongodb://${AWSIP:-AWS_IP_ADDRESS}:27017
       - MONGODB_DB=swarmonomicon
       - MONGODB_COLLECTION=todos
-      - AWSIP=mongodb
-      - AWSPORT=27017
-      - MQTT_HOST=mosquitto
-      - MQTT_PORT=1883
+      - AWSIP=${AWSIP:-AWS_IP_ADDRESS}
+      - AWSPORT=${AWSPORT:-1883}
+      - MQTT_HOST=${AWSIP:-AWS_IP_ADDRESS}
+      - MQTT_PORT=${AWSPORT:-1883}
       - DeNa=omnispindle
+      - HOST=0.0.0.0
+      - PORT=8000
     deploy:
       resources:
         limits:
           memory: 512M
           cpus: '0.5'
-    depends_on:
-      mongodb:
-        condition: service_healthy
-      mosquitto:
-        condition: service_healthy
+    networks:
+      - madness_network
 
-  # Todo Dashboard (optional web UI)
-  todo-dashboard:
-    build:
-      context: ./todo-dashboard
-      dockerfile: Dockerfile
-    image: omnispindle/todo-dashboard:latest
-    restart: unless-stopped
-    ports:
-      - "3001:80"
-    environment:
-      - API_URL=http://mcp-todo-server:8080
-    depends_on:
-      - mcp-todo-server
+  # # Todo Dashboard (optional web UI)
+  # todo-dashboard:
+  #   build:
+  #     context: ./Todomill_projectorium
+  #     dockerfile: Dockerfile
+  #   image: danedens31/omnispindle-dashboard:latest
+  #   restart: unless-stopped
+  #   ports:
+  #     - "3001:80"
+  #   environment:
+  #     - API_URL=http://mcp-todo-server:8080
+  #   depends_on:
+  #     - mcp-todo-server
+  #   networks:
+  #     - madness_network
+
+networks:
+  madness_network:
+    driver: bridge
+    name: madness_network
+    external: true
 
 volumes:
   mongodb_data:
   mosquitto_data:
-  mosquitto_log: 
+  mosquitto_log:
