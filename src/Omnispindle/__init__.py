@@ -75,10 +75,10 @@ from .tools import search_lessons
 from .tools import search_todos
 from .tools import update_lesson
 from .tools import update_todo
+from .tools import list_project_todos
 from .mqtt import mqtt_publish
 from .mqtt import mqtt_get
 from pymongo import MongoClient
-from .tools import list_project_todos
 
 # Import the AI assistant functions (WIP)
 # from .ai_assistant import get_todo_suggestions
