@@ -377,7 +377,18 @@ async def search_todos_tool(query: str, fields: list = None, limit: int = 100) -
             - Use "project:<name>" in query to search by project
     limit: Max results (default: 100)
     
-    → Returns: {count, query, matches[{id, description, project, status}]}
+    → Returns: 
+        {
+          count: Number of matching todos,
+          query: Search query used,
+          matches: [{id, description, project, status}],
+          normalized_project: (When applicable) Shows if project name was normalized
+        }
+    
+    Examples:
+        - "project:RegressionTestKit" - Searches for todos in that project
+        - "fix bug" - Searches for "fix bug" in description field
+        - "all" with fields=["all"] - Searches all fields
     """
     return await search_todos(query, fields, limit)
 
