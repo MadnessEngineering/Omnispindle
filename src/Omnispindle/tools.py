@@ -804,3 +804,59 @@ async def search_lessons(query: str, fields: list = None, limit: int = 100) -> s
         print(f"MQTT publish error (non-fatal): {str(e)}")
 
     return create_response(True, summary)
+
+async def list_project_todos(project: str, limit: int = 5) -> str:
+    """
+    List recent todos for a specific project.
+    
+    Retrieves the most recently updated todos for a specific project.
+    Results are sorted by the last update time (created or last modified).
+    
+    Parameters:
+        project: Project name to filter by
+        limit: Maximum number of todos to return (default: 5)
+        
+    Returns:
+        JSON containing:
+        - count: Number of todos found
+        - project: The project that was queried
+        - items: Array of matching todos with ID and description
+    """
+    # Validate and normalize the project name
+    validated_project = validate_project_name(project)
+    
+    # Find todos for this project and sort by last update (created_at or updated_at if exists)
+    # We use sort on created_at to get the newest todos first
+    cursor = collection.find(
+        {"project": validated_project},
+        sort=[("created_at", -1)],  # -1 means descending order, newest first
+        limit=limit
+    )
+    results = list(cursor)
+
+    # Create an optimized summary with only essential data
+    summary = {
+        "count": len(results),
+        "project": validated_project,
+        "items": []
+    }
+
+    # Add todo items with minimal but useful information
+    for todo in results:
+        # Include ID and description only to keep response concise
+        summary["items"].append({
+            "id": todo["id"],
+            "description": todo["description"],
+            "status": todo["status"],
+            "created_at": datetime.fromtimestamp(todo["created_at"], UTC).strftime("%Y-%m-%d %H:%M")
+        })
+
+    # Publish MQTT status with minimal error handling
+    try:
+        await mqtt_publish(f"status/{os.getenv('DeNa')}/omnispindle/list_project_todos",
+                        f"project: {validated_project}, limit: {limit}, found: {len(results)}")
+    except Exception as e:
+        # Log the error but don't fail the entire operation
+        print(f"MQTT publish error (non-fatal): {str(e)}")
+
+    return create_response(True, summary)

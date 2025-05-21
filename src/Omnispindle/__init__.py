@@ -78,6 +78,7 @@ from .tools import update_todo
 from .mqtt import mqtt_publish
 from .mqtt import mqtt_get
 from pymongo import MongoClient
+from .tools import list_project_todos
 
 # Import the AI assistant functions (WIP)
 # from .ai_assistant import get_todo_suggestions
@@ -390,6 +391,19 @@ async def search_lessons_tool(query: str, fields: list = None, limit: int = 100)
     → Returns: {count, query, matches[{id, language, topic, preview, tags}]}
     """
     return await search_lessons(query, fields, limit)
+
+
+@register_tool_once
+async def list_project_todos_tool(project: str, limit: int = 5) -> str:
+    """
+    List recent todos by project.
+    
+    project: Project name to filter by
+    limit: Max results (default: 5)
+    
+    → Returns: {count, project, items[{id, description, status, created_at}]}
+    """
+    return await list_project_todos(project, limit)
 
 
 async def run_server() -> Callable:
