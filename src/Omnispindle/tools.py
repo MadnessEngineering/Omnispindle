@@ -28,6 +28,56 @@ db = mongo_client[MONGODB_DB]
 collection = db[MONGODB_COLLECTION]
 lessons_collection = db["lessons_learned"]
 
+# Valid project list - all lowercase for case-insensitive matching
+VALID_PROJECTS = [
+    "madness_interactive",
+    "regressiontestkit", 
+    "omnispindle", 
+    "todomill_projectorium",
+    "swarmonomicon", 
+    "hammerspoon", 
+    "lab_management", 
+    "cogwyrm", 
+    "docker_implementation", 
+    "documentation", 
+    "eventghost", 
+    "hammerghost",  
+    "quality_assurance",
+    "spindlewrit", 
+    "inventorium"
+]
+
+def validate_project_name(project: str) -> str:
+    """
+    Validates and normalizes project names to ensure they match the allowed projects.
+    
+    Args:
+        project: Project name to validate (any case)
+        
+    Returns:
+        Normalized project name (lowercase) if valid, or "madness_interactive" as fallback
+    """
+    if not project:
+        logging.warning(f"Empty project name received, defaulting to madness_interactive")
+        return "madness_interactive"
+    
+    # Convert to lowercase for case-insensitive matching
+    project_lower = project.lower()
+    
+    # Direct match with valid projects
+    if project_lower in VALID_PROJECTS:
+        return project_lower
+    
+    # Try to find a partial match (common issue with typos)
+    for valid_proj in VALID_PROJECTS:
+        if valid_proj in project_lower or project_lower in valid_proj:
+            logging.info(f"Project '{project}' matched to '{valid_proj}' instead")
+            return valid_proj
+    
+    # No match found, use default
+    logging.warning(f"Invalid project name '{project}', defaulting to madness_interactive")
+    return "madness_interactive"
+
 
 async def add_todo(description: str, project: str, priority: str = "Medium", target_agent: str = "user", metadata: dict = None, ctx: Context = None) -> str:
     """
@@ -53,10 +103,13 @@ async def add_todo(description: str, project: str, priority: str = "Medium", tar
         - target_agent: Who should complete this (default: user)
         - metadata: Optional additional structured data for the todo
     """
+    # Validate and normalize project name
+    validated_project = validate_project_name(project)
+    
     todo = {
         "id": str(uuid.uuid4()),
         "description": description,
-        "project": project.lower(),
+        "project": validated_project,
         "priority": priority,
         "source_agent": "Omnispindle",
         "target_agent": target_agent,
@@ -78,7 +131,7 @@ async def add_todo(description: str, project: str, priority: str = "Medium", tar
 
     # MQTT publish as confirmation after the database operation - completely non-blocking
     try:
-        mqtt_message = f"description: {description}, project: {project}, priority: {priority}, target_agent: {target_agent}"
+        mqtt_message = f"description: {description}, project: {validated_project}, priority: {priority}, target_agent: {target_agent}"
         # Use a separate try/except to catch any issues with mqtt_publish itself
         try:
             publish_success = await mqtt_publish(f"status/{os.getenv('DeNa')}/omnispindle/add_todo", mqtt_message, ctx)
@@ -99,7 +152,7 @@ async def add_todo(description: str, project: str, priority: str = "Medium", tar
     return create_response(True, {
         "todo_id": todo["id"],
         "description": truncated_desc,
-        "project": project,
+        "project": validated_project,
         "next_actions": ["get_todo_tool", "update_todo_tool", "mark_todo_complete_tool"],
         "target_agent": target_agent,
         "metadata": metadata
