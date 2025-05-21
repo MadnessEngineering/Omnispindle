@@ -26,7 +26,7 @@ async def test_search():
             logger.info(f"Result: {result}")
         except Exception as e:
             logger.error(f"Test 1 failed: {str(e)}")
-        
+
         # Test regular search
         logger.info('\nTest 2: Regular text search')
         try:
@@ -42,7 +42,7 @@ async def test_search():
             logger.info(f"Result: {result}")
         except Exception as e:
             logger.error(f"Test 3 failed: {str(e)}")
-            
+
         # Test project search with fields
         logger.info('\nTest 4: Project search with fields')
         try:
@@ -50,9 +50,9 @@ async def test_search():
             logger.info(f"Result: {result}")
         except Exception as e:
             logger.error(f"Test 4 failed: {str(e)}")
-            
+
     except Exception as e:
         logger.error(f"Test suite failed: {str(e)}")
 
 if __name__ == "__main__":
-    asyncio.run(test_search()) 
+    asyncio.run(test_search())
