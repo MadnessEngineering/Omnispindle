@@ -126,7 +126,7 @@ async def query_todos(filter: dict = None, project: dict = None, limit: int = 10
     # Find matching todos first
     cursor = collection.find(
         filter or {},
-        projection=project,
+        projection=project.lower(),
         limit=limit
     )
     results = list(cursor)
@@ -139,12 +139,16 @@ async def query_todos(filter: dict = None, project: dict = None, limit: int = 10
 
     # Include only essential fields for each todo
     for todo in results:
+        if todo["enhanced_description"]:
+            enhanced_description = True
+        else:
+            enhanced_description = False
         summary["items"].append({
             "id": todo["id"],
             "description": todo["description"],
             "project": todo["project"],
             "status": todo["status"],
-            "priority": todo["priority"]
+            "enhanced_description": enhanced_description
         })
 
     # MQTT publish as confirmation after the database query
@@ -241,11 +245,8 @@ async def get_todo(todo_id: str) -> str:
         - description: Full task description
         - project: Project category 
         - status: Current status (initial, pending, completed)
-        - priority: Task priority
-        - target: Entity responsible for the task
-        - created: Creation timestamp
-        - completed: Completion timestamp (if applicable)
-        - duration: Time between creation and completion (if applicable)
+        - enhanced_description: Boolean indicating if the description is enhanced
+        - notes: Notes about the todo
     """
     todo = collection.find_one({"id": todo_id})
 
@@ -258,10 +259,18 @@ async def get_todo(todo_id: str) -> str:
         "description": todo["description"],
         "project": todo["project"],
         "status": todo["status"],
-        "priority": todo["priority"],
-        "target": todo.get("target_agent", "user"),
-        "created": todo["created_at"]
+
     }
+
+    # if "notes"
+    if todo["notes"]:
+        formatted_todo["notes"] = todo["notes"]
+    else:
+        formatted_todo["notes"] = ""
+    if todo["enhanced_description"]:
+        formatted_todo["enhanced_description"] = todo["enhanced_description"]
+    else:
+        formatted_todo["enhanced_description"] = False
 
     # Add completion information if available (using compact format)
     if todo.get("completed_at"):
@@ -341,7 +350,7 @@ async def list_todos_by_status(status: str, limit: int = 100) -> str:
         - projects: List of unique projects (only included if multiple exist)
     """
     cursor = collection.find(
-        {"status": status},
+        {"status": status.lower()},
         limit=limit
     )
     results = list(cursor)
@@ -605,7 +614,7 @@ async def search_todos(query: str, fields: list = None, limit: int = 100) -> str
     # Execute the search
     cursor = collection.find(search_query, limit=limit)
     results = list(cursor)
-
+# 
     # Create a compact summary of results
     summary = {
         "count": len(results),
