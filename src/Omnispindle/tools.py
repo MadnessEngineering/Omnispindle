@@ -31,19 +31,19 @@ lessons_collection = db["lessons_learned"]
 # Valid project list - all lowercase for case-insensitive matching
 VALID_PROJECTS = [
     "madness_interactive",
-    "regressiontestkit", 
-    "omnispindle", 
+    "regressiontestkit",
+    "omnispindle",
     "todomill_projectorium",
-    "swarmonomicon", 
-    "hammerspoon", 
-    "lab_management", 
-    "cogwyrm", 
-    "docker_implementation", 
-    "documentation", 
-    "eventghost", 
-    "hammerghost",  
+    "swarmonomicon",
+    "hammerspoon",
+    "lab_management",
+    "cogwyrm",
+    "docker_implementation",
+    "documentation",
+    "eventghost",
+    "hammerghost",
     "quality_assurance",
-    "spindlewrit", 
+    "spindlewrit",
     "inventorium"
 ]
 
@@ -60,20 +60,20 @@ def validate_project_name(project: str) -> str:
     if not project:
         logging.warning(f"Empty project name received, defaulting to madness_interactive")
         return "madness_interactive"
-    
+
     # Convert to lowercase for case-insensitive matching
     project_lower = project.lower()
-    
+
     # Direct match with valid projects
     if project_lower in VALID_PROJECTS:
         return project_lower
-    
+
     # Try to find a partial match (common issue with typos)
     for valid_proj in VALID_PROJECTS:
         if valid_proj in project_lower or project_lower in valid_proj:
             logging.info(f"Project '{project}' matched to '{valid_proj}' instead")
             return valid_proj
-    
+
     # No match found, use default
     logging.warning(f"Invalid project name '{project}', defaulting to madness_interactive")
     return "madness_interactive"
@@ -105,7 +105,7 @@ async def add_todo(description: str, project: str, priority: str = "Medium", tar
     """
     # Validate and normalize project name
     validated_project = validate_project_name(project)
-    
+
     todo = {
         "id": str(uuid.uuid4()),
         "description": description,
@@ -158,7 +158,7 @@ async def add_todo(description: str, project: str, priority: str = "Medium", tar
         "metadata": metadata
     }, return_context=False)
 
-async def query_todos(filter: dict = None, project: dict = None, limit: int = 100, ctx=None) -> str:
+async def query_todos(filter: dict = None, projection: dict = None, limit: int = 100, ctx=None) -> str:
     """
     Query todos with flexible filtering options.
     
@@ -167,7 +167,7 @@ async def query_todos(filter: dict = None, project: dict = None, limit: int = 10
     
     Parameters:
         filter: MongoDB-style query object to filter todos (e.g., {"status": "pending"})
-        project: Fields to include/exclude in results (e.g., {"description": 1})
+        projection: Fields to include/exclude in results (e.g., {"description": 1})
         limit: Maximum number of todos to return (default: 100)
         
     Returns:
@@ -176,10 +176,24 @@ async def query_todos(filter: dict = None, project: dict = None, limit: int = 10
         - items: Array of matching todos with essential fields
         - projects: List of unique projects in the results (if multiple exist)
     """
+    # Process filter to ensure project and status fields are case insensitive
+    if filter and isinstance(filter, dict):
+        processed_filter = {}
+        for key, value in filter.items():
+            if key == "project" and isinstance(value, str):
+                # Apply project name validation to project filters
+                processed_filter[key] = validate_project_name(value)
+            elif key == "status" and isinstance(value, str):
+                # Make status case insensitive
+                processed_filter[key] = value.lower()
+            else:
+                processed_filter[key] = value
+        filter = processed_filter
+
     # Find matching todos first
     cursor = collection.find(
         filter or {},
-        projection=project.lower(),
+        projection=projection,
         limit=limit
     )
     results = list(cursor)
@@ -192,10 +206,9 @@ async def query_todos(filter: dict = None, project: dict = None, limit: int = 10
 
     # Include only essential fields for each todo
     for todo in results:
-        if todo["enhanced_description"]:
-            enhanced_description = True
-        else:
-            enhanced_description = False
+        # Check if enhanced_description exists and has content
+        enhanced_description = bool(todo.get("enhanced_description"))
+
         summary["items"].append({
             "id": todo["id"],
             "description": todo["description"],
@@ -205,9 +218,12 @@ async def query_todos(filter: dict = None, project: dict = None, limit: int = 10
         })
 
     # MQTT publish as confirmation after the database query
-
-    mqtt_message = f"filter: {json.dumps(filter)}, project: {json.dumps(project)}, limit: {limit}"
-    await mqtt_publish(f"status/{os.getenv('DeNa')}/omnispindle/query_todos", mqtt_message, ctx)
+    try:
+        mqtt_message = f"filter: {json.dumps(filter)}, limit: {limit}"
+        await mqtt_publish(f"status/{os.getenv('DeNa')}/omnispindle/query_todos", mqtt_message, ctx)
+    except Exception as e:
+        # Log the error but don't fail the entire operation
+        print(f"MQTT publish error (non-fatal): {str(e)}")
 
     return create_response(True, summary)
 
@@ -629,16 +645,20 @@ async def list_lessons(limit: int = 100) -> str:
 
     return create_response(True, summary)
 
-async def search_todos(query: str, fields: list = None, limit: int = 100) -> str:
+async def search_todos(query: str, fields: list = None, limit: int = 100, ctx=None) -> str:
     """
     Search todos with text search capabilities.
     
     Performs a case-insensitive text search across specified fields in todos.
     Uses regex pattern matching to find todos matching the query string.
+    Special handling for project field ensures proper project name validation.
     
     Parameters:
         query: Text string to search for
         fields: List of fields to search in (default: ["description"])
+                Can include special values:
+                - "all" to search all text fields
+                - "project:<name>" to search by project name
         limit: Maximum number of todos to return (default: 100)
         
     Returns:
@@ -651,23 +671,47 @@ async def search_todos(query: str, fields: list = None, limit: int = 100) -> str
           - project: Project category
           - status: Current status
     """
-    if not fields:
-        fields = ["description"]
+    # Handle project-specific search format "project:<name>"
+    if query.lower().startswith("project:"):
+        project_name = query[8:].strip()  # Remove "project:" prefix
+        validated_project = validate_project_name(project_name)
 
-    # Create a regex pattern for case-insensitive search
-    regex_pattern = {"$regex": query, "$options": "i"}
+        # Use direct lookup instead of regex for better performance
+        search_query = {"project": validated_project}
+        fields = []  # Don't need fields for direct project lookup
 
-    # Build the query with OR conditions for each field
-    search_conditions = []
-    for field in fields:
-        search_conditions.append({field: regex_pattern})
+    # Handle normal text search
+    else:
+        if not fields:
+            fields = ["description"]
 
-    search_query = {"$or": search_conditions}
+        # Support "all" as a special field value to search across multiple fields
+        if "all" in fields:
+            fields = ["description", "project", "status", "priority", "notes"]
+
+        # Create a regex pattern for case-insensitive search
+        regex_pattern = {"$regex": query, "$options": "i"}
+
+        # Build the query with OR conditions for each field
+        search_conditions = []
+        for field in fields:
+            # If searching project field, validate project name first
+            if field == "project" and query:
+                validated_project = validate_project_name(query)
+                search_conditions.append({"project": validated_project})
+            else:
+                search_conditions.append({field: regex_pattern})
+
+        search_query = {"$or": search_conditions}
 
     # Execute the search
-    cursor = collection.find(search_query, limit=limit)
-    results = list(cursor)
-# 
+    try:
+        cursor = collection.find(search_query, limit=limit)
+        results = list(cursor)
+    except Exception as e:
+        logging.error(f"Search query failed: {e}")
+        return create_response(False, message=f"Search failed: {str(e)}")
+
     # Create a compact summary of results
     summary = {
         "count": len(results),
@@ -687,7 +731,7 @@ async def search_todos(query: str, fields: list = None, limit: int = 100) -> str
     # MQTT publish as confirmation after searching todos
     try:
         mqtt_message = f"query: {query}, fields: {fields}, limit: {limit}"
-        await mqtt_publish(f"status/{os.getenv('DeNa')}/omnispindle/search_todos", mqtt_message, ctx=None)
+        await mqtt_publish(f"status/{os.getenv('DeNa')}/omnispindle/search_todos", mqtt_message, ctx)
     except Exception as e:
         # Log the error but don't fail the entire operation
         print(f"MQTT publish error (non-fatal): {str(e)}")

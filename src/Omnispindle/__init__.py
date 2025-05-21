@@ -128,11 +128,12 @@ async def add_todo_tool(description: str, project: str, priority: str = "Medium"
     metadata: { "ticket": "ticket number", "tags": ["tag1", "tag2"], "notes": "notes" }
     → Returns: {todo_id, truncated_description, project}
     """
-    # Create TODO about these comments with mcp tools to test this
-    # normalize_project_name(project)
-    # Check with regex if can match the full name from the list of projects
-    # If not, try to use local AI models to infer the project name from existing list
-    # If still not found, return error to the mcp call with a full list
+    # Project name will be validated and normalized in tools.py
+    # This includes:
+    # 1. Conversion to lowercase for consistent storage
+    # 2. Validation against known project list
+    # 3. Partial matching for typos/case differences
+    # 4. Fallback to madness_interactive if no match found
     try:
         result = await add_todo(description, project, priority, target_agent, metadata, ctx)
 
@@ -371,6 +372,9 @@ async def search_todos_tool(query: str, fields: list = None, limit: int = 100) -
     
     query: Text to search for
     fields: Fields to search in (default: ["description"])
+            Special values supported:
+            - "all" to search all text fields
+            - Use "project:<name>" in query to search by project
     limit: Max results (default: 100)
     
     → Returns: {count, query, matches[{id, description, project, status}]}
