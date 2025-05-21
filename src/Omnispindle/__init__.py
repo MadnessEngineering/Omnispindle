@@ -68,7 +68,6 @@ from .tools import delete_todo
 from .tools import get_lesson
 from .tools import get_todo
 from .tools import list_lessons
-from .tools import list_todos_by_status
 from .tools import mark_todo_complete
 from .tools import query_todos
 from .tools import search_lessons
@@ -78,6 +77,7 @@ from .tools import update_todo
 from .mqtt import mqtt_publish
 from .mqtt import mqtt_get
 from pymongo import MongoClient
+from .tools import list_project_todos
 
 # Import the AI assistant functions (WIP)
 # from .ai_assistant import get_todo_suggestions
@@ -285,19 +285,6 @@ async def mark_todo_complete_tool(todo_id: str, ctx: Context = None) -> str:
     → Returns: {todo_id, completed_at}
     """
     return await mark_todo_complete(todo_id, ctx)
-
-
-@register_tool_once
-async def list_todos_by_status_tool(status: str, limit: int = 100) -> str:
-    """
-    List todos by status.
-    
-    status: Filter value ("initial"|"pending"|"completed"|"review")
-    limit: Max results (default: 100)
-    
-    → Returns: {count, status, items[{id, desc, project}], projects?}
-    """
-    return await list_todos_by_status(status, limit)
 
 
 @register_tool_once
