@@ -671,44 +671,37 @@ async def search_todos(query: str, fields: list = None, limit: int = 100, ctx=No
           - project: Project category
           - status: Current status
     """
-    is_project_search = False
-    original_project_name = None
-    
     # Handle project-specific search format "project:<name>"
     if query.lower().startswith("project:"):
         project_name = query[8:].strip()  # Remove "project:" prefix
-        original_project_name = project_name
         validated_project = validate_project_name(project_name)
-        is_project_search = True
-        
+
         # Use direct lookup instead of regex for better performance
         search_query = {"project": validated_project}
         fields = []  # Don't need fields for direct project lookup
-        
+
     # Handle normal text search
     else:
         if not fields:
             fields = ["description"]
-            
+
         # Support "all" as a special field value to search across multiple fields
         if "all" in fields:
             fields = ["description", "project", "status", "priority", "notes"]
-            
+
         # Create a regex pattern for case-insensitive search
         regex_pattern = {"$regex": query, "$options": "i"}
-        
+
         # Build the query with OR conditions for each field
         search_conditions = []
         for field in fields:
             # If searching project field, validate project name first
             if field == "project" and query:
                 validated_project = validate_project_name(query)
-                original_project_name = query
-                is_project_search = True
                 search_conditions.append({"project": validated_project})
             else:
                 search_conditions.append({field: regex_pattern})
-                
+
         search_query = {"$or": search_conditions}
 
     # Execute the search
@@ -718,23 +711,13 @@ async def search_todos(query: str, fields: list = None, limit: int = 100, ctx=No
     except Exception as e:
         logging.error(f"Search query failed: {e}")
         return create_response(False, message=f"Search failed: {str(e)}")
- 
+
     # Create a compact summary of results
     summary = {
         "count": len(results),
         "query": query,
         "matches": []
     }
-    
-    # Add project normalization notice if applicable
-    if is_project_search and original_project_name:
-        validated_project = validate_project_name(original_project_name)
-        if original_project_name.lower() != validated_project:
-            summary["normalized_project"] = {
-                "original": original_project_name,
-                "normalized": validated_project,
-                "message": f"Project name was normalized from '{original_project_name}' to '{validated_project}'"
-            }
 
     # Include only essential fields for each todo
     for todo in results:

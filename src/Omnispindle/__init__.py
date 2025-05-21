@@ -162,18 +162,31 @@ async def add_todo_tool(description: str, project: str, priority: str = "Medium"
 
 
 @register_tool_once
-async def query_todos_tool(filter: dict = None, projection: dict = None, limit: int = 100) -> str:
+async def query_todos_tool(query_or_filter: any = None, fields_or_projection: any = None, limit: int = 100, ctx: Context = None) -> str:
     """
-    Query todos with filters.
+    Query or search todos with flexible options.
     
-    filter: MongoDB query dict (e.g. {"status": "pending"})
-    projection: Fields to include/exclude
+    query_or_filter: Can be either:
+                    - MongoDB query dict (e.g. {"status": "pending"})
+                    - Text string to search for when fields_or_projection is a list
+    fields_or_projection: Can be either:
+                    - MongoDB projection dict for filtering fields to return
+                    - List of fields to search in when query_or_filter is a text string
+                      Special values supported:
+                      - "all" to search all text fields
+                      - Use "project:<name>" in query to search by project
     limit: Max results (default: 100)
     
-    → Returns: {count, items[{id, description, project, status, priority}]}
+    → Returns: {count, items[...]} when filtering or {count, query, matches[...]} when searching
     """
-    result = await query_todos(filter, projection, limit)
-    return json.dumps(result, default=str)
+    # Determine if this is a search or query operation based on parameter types
+    if isinstance(query_or_filter, str):
+        # This is a search operation with a text query
+        return await search_todos(query_or_filter, fields_or_projection, limit, ctx)
+    else:
+        # This is a filter operation with a MongoDB filter
+        result = await query_todos(query_or_filter, fields_or_projection, limit, ctx)
+        return json.dumps(result, default=str)
 
 
 @register_tool_once
@@ -295,7 +308,7 @@ async def list_todos_by_status_tool(status: str, limit: int = 100) -> str:
     
     status: Filter value ("initial"|"pending"|"completed"|"review")
     limit: Max results (default: 100)
-    
+
     → Returns: {count, status, items[{id, desc, project}], projects?}
     """
     return await list_todos_by_status(status, limit)
@@ -305,12 +318,12 @@ async def list_todos_by_status_tool(status: str, limit: int = 100) -> str:
 async def add_lesson_tool(language: str, topic: str, lesson_learned: str, tags: list = None, ctx: Context = None) -> str:
     """
     Create lesson.
-    
+
     language: Technology or language name
     topic: Brief title/subject
     lesson_learned: Full lesson content
     tags: Optional categorization tags
-    
+
     → Returns: {lesson_id, topic}
     """
     return await add_lesson(language, topic, lesson_learned, tags, ctx)
@@ -320,9 +333,9 @@ async def add_lesson_tool(language: str, topic: str, lesson_learned: str, tags: 
 async def get_lesson_tool(lesson_id: str) -> str:
     """
     Get lesson details.
-    
+
     lesson_id: ID of lesson to retrieve
-    
+
     → Returns: {id, language, topic, lesson_learned, tags, created}
     """
     return await get_lesson(lesson_id)
@@ -332,10 +345,10 @@ async def get_lesson_tool(lesson_id: str) -> str:
 async def update_lesson_tool(lesson_id: str, updates: dict, ctx: Context = None) -> str:
     """
     Update lesson.
-    
+
     lesson_id: ID of lesson to update
     updates: Fields to change {field: new_value}
-    
+
     → Returns: {success, message}
     """
     return await update_lesson(lesson_id, updates, ctx)
@@ -345,9 +358,9 @@ async def update_lesson_tool(lesson_id: str, updates: dict, ctx: Context = None)
 async def delete_lesson_tool(lesson_id: str, ctx: Context = None) -> str:
     """
     Delete lesson.
-    
+
     lesson_id: ID of lesson to remove
-    
+
     → Returns: {success, message}
     """
     return await delete_lesson(lesson_id, ctx)
@@ -357,51 +370,23 @@ async def delete_lesson_tool(lesson_id: str, ctx: Context = None) -> str:
 async def list_lessons_tool(limit: int = 100) -> str:
     """
     List all lessons.
-    
+
     limit: Max results (default: 100)
-    
+
     → Returns: {count, items[{id, language, topic, tags, preview}]}
     """
     return await list_lessons(limit)
 
 
 @register_tool_once
-async def search_todos_tool(query: str, fields: list = None, limit: int = 100) -> str:
-    """
-    Search todos by text.
-    
-    query: Text to search for
-    fields: Fields to search in (default: ["description"])
-            Special values supported:
-            - "all" to search all text fields
-            - Use "project:<name>" in query to search by project
-    limit: Max results (default: 100)
-    
-    → Returns: 
-        {
-          count: Number of matching todos,
-          query: Search query used,
-          matches: [{id, description, project, status}],
-          normalized_project: (When applicable) Shows if project name was normalized
-        }
-    
-    Examples:
-        - "project:RegressionTestKit" - Searches for todos in that project
-        - "fix bug" - Searches for "fix bug" in description field
-        - "all" with fields=["all"] - Searches all fields
-    """
-    return await search_todos(query, fields, limit)
-
-
-@register_tool_once
 async def search_lessons_tool(query: str, fields: list = None, limit: int = 100) -> str:
     """
     Search lessons by text.
-    
+
     query: Text to search for
     fields: Fields to search in (default: ["topic", "lesson_learned"])
     limit: Max results (default: 100)
-    
+
     → Returns: {count, query, matches[{id, language, topic, preview, tags}]}
     """
     return await search_lessons(query, fields, limit)
@@ -410,11 +395,11 @@ async def search_lessons_tool(query: str, fields: list = None, limit: int = 100)
 async def run_server() -> Callable:
     """
     Run the FastMCP server.
-    
+
     This function initializes and starts the FastMCP server by calling the run_server method
     on the Omnispindle instance. It handles server setup and ensures that all tools are
     properly registered before starting.
-    
+
     Returns:
         Callable: An ASGI application that can handle HTTP, WebSocket, and lifespan requests.
         If the underlying run_sse_async() method returns None, a fallback ASGI application
