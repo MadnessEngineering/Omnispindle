@@ -678,18 +678,18 @@ async def search_todos(query: str, fields: list = None, limit: int = 100, ctx=No
             project_name = query[8:].strip()
             if not project_name:
                 return create_response(False, message="Project name is empty. Use format 'project:ProjectName'")
-                
+
             # Validate the project name
             validated_project = validate_project_name(project_name)
-            
+
             # Use direct lookup for project search
             search_query = {"project": validated_project}
-            
+
             logging.info(f"Project search: '{project_name}' validated to '{validated_project}'")
         except Exception as e:
             logging.error(f"Project search parsing error: {str(e)}")
             return create_response(False, message=f"Invalid project search format. Use 'project:ProjectName'. Error: {str(e)}")
-    
+
     # Handle normal text search
     else:
         if not fields:
@@ -835,7 +835,7 @@ async def list_project_todos(project: str, limit: int = 5) -> str:
     """
     # Validate and normalize the project name
     validated_project = validate_project_name(project)
-    
+
     # Find todos for this project and sort by last update (created_at or updated_at if exists)
     # We use sort on created_at to get the newest todos first
     cursor = collection.find(
