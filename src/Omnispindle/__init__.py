@@ -163,19 +163,20 @@ async def add_todo_tool(description: str, project: str, priority: str = "Medium"
 
 
 @register_tool_once
-async def query_todos_tool(query_or_filter: any = None, fields_or_projection: any = None, limit: int = 100, ctx: Context = None) -> str:
+async def query_todos_tool(query_or_filter=None, fields_or_projection=None, limit: int = 100, ctx: Context = None) -> str:
     """
     Query or search todos with flexible options.
     
     query_or_filter: Can be either:
                     - MongoDB query dict (e.g. {"status": "pending"})
                     - Text string to search for when fields_or_projection is a list
+                      Special formats:
+                      - Use "project:ProjectName" to search for todos in specific project
     fields_or_projection: Can be either:
                     - MongoDB projection dict for filtering fields to return
                     - List of fields to search in when query_or_filter is a text string
                       Special values supported:
                       - "all" to search all text fields
-                      - Use "project:<name>" in query to search by project
     limit: Max results (default: 100)
     
     → Returns: {count, items[...]} when filtering or {count, query, matches[...]} when searching

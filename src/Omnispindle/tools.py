@@ -655,10 +655,10 @@ async def search_todos(query: str, fields: list = None, limit: int = 100, ctx=No
     
     Parameters:
         query: Text string to search for
+              Special format: "project:ProjectName" to search by project
         fields: List of fields to search in (default: ["description"])
                 Can include special values:
                 - "all" to search all text fields
-                - "project:<name>" to search by project name
         limit: Maximum number of todos to return (default: 100)
         
     Returns:
@@ -671,15 +671,25 @@ async def search_todos(query: str, fields: list = None, limit: int = 100, ctx=No
           - project: Project category
           - status: Current status
     """
-    # Handle project-specific search format "project:<name>"
-    if query.lower().startswith("project:"):
-        project_name = query[8:].strip()  # Remove "project:" prefix
-        validated_project = validate_project_name(project_name)
-
-        # Use direct lookup instead of regex for better performance
-        search_query = {"project": validated_project}
-        fields = []  # Don't need fields for direct project lookup
-
+    # Handle project-specific search format "project:ProjectName"
+    if isinstance(query, str) and query.lower().startswith("project:"):
+        try:
+            # Extract project name - everything after "project:"
+            project_name = query[8:].strip()
+            if not project_name:
+                return create_response(False, message="Project name is empty. Use format 'project:ProjectName'")
+                
+            # Validate the project name
+            validated_project = validate_project_name(project_name)
+            
+            # Use direct lookup for project search
+            search_query = {"project": validated_project}
+            
+            logging.info(f"Project search: '{project_name}' validated to '{validated_project}'")
+        except Exception as e:
+            logging.error(f"Project search parsing error: {str(e)}")
+            return create_response(False, message=f"Invalid project search format. Use 'project:ProjectName'. Error: {str(e)}")
+    
     # Handle normal text search
     else:
         if not fields:
@@ -708,6 +718,7 @@ async def search_todos(query: str, fields: list = None, limit: int = 100, ctx=No
     try:
         cursor = collection.find(search_query, limit=limit)
         results = list(cursor)
+        logging.info(f"Search found {len(results)} results for query: {query}")
     except Exception as e:
         logging.error(f"Search query failed: {e}")
         return create_response(False, message=f"Search failed: {str(e)}")
