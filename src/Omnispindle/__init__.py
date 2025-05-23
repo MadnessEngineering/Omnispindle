@@ -71,6 +71,7 @@ from .tools import list_lessons
 from .tools import list_todos_by_status
 from .tools import mark_todo_complete
 from .tools import query_todos
+from .tools import query_todo_logs
 from .tools import search_lessons
 from .tools import search_todos
 from .tools import update_lesson
@@ -79,6 +80,9 @@ from .tools import list_project_todos
 from .mqtt import mqtt_publish
 from .mqtt import mqtt_get
 from pymongo import MongoClient
+
+# Import the TodoLogService for initialization
+from .todo_log_service import get_service_instance as get_log_service
 
 # Import the AI assistant functions (WIP)
 # from .ai_assistant import get_todo_suggestions
@@ -475,3 +479,20 @@ async def run_server() -> Callable:
     _run_server_result = result
 
     return result
+
+# Automatically start the TodoLogService when the module is imported
+async def _init_todo_log_service():
+    """Initialize the TodoLogService."""
+    log_service = get_log_service()
+    try:
+        await log_service.start()
+        logger.info("TodoLogService started at module initialization")
+    except Exception as e:
+        logger.error(f"Failed to start TodoLogService: {str(e)}")
+
+# Schedule the initialization
+loop = asyncio.get_event_loop()
+try:
+    loop.create_task(_init_todo_log_service())
+except Exception as e:
+    logger.error(f"Failed to schedule TodoLogService initialization: {str(e)}")

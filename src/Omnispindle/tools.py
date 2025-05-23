@@ -13,6 +13,7 @@ from pymongo import MongoClient
 from .mqtt import mqtt_publish
 from .utils import _format_duration
 from .utils import create_response
+from .todo_log_service import get_service_instance as get_log_service
 
 # Load environment variables
 load_dotenv()
@@ -1006,3 +1007,48 @@ async def list_project_todos(project: str, limit: int = 5) -> str:
         print(f"MQTT publish error (non-fatal): {str(e)}")
 
     return create_response(True, summary)
+
+async def query_todo_logs(filter_type: str = 'all', project: str = 'all', 
+                       page: int = 1, page_size: int = 20, ctx: Context = None) -> str:
+    """
+    Query todo logs with filtering options.
+    
+    Gets log entries from the TodoLogService showing changes to todo items.
+    Returns a collection of log entries matching the filter criteria.
+    
+    Parameters:
+        filter_type: Type of operation to filter by ('all', 'create', 'update', 'delete', 'complete')
+        project: Project name to filter by ('all' for all projects)
+        page: Page number (1-based)
+        page_size: Maximum number of logs to return (default: 20)
+        ctx: Optional context for logging
+        
+    Returns:
+        JSON containing:
+        - logEntries: Array of matching log entries
+        - totalCount: Total number of logs matching the filter
+        - page: Current page number
+        - pageSize: Number of items per page
+        - hasMore: Whether there are more logs beyond this page
+        - projects: List of unique projects for filtering
+    """
+    try:
+        # Get the TodoLogService instance
+        log_service = get_log_service()
+        
+        # Initialize the service if it's not running
+        if not log_service.running:
+            await log_service.start()
+        
+        # Query the logs
+        result = await log_service.get_logs(
+            filter_type=filter_type,
+            project=project,
+            page=page,
+            page_size=page_size
+        )
+        
+        return create_response(True, result, return_context=False)
+        
+    except Exception as e:
+        return create_response(False, message=f"Failed to query todo logs: {str(e)}", return_context=False)
