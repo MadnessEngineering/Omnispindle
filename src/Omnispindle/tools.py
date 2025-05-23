@@ -27,6 +27,11 @@ mongo_client = MongoClient(MONGODB_URI)
 db = mongo_client[MONGODB_DB]
 collection = db[MONGODB_COLLECTION]
 lessons_collection = db["lessons_learned"]
+tags_cache_collection = db["tags_cache"]
+
+# Cache constants
+TAGS_CACHE_KEY = "all_lesson_tags"
+TAGS_CACHE_EXPIRY = 43200  # Cache expiry in seconds (12 hours)
 
 # Valid project list - all lowercase for case-insensitive matching
 VALID_PROJECTS = [
@@ -46,6 +51,110 @@ VALID_PROJECTS = [
     "spindlewrit",
     "inventorium"
 ]
+
+# Cache utility functions
+def cache_lesson_tags(tags_list):
+    """
+    Cache the list of all lesson tags in MongoDB.
+    
+    Args:
+        tags_list: List of tags to cache
+    """
+    try:
+        # Add timestamp for cache expiry management
+        cache_entry = {
+            "key": TAGS_CACHE_KEY,
+            "tags": list(tags_list),
+            "updated_at": int(datetime.now(UTC).timestamp())
+        }
+
+        # Use upsert to update if exists or insert if not
+        tags_cache_collection.update_one(
+            {"key": TAGS_CACHE_KEY},
+            {"$set": cache_entry},
+            upsert=True
+        )
+        return True
+    except Exception as e:
+        logging.error(f"Failed to cache lesson tags: {str(e)}")
+        return False
+
+def get_cached_lesson_tags():
+    """
+    Retrieve the cached list of lesson tags from MongoDB.
+    
+    Returns:
+        List of tags if cache exists and is valid, None otherwise
+    """
+    try:
+        # Find the cache entry
+        cache_entry = tags_cache_collection.find_one({"key": TAGS_CACHE_KEY})
+
+        if not cache_entry:
+            return None
+
+        # Check if cache is expired
+        current_time = int(datetime.now(UTC).timestamp())
+        if current_time - cache_entry["updated_at"] > TAGS_CACHE_EXPIRY:
+            # Cache expired, invalidate it
+            invalidate_lesson_tags_cache()
+            return None
+
+        return cache_entry["tags"]
+    except Exception as e:
+        logging.error(f"Failed to retrieve cached lesson tags: {str(e)}")
+        return None
+
+def invalidate_lesson_tags_cache():
+    """
+    Invalidate the lesson tags cache in MongoDB.
+    
+    Returns:
+        True if successful, False otherwise
+    """
+    try:
+        tags_cache_collection.delete_one({"key": TAGS_CACHE_KEY})
+        return True
+    except Exception as e:
+        logging.error(f"Failed to invalidate lesson tags cache: {str(e)}")
+        return False
+
+def get_all_lesson_tags():
+    """
+    Get all unique tags from lessons, with caching.
+    
+    First tries to fetch from cache, falls back to database if needed.
+    Also updates the cache if fetching from database.
+    
+    Returns:
+        List of all unique tags
+    """
+    # Try to get from cache first
+    cached_tags = get_cached_lesson_tags()
+    if cached_tags is not None:
+        return cached_tags
+
+    # If not in cache, query from database
+    try:
+        # Use MongoDB aggregation to get all unique tags
+        pipeline = [
+            {"$project": {"tags": 1}},
+            {"$unwind": "$tags"},
+            {"$group": {"_id": None, "unique_tags": {"$addToSet": "$tags"}}},
+        ]
+        result = list(lessons_collection.aggregate(pipeline))
+
+        # Extract tags from result
+        all_tags = []
+        if result and 'unique_tags' in result[0]:
+            all_tags = result[0]['unique_tags']
+
+        # Cache the results for future use
+        cache_lesson_tags(all_tags)
+        return all_tags
+    except Exception as e:
+        logging.error(f"Failed to aggregate lesson tags: {str(e)}")
+        return []
 
 def validate_project_name(project: str) -> str:
     """
@@ -332,10 +441,10 @@ async def get_todo(todo_id: str) -> str:
     }
 
     # if "notes"
-    if todo["notes"]:
-        formatted_todo["notes"] = todo["notes"]
-    else:
-        formatted_todo["notes"] = ""
+    # if todo["notes"]:
+    #     formatted_todo["notes"] = todo["notes"]
+    # else:
+    #     formatted_todo["notes"] = ""
     if todo["enhanced_description"]:
         formatted_todo["enhanced_description"] = todo["enhanced_description"]
     else:
@@ -484,6 +593,9 @@ async def add_lesson(language: str, topic: str, lesson_learned: str, tags: list 
 
     lessons_collection.insert_one(lesson)
 
+    # Invalidate tags cache since we added new tags
+    invalidate_lesson_tags_cache()
+
     # MQTT publish as confirmation after adding lesson
     try:
         mqtt_message = f"language: {language}, topic: {topic}, tags: {tags}"
@@ -553,9 +665,16 @@ async def update_lesson(lesson_id: str, updates: dict, ctx: Context = None) -> s
     Returns:
         JSON with success status and confirmation message
     """
+    # Check if we're updating tags
+    tags_updated = "tags" in updates
+
     result = lessons_collection.update_one({"id": lesson_id}, {"$set": updates})
     if result.modified_count == 0:
         return create_response(False, message="Lesson not found")
+
+    # Invalidate tags cache if tags were updated
+    if tags_updated:
+        invalidate_lesson_tags_cache()
 
     # MQTT publish as confirmation after updating lesson
     try:
@@ -581,10 +700,18 @@ async def delete_lesson(lesson_id: str, ctx: Context = None) -> str:
     Returns:
         JSON with success status and confirmation message
     """
+    # Get lesson first to check if it has tags
+    lesson = lessons_collection.find_one({"id": lesson_id})
+    has_tags = lesson and lesson.get("tags") and len(lesson.get("tags")) > 0
+
     result = lessons_collection.delete_one({"id": lesson_id})
 
     if result.deleted_count == 0:
         return create_response(False, message="Lesson not found")
+
+    # Invalidate tags cache if the deleted lesson had tags
+    if has_tags:
+        invalidate_lesson_tags_cache()
 
     # MQTT publish as confirmation after deleting lesson
     try:
@@ -602,6 +729,7 @@ async def list_lessons(limit: int = 100) -> str:
     
     Retrieves a collection of lessons with preview content.
     Each lesson includes a truncated preview of its content to reduce response size.
+    Additionally returns a list of all unique tags across all lessons.
     
     Parameters:
         limit: Maximum number of lessons to return (default: 100)
@@ -615,6 +743,7 @@ async def list_lessons(limit: int = 100) -> str:
           - topic: Subject or title
           - tags: List of categorization tags
           - preview: Truncated content preview
+        - all_tags: List of all unique tags across all lessons
     """
     cursor = lessons_collection.find(limit=limit)
     results = list(cursor)
@@ -627,13 +756,19 @@ async def list_lessons(limit: int = 100) -> str:
 
     # Add simplified lesson items
     for lesson in results:
+        # Extract tags from the lesson
+        lesson_tags = lesson.get("tags", [])
+
         summary["items"].append({
             "id": lesson["id"],
             "language": lesson["language"],
             "topic": lesson["topic"],
-            "tags": lesson.get("tags", []),
+            "tags": lesson_tags,
             "preview": lesson["lesson_learned"][:40] + ("..." if len(lesson["lesson_learned"]) > 40 else "")
         })
+
+    # Get all unique tags using the cached mechanism
+    summary["all_tags"] = get_all_lesson_tags()
 
     # MQTT publish as confirmation after listing lessons
     try:
