@@ -32,21 +32,21 @@ from Omnispindle.todo_log_service import start_service, stop_service
 async def run_service():
     """Run the TodoLogService and wait for shutdown signal"""
     service = await start_service()
-    
+
     # Setup signal handlers for graceful shutdown
     loop = asyncio.get_event_loop()
     for sig in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(sig, lambda: asyncio.create_task(stop_service()))
-    
+
     logger.info("Todo Log Service API running. Press Ctrl+C to stop.")
-    
+
     # Keep the service running
     try:
         while True:
             await asyncio.sleep(1)
     except asyncio.CancelledError:
         pass
-        
+
     logger.info("Todo Log Service shutting down")
 
 if __name__ == "__main__":
@@ -57,4 +57,4 @@ if __name__ == "__main__":
         logger.info("Service stopped by user")
     except Exception as e:
         logger.error(f"Service error: {str(e)}")
-    logger.info("Todo Log Service shutdown complete") 
+    logger.info("Todo Log Service shutdown complete")
