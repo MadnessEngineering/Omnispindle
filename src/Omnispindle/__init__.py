@@ -411,6 +411,21 @@ async def list_project_todos_tool(project: str, limit: int = 5) -> str:
     return await list_project_todos(project, limit)
 
 
+@register_tool_once
+async def query_todo_logs_tool(filter_type: str = 'all', project: str = 'all', page: int = 1, page_size: int = 20, ctx: Context = None) -> str:
+    """
+    Query todo logs with filtering options.
+    
+    filter_type: Operation type filter ('all', 'create', 'update', 'delete', 'complete')
+    project: Project name to filter by ('all' for all projects)
+    page: Page number (1-based)
+    page_size: Number of items per page (default: 20)
+    
+    → Returns: {logEntries, totalCount, page, pageSize, hasMore, projects}
+    """
+    return await query_todo_logs(filter_type, project, page, page_size, ctx)
+
+
 async def run_server() -> Callable:
     """
     Run the FastMCP server.

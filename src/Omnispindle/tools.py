@@ -14,6 +14,7 @@ from .mqtt import mqtt_publish
 from .utils import _format_duration
 from .utils import create_response
 from .todo_log_service import get_service_instance as get_log_service
+from .todo_log_service import log_todo_create, log_todo_update, log_todo_complete, log_todo_delete
 
 # Load environment variables
 load_dotenv()
@@ -198,75 +199,64 @@ async def add_todo(description: str, project: str, priority: str = "Medium", tar
     Parameters:
         description: Content of the todo item (task description)
         project: Project identifier (organizing category for the task)
-        priority: Priority level [Low, Medium, High] (default: Medium)
-        target_agent: Entity responsible for completing the task (default: user)
-        metadata: Optional additional structured data for the todo
-            { "ticket": "ticket number", "tags": ["tag1", "tag2"], "notes": "notes" }
-        ctx: Optional context for logging
-    
+        priority: Importance level ("Low", "Medium", "High")
+        target_agent: The agent or system responsible for this todo
+        metadata: Additional data like ticket number, tags, notes
+        ctx: Optional context object with user agent info
+        
     Returns:
         JSON containing:
-        - todo_id: Unique identifier for the created todo
-        - description: Truncated task description
-        - project: The project name
-        - next_actions: Available actions for this todo
-        - target_agent: Who should complete this (default: user)
-        - metadata: Optional additional structured data for the todo
+        - success: Boolean indicating if the operation succeeded
+        - message: Status message about the operation
+        - data: Created todo item information (ID, description, project)
     """
-    # Validate and normalize project name
-    validated_project = validate_project_name(project)
+    # Validate the project name
+    project = validate_project_name(project)
+
+    # Ensure priority is one of the allowed values
+    if priority not in ["Low", "Medium", "High"]:
+        priority = "Medium"
+
+    # Create the todo object
+    todo_id = str(uuid.uuid4())
+    created_at = int(datetime.now(UTC).timestamp())
 
     todo = {
-        "id": str(uuid.uuid4()),
+        "id": todo_id,
         "description": description,
-        "project": validated_project,
+        "project": project,
         "priority": priority,
-        "source_agent": "Omnispindle",
-        "target_agent": target_agent,
-        "status": "initial",
-        "created_at": int(datetime.now(UTC).timestamp()),
-        "completed_at": None,
-        "metadata": metadata or {}
+        "status": "pending",
+        "target": target_agent,
+        "created_at": created_at
     }
 
+    # Add metadata if provided
+    if metadata:
+        todo["metadata"] = metadata
+
+    # Insert into MongoDB
     try:
         collection.insert_one(todo)
-    except Exception as e:
-        # collection and mongo stats
-        data = {
-            "collection": MONGODB_COLLECTION,
-            "mongo_stats": mongo_client.admin.command("dbstats")
-        }
-        return create_response(False, data, message=f"Failed to insert todo: {str(e)}", return_context=False)
+        logging.info(f"Todo created: {todo_id}")
 
-    # MQTT publish as confirmation after the database operation - completely non-blocking
-    try:
-        mqtt_message = f"description: {description}, project: {validated_project}, priority: {priority}, target_agent: {target_agent}"
-        # Use a separate try/except to catch any issues with mqtt_publish itself
-        try:
-            publish_success = await mqtt_publish(f"status/{os.getenv('DeNa')}/omnispindle/add_todo", mqtt_message, ctx)
-            if not publish_success:
-                print(f"Warning: MQTT publish returned False for todo {todo['id']}")
-        except Exception as mqtt_err:
-            print(f"MQTT publish function error: {str(mqtt_err)}")
-    except Exception as e:
-        # Catch absolutely any errors in the MQTT process
-        print(f"MQTT processing error (non-fatal): {str(e)}")
+        # Log the todo creation
+        user_agent = ctx.user_agent if ctx and hasattr(ctx, 'user_agent') else None
+        await log_todo_create(todo_id, description, project, user_agent)
 
-    # Return optimized response with essentials only
-    # Description is truncated to save context tokens while still being identifiable
-    if len(description) > 10:
-        truncated_desc = description[:10] + "..." + description[-10:]
-    else:
-        truncated_desc = description
-    return create_response(True, {
-        "todo_id": todo["id"],
-        "description": truncated_desc,
-        "project": validated_project,
-        "next_actions": ["get_todo_tool", "update_todo_tool", "mark_todo_complete_tool"],
-        "target_agent": target_agent,
-        "metadata": metadata
-    }, return_context=False)
+        # Create a success response with the todo ID and truncated description
+        return create_response(True,
+            {
+                "todo_id": todo_id,
+                "description": description[:40] + ("..." if len(description) > 40 else ""),
+                "project": project
+            },
+            "Todo created successfully"
+        )
+    except Exception as e:
+        error_msg = f"Failed to create todo: {str(e)}"
+        logging.error(error_msg)
+        return create_response(False, message=error_msg)
 
 async def query_todos(filter: dict = None, projection: dict = None, limit: int = 100, ctx=None) -> str:
     """
@@ -339,74 +329,113 @@ async def query_todos(filter: dict = None, projection: dict = None, limit: int =
 
 async def update_todo(todo_id: str, updates: dict, ctx: Context = None) -> str:
     """
-    Update an existing todo by ID.
+    Update a todo with the provided changes.
     
-    Modifies specified fields of a todo item. Common fields to update include 
-    status, priority, description, and project.
+    Updates specific fields of an existing todo without affecting other fields.
+    Common fields to update: description, priority, status, metadata.
     
     Parameters:
-        todo_id: Unique identifier of the todo to update
-        updates: Dictionary of fields to update and their new values
-        ctx: Optional context for logging
+        todo_id: Identifier of the todo to update
+        updates: Dictionary of fields to update with their new values
+        ctx: Optional context object with user agent info
         
     Returns:
-        JSON with success status and confirmation message
+        JSON containing:
+        - success: Boolean indicating if the operation succeeded
+        - message: Status message about the operation
     """
-    result = collection.update_one({"id": todo_id}, {"$set": updates})
+    # Check if todo exists
+    existing_todo = collection.find_one({"id": todo_id})
+    if not existing_todo:
+        return create_response(False, message=f"Todo with ID {todo_id} not found")
 
-    if result.modified_count == 0:
-        return create_response(False, message="Todo not found")
+    # Validate specific fields
+    if 'project' in updates:
+        updates['project'] = validate_project_name(updates['project'])
 
-    if ctx is not None:
-        try:
-            ctx.info(f"Updated todo {todo_id}")
-        except ValueError:
-            pass
+    if 'priority' in updates and updates['priority'] not in ["Low", "Medium", "High"]:
+        updates['priority'] = "Medium"
 
-    # MQTT publish as confirmation after the database update
+    # Add updated timestamp
+    updates['updated_at'] = int(datetime.now(UTC).timestamp())
+
     try:
-        mqtt_message = f"todo_id: {todo_id}, updates: {json.dumps(updates)}"
-        await mqtt_publish(f"status/{os.getenv('DeNa')}/omnispindle/update_todo", mqtt_message, ctx)
-    except Exception as e:
-        # Log the error but don't fail the entire operation
-        print(f"MQTT publish error (non-fatal): {str(e)}")
+        result = collection.update_one(
+            {"id": todo_id},
+            {"$set": updates}
+        )
 
-    return create_response(True, message=f"Todo {todo_id} updated successfully")
+        if result.modified_count == 1:
+            logging.info(f"Todo updated: {todo_id}")
+
+            # Log the todo update
+            user_agent = ctx.user_agent if ctx and hasattr(ctx, 'user_agent') else None
+            description = updates.get('description', existing_todo.get('description', 'Unknown'))
+            project = updates.get('project', existing_todo.get('project', 'Unknown'))
+
+            # Create changes list for logging
+            changes = [
+                {
+                    'field': field,
+                    'oldValue': existing_todo.get(field),
+                    'newValue': value
+                }
+                for field, value in updates.items()
+                if field != 'updated_at' and existing_todo.get(field) != value
+            ]
+
+            await log_todo_update(todo_id, description, project, changes, user_agent)
+
+            return create_response(True, message=f"Todo {todo_id} updated successfully")
+        else:
+            return create_response(False, message=f"No changes were made to todo {todo_id}")
+
+    except Exception as e:
+        error_msg = f"Failed to update todo: {str(e)}"
+        logging.error(error_msg)
+        return create_response(False, message=error_msg)
 
 async def delete_todo(todo_id: str, ctx: Context = None) -> str:
     """
-    Delete a todo by ID.
+    Delete a todo by its ID.
     
-    Permanently removes a todo item from the database.
-    This action cannot be undone.
+    Permanently removes a todo from the database.
     
     Parameters:
-        todo_id: Unique identifier of the todo to delete
-        ctx: Optional context for logging
+        todo_id: Identifier of the todo to delete
+        ctx: Optional context object with user agent info
         
     Returns:
-        JSON with success status and confirmation message
+        JSON containing:
+        - success: Boolean indicating if the operation succeeded
+        - message: Status message about the operation
     """
-    result = collection.delete_one({"id": todo_id})
+    # Check if todo exists
+    existing_todo = collection.find_one({"id": todo_id})
+    if not existing_todo:
+        return create_response(False, message=f"Todo with ID {todo_id} not found")
 
-    if result.deleted_count == 0:
-        return create_response(False, message="Todo not found")
-
-    if ctx is not None:
-        try:
-            ctx.info(f"Deleted todo {todo_id}")
-        except ValueError:
-            pass
-
-    # MQTT publish as confirmation after the database deletion
     try:
-        mqtt_message = f"todo_id: {todo_id}"
-        await mqtt_publish(f"status/{os.getenv('DeNa')}/omnispindle/delete_todo", mqtt_message, ctx)
-    except Exception as e:
-        # Log the error but don't fail the entire operation
-        print(f"MQTT publish error (non-fatal): {str(e)}")
+        result = collection.delete_one({"id": todo_id})
 
-    return create_response(True, message=f"Todo {todo_id} deleted")
+        if result.deleted_count == 1:
+            logging.info(f"Todo deleted: {todo_id}")
+
+            # Log the todo deletion
+            user_agent = ctx.user_agent if ctx and hasattr(ctx, 'user_agent') else None
+            description = existing_todo.get('description', 'Unknown')
+            project = existing_todo.get('project', 'Unknown')
+
+            await log_todo_delete(todo_id, description, project, user_agent)
+
+            return create_response(True, message=f"Todo {todo_id} deleted successfully")
+        else:
+            return create_response(False, message=f"Failed to delete todo {todo_id}")
+
+    except Exception as e:
+        error_msg = f"Failed to delete todo: {str(e)}"
+        logging.error(error_msg)
+        return create_response(False, message=error_msg)
 
 async def get_todo(todo_id: str) -> str:
     """
@@ -467,47 +496,74 @@ async def mark_todo_complete(todo_id: str, ctx: Context = None) -> str:
     """
     Mark a todo as completed.
     
-    Updates a todo's status to 'completed' and records the completion timestamp.
-    This allows tracking of when tasks were completed and calculating the 
-    duration between creation and completion.
+    Updates a todo's status to "completed" and records the completion time.
+    Also calculates the duration from creation to completion.
     
     Parameters:
-        todo_id: Unique identifier of the todo to mark as complete
-        ctx: Optional context for logging
+        todo_id: Identifier of the todo to mark complete
+        ctx: Optional context object with user agent info
         
     Returns:
-        JSON with success status and completion information:
-        - todo_id: The ID of the completed todo
-        - completed_at: Formatted timestamp of when the todo was marked complete
+        JSON containing:
+        - success: Boolean indicating if the operation succeeded
+        - message: Status message about the operation
+        - data: Information about the completed todo (ID, completion time)
     """
-    completed_time = int(datetime.now(UTC).timestamp())
+    # Check if todo exists and isn't already completed
+    existing_todo = collection.find_one({"id": todo_id})
 
-    result = collection.update_one(
-        {"id": todo_id},
-        {"$set": {"status": "review", "completed_at": completed_time}}
-    )
+    if not existing_todo:
+        return create_response(False, message=f"Todo with ID {todo_id} not found")
 
-    if result.modified_count == 0:
-        return create_response(False, message="Todo not found or already completed")
+    if existing_todo.get("status") == "completed":
+        return create_response(False, message=f"Todo {todo_id} is already marked as completed")
 
-    if ctx is not None:
-        try:
-            ctx.info(f"Completed todo {todo_id}")
-        except ValueError:
-            pass
+    # Record completion time and calculate duration
+    completed_at = int(datetime.now(UTC).timestamp())
+    created_at = existing_todo.get("created_at", completed_at)
+    duration_sec = completed_at - created_at
+    duration = _format_duration(duration_sec)
 
-    # MQTT publish as confirmation after marking todo complete
+    updates = {
+        "status": "completed",
+        "completed_at": completed_at,
+        "duration": duration,
+        "duration_sec": duration_sec,
+        "updated_at": completed_at
+    }
+
     try:
-        mqtt_message = f"todo_id: {todo_id}"
-        await mqtt_publish(f"status/{os.getenv('DeNa')}/omnispindle/mark_todo_complete", mqtt_message, ctx)
-    except Exception as e:
-        # Log the error but don't fail the entire operation
-        print(f"MQTT publish error (non-fatal): {str(e)}")
+        result = collection.update_one(
+            {"id": todo_id},
+            {"$set": updates}
+        )
 
-    return create_response(True, {
-        "todo_id": todo_id,
-        "completed_at": datetime.fromtimestamp(completed_time, UTC).strftime("%Y-%m-%d %H:%M")
-    })
+        if result.modified_count == 1:
+            logging.info(f"Todo marked complete: {todo_id}")
+
+            # Log the todo completion
+            user_agent = ctx.user_agent if ctx and hasattr(ctx, 'user_agent') else None
+            description = existing_todo.get('description', 'Unknown')
+            project = existing_todo.get('project', 'Unknown')
+
+            await log_todo_complete(todo_id, description, project, user_agent)
+
+            # Return a success response
+            return create_response(True,
+                {
+                    "todo_id": todo_id,
+                    "completed_at": datetime.fromtimestamp(completed_at, UTC).strftime("%Y-%m-%d %H:%M:%S"),
+                    "duration": duration
+                },
+                f"Todo {todo_id} marked as completed"
+            )
+        else:
+            return create_response(False, message=f"Failed to mark todo {todo_id} as completed")
+
+    except Exception as e:
+        error_msg = f"Failed to mark todo as complete: {str(e)}"
+        logging.error(error_msg)
+        return create_response(False, message=error_msg)
 
 async def list_todos_by_status(status: str, limit: int = 100) -> str:
     """
@@ -1008,7 +1064,7 @@ async def list_project_todos(project: str, limit: int = 5) -> str:
 
     return create_response(True, summary)
 
-async def query_todo_logs(filter_type: str = 'all', project: str = 'all', 
+async def query_todo_logs(filter_type: str = 'all', project: str = 'all',
                        page: int = 1, page_size: int = 20, ctx: Context = None) -> str:
     """
     Query todo logs with filtering options.
@@ -1035,11 +1091,11 @@ async def query_todo_logs(filter_type: str = 'all', project: str = 'all',
     try:
         # Get the TodoLogService instance
         log_service = get_log_service()
-        
+
         # Initialize the service if it's not running
         if not log_service.running:
             await log_service.start()
-        
+
         # Query the logs
         result = await log_service.get_logs(
             filter_type=filter_type,
@@ -1047,8 +1103,8 @@ async def query_todo_logs(filter_type: str = 'all', project: str = 'all',
             page=page,
             page_size=page_size
         )
-        
+
         return create_response(True, result, return_context=False)
-        
+
     except Exception as e:
         return create_response(False, message=f"Failed to query todo logs: {str(e)}", return_context=False)

@@ -1,31 +1,25 @@
 """
-Todo Log Change Stream Service
+Todo Log Service
 
-This module provides a standalone service that:
-1. Monitors MongoDB change streams for todo item changes
-2. Logs all changes (create, update, delete, complete) to a separate todo_logs collection
-3. Provides an API for querying the log data
-4. Can run independently from Node-RED
+This module provides a service that:
+1. Logs all changes (create, update, delete, complete) to a separate todo_logs collection
+2. Provides API for querying and displaying log data
+3. Supports direct logging from todo operations rather than monitoring
 
-This approach separates concerns:
-- This service focuses exclusively on monitoring and recording todo changes
-- Node-RED only needs to query and display the logs
+This approach:
+- Logs changes directly during operations
+- Provides reliable tracking regardless of MongoDB configuration
+- Simplifies the architecture by eliminating stream monitoring
 """
 
-import asyncio
 import json
 import logging
 import os
-import signal
-import sys
-import threading
-import time
 from datetime import datetime, UTC
 from typing import Dict, List, Any, Optional, Union
 
 import pymongo
 from pymongo import MongoClient
-from pymongo.errors import OperationFailure, PyMongoError
 from dotenv import load_dotenv
 
 # Import MQTT functionality
@@ -46,7 +40,7 @@ MONGODB_LOGS_COLLECTION = os.getenv("MONGODB_LOGS_COLLECTION", "todo_logs")
 
 class TodoLogService:
     """
-    A standalone service for monitoring MongoDB change streams and logging todo changes.
+    A service for logging and retrieving todo changes.
     """
 
     def __init__(self, mongo_uri: str = MONGODB_URI,
@@ -72,12 +66,6 @@ class TodoLogService:
         self.db = None
         self.todos_collection = None
         self.logs_collection = None
-        self.change_stream = None
-
-        # For tracking the service state
-        self.running = False
-        self.watch_thread = None
-        self._stop_event = threading.Event()
 
         logger.info(f"TodoLogService initialized with db={db_name}, todos={todos_collection}, logs={logs_collection}")
 
@@ -109,7 +97,7 @@ class TodoLogService:
                                 "todoTitle": { "bsonType": "string" },
                                 "project": { "bsonType": "string" },
                                 "changes": { "bsonType": "array" },
-                                "fullDocument": { "bsonType": "object" }
+                                "userAgent": { "bsonType": "string" }
                             }
                         }
                     }
@@ -129,138 +117,47 @@ class TodoLogService:
             logger.error(f"Error initializing database: {str(e)}")
             return False
 
-    def process_change_event(self, change_event: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    async def log_todo_action(self, operation: str, todo_id: str, todo_title: str, 
+                          project: str, changes: List[Dict] = None, 
+                          user_agent: str = None) -> bool:
         """
-        Process a change event into a log entry.
+        Log a todo action directly.
         
         Args:
-            change_event: The MongoDB change event document
+            operation: The operation type ('create', 'update', 'delete', 'complete')
+            todo_id: The todo ID
+            todo_title: The todo title/description
+            project: The project name
+            changes: Optional list of changes for updates
+            user_agent: Optional user agent info
             
         Returns:
-            A log entry dict or None if it should be skipped
+            True if successful, False otherwise
         """
-        # Skip if not a real operation we care about
-        if not change_event.get('operationType') or \
-           change_event['operationType'] not in ['insert', 'update', 'delete', 'replace']:
-            return None
-        
-        timestamp = datetime.now(UTC)
-        operation = ''
-        todo_id = ''
-        todo_title = ''
-        project = ''
-        changes = []
-        full_document = None
-        
-        # Process based on operation type
-        op_type = change_event['operationType']
-        
-        if op_type in ['insert', 'replace']:
-            operation = 'create'
-            # Get document data
-            doc = change_event.get('fullDocument', {})
-            todo_id = str(doc.get('_id', ''))
-            todo_title = doc.get('description', 'Untitled Todo')
-            project = doc.get('project', 'No Project')
-            full_document = doc
-        
-        elif op_type == 'update':
-            # Check if this is a completion
-            doc = change_event.get('fullDocument', {})
-            
-            # Determine operation type
-            if doc.get('status') == 'completed':
-                operation = 'complete'
-            else:
-                operation = 'update'
-            
-            # Get the document ID
-            todo_id = str(change_event.get('documentKey', {}).get('_id', ''))
-            
-            todo_title = doc.get('description', 'Untitled Todo')
-            project = doc.get('project', 'No Project')
-            full_document = doc
-            
-            # Extract changes
-            if 'updateDescription' in change_event and 'updatedFields' in change_event['updateDescription']:
-                updated_fields = change_event['updateDescription']['updatedFields']
-                
-                # Convert to array of changes
-                changes = [
-                    {
-                        'field': field,
-                        'oldValue': None,  # We don't have the previous value in the change stream
-                        'newValue': value
-                    }
-                    for field, value in updated_fields.items()
-                ]
-        
-        elif op_type == 'delete':
-            operation = 'delete'
-            # For delete, use the document key
-            todo_id = str(change_event.get('documentKey', {}).get('_id', ''))
-        
-        # Construct log entry
-        return {
-            'timestamp': timestamp,
-            'operation': operation,
-            'todoId': todo_id,
-            'todoTitle': todo_title,
-            'project': project,
-            'changes': changes,
-            'fullDocument': full_document
-        }
-
-    def watch_changes_thread(self):
-        """
-        Thread function that watches for MongoDB changes.
-        """
-        logger.info("Starting MongoDB change stream watcher thread")
-
-        # Setup options for the change stream
-        pipeline = [
-            {'$match': {
-                'operationType': {'$in': ['insert', 'update', 'delete', 'replace']}
-            }}
-        ]
-
         try:
-            # Create the change stream
-            with self.todos_collection.watch(pipeline) as stream:
-                logger.info("Change stream established successfully")
-
-                # Process changes as they come in
-                while not self._stop_event.is_set():
-                    try:
-                        # Use next_document with a timeout to allow checking the stop event
-                        change = stream.try_next()
-
-                        if change is not None:
-                            # Process the change
-                            log_entry = self.process_change_event(change)
-
-                            if log_entry:
-                                # Store the log entry
-                                self.logs_collection.insert_one(log_entry)
-                                logger.debug(f"Logged {log_entry['operation']} for todo {log_entry['todoId']}")
-
-                                # Notify via MQTT
-                                asyncio.run(self.notify_change(log_entry))
-
-                        # Small sleep to prevent CPU spinning
-                        time.sleep(0.1)
-
-                    except pymongo.errors.PyMongoError as e:
-                        if not self._stop_event.is_set():
-                            logger.error(f"Error processing change: {str(e)}")
-                            # Continue watching after a short delay
-                            time.sleep(1)
-
-                logger.info("Change stream watcher thread stopping")
-
+            # Create log entry
+            log_entry = {
+                'timestamp': datetime.now(UTC),
+                'operation': operation,
+                'todoId': todo_id,
+                'todoTitle': todo_title,
+                'project': project,
+                'changes': changes or [],
+                'userAgent': user_agent or 'Unknown'
+            }
+            
+            # Store in database
+            self.logs_collection.insert_one(log_entry)
+            
+            # Send MQTT notification if configured
+            await self.notify_change(log_entry)
+            
+            logger.info(f"Logged {operation} for todo {todo_id}")
+            return True
+            
         except Exception as e:
-            if not self._stop_event.is_set():
-                logger.error(f"Error in change stream: {str(e)}")
+            logger.error(f"Error logging todo action: {str(e)}")
+            return False
 
     async def notify_change(self, log_entry: Dict[str, Any]):
         """
@@ -273,10 +170,6 @@ class TodoLogService:
             # Convert datetime to string for JSON serialization
             log_data = log_entry.copy()
             log_data['timestamp'] = log_data['timestamp'].isoformat()
-
-            # Remove the full document to reduce message size
-            if 'fullDocument' in log_data:
-                del log_data['fullDocument']
 
             # Publish to MQTT
             topic = f"todo/log/new_entry"
@@ -292,47 +185,23 @@ class TodoLogService:
         """
         Start the Todo Log Service.
         """
-        if self.running:
-            logger.warning("TodoLogService is already running")
-            return
-
         # Initialize database connections
         success = await self.initialize_db()
         if not success:
             logger.error("Failed to initialize database, cannot start service")
-            return
-
-        # Clear the stop event
-        self._stop_event.clear()
-
-        # Start the change stream watcher thread
-        self.watch_thread = threading.Thread(target=self.watch_changes_thread)
-        self.watch_thread.daemon = True
-        self.watch_thread.start()
-
-        self.running = True
+            return False
+        
         logger.info("TodoLogService started successfully")
+        return True
 
     async def stop(self):
         """
         Stop the Todo Log Service.
         """
-        if not self.running:
-            logger.warning("TodoLogService is not running")
-            return
-
-        # Signal the thread to stop
-        self._stop_event.set()
-
-        # Wait for the thread to finish
-        if self.watch_thread:
-            self.watch_thread.join(timeout=5.0)
-
         # Close the MongoDB connection
         if self.mongo_client:
             self.mongo_client.close()
 
-        self.running = False
         logger.info("TodoLogService stopped")
 
     async def get_logs(self, filter_type: str = 'all', project: str = 'all',
@@ -419,27 +288,12 @@ def get_service_instance() -> TodoLogService:
 
 async def start_service():
     """
-    Start the TodoLogService as a standalone service.
+    Start the TodoLogService.
     """
     service = get_service_instance()
     await service.start()
-
-    # Setup signal handlers for graceful shutdown
-    loop = asyncio.get_event_loop()
-
-    for sig in (signal.SIGINT, signal.SIGTERM):
-        loop.add_signal_handler(sig, lambda: asyncio.create_task(stop_service()))
-
-    logger.info("Todo Log Service is running. Press Ctrl+C to stop.")
-
-    # Keep the service running
-    try:
-        while service.running:
-            await asyncio.sleep(1)
-    except asyncio.CancelledError:
-        pass
-
-    logger.info("Todo Log Service shutting down")
+    logger.info("Todo Log Service started")
+    return service
 
 async def stop_service():
     """
@@ -448,6 +302,32 @@ async def stop_service():
     service = get_service_instance()
     await service.stop()
 
-# Main entry point for running as a standalone script
-if __name__ == "__main__":
-    asyncio.run(start_service())
+# Direct logging functions for use in tools
+async def log_todo_create(todo_id: str, todo_title: str, project: str, user_agent: str = None) -> bool:
+    """
+    Log a todo creation action.
+    """
+    service = get_service_instance()
+    return await service.log_todo_action('create', todo_id, todo_title, project, None, user_agent)
+
+async def log_todo_update(todo_id: str, todo_title: str, project: str, 
+                         changes: List[Dict] = None, user_agent: str = None) -> bool:
+    """
+    Log a todo update action.
+    """
+    service = get_service_instance()
+    return await service.log_todo_action('update', todo_id, todo_title, project, changes, user_agent)
+
+async def log_todo_complete(todo_id: str, todo_title: str, project: str, user_agent: str = None) -> bool:
+    """
+    Log a todo completion action.
+    """
+    service = get_service_instance()
+    return await service.log_todo_action('complete', todo_id, todo_title, project, None, user_agent)
+
+async def log_todo_delete(todo_id: str, todo_title: str, project: str, user_agent: str = None) -> bool:
+    """
+    Log a todo deletion action.
+    """
+    service = get_service_instance()
+    return await service.log_todo_action('delete', todo_id, todo_title, project, None, user_agent)
