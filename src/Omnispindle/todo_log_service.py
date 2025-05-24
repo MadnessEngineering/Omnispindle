@@ -20,7 +20,7 @@ import signal
 import sys
 import threading
 import time
-from datetime import datetime
+from datetime import datetime, UTC
 from typing import Dict, List, Any, Optional, Union
 
 import pymongo
@@ -143,50 +143,48 @@ class TodoLogService:
         if not change_event.get('operationType') or \
            change_event['operationType'] not in ['insert', 'update', 'delete', 'replace']:
             return None
-
-        timestamp = datetime.now()
+        
+        timestamp = datetime.now(UTC)
         operation = ''
         todo_id = ''
         todo_title = ''
         project = ''
         changes = []
         full_document = None
-
+        
         # Process based on operation type
         op_type = change_event['operationType']
-
-        if op_type == 'insert':
+        
+        if op_type in ['insert', 'replace']:
             operation = 'create'
             # Get document data
-            if 'fullDocument' in change_event:
-                doc = change_event['fullDocument']
-                todo_id = doc.get('id') or str(doc.get('_id', ''))
-                todo_title = doc.get('description', 'Untitled Todo')
-                project = doc.get('project', 'No Project')
-                full_document = doc
-
+            doc = change_event.get('fullDocument', {})
+            todo_id = str(doc.get('_id', ''))
+            todo_title = doc.get('description', 'Untitled Todo')
+            project = doc.get('project', 'No Project')
+            full_document = doc
+        
         elif op_type == 'update':
             # Check if this is a completion
-            if change_event.get('updateDescription', {}).get('updatedFields', {}).get('status') == 'completed':
+            doc = change_event.get('fullDocument', {})
+            
+            # Determine operation type
+            if doc.get('status') == 'completed':
                 operation = 'complete'
             else:
                 operation = 'update'
-
+            
             # Get the document ID
-            if 'documentKey' in change_event:
-                todo_id = str(change_event['documentKey'].get('_id', ''))
-
-            # Get the full updated document
-            if 'fullDocument' in change_event:
-                doc = change_event['fullDocument']
-                todo_title = doc.get('description', 'Untitled Todo')
-                project = doc.get('project', 'No Project')
-                full_document = doc
-
+            todo_id = str(change_event.get('documentKey', {}).get('_id', ''))
+            
+            todo_title = doc.get('description', 'Untitled Todo')
+            project = doc.get('project', 'No Project')
+            full_document = doc
+            
             # Extract changes
             if 'updateDescription' in change_event and 'updatedFields' in change_event['updateDescription']:
                 updated_fields = change_event['updateDescription']['updatedFields']
-
+                
                 # Convert to array of changes
                 changes = [
                     {
@@ -196,26 +194,13 @@ class TodoLogService:
                     }
                     for field, value in updated_fields.items()
                 ]
-
+        
         elif op_type == 'delete':
             operation = 'delete'
-            # For deletes, we only have the document key
-            if 'documentKey' in change_event:
-                todo_id = str(change_event['documentKey'].get('_id', ''))
-
-            # We don't have the full document for deletes
-            # In a production system, we might want to add pre-delete snapshots
-
-        elif op_type == 'replace':
-            operation = 'update'
-            if 'fullDocument' in change_event:
-                doc = change_event['fullDocument']
-                todo_id = doc.get('id') or str(doc.get('_id', ''))
-                todo_title = doc.get('description', 'Untitled Todo')
-                project = doc.get('project', 'No Project')
-                full_document = doc
-
-        # Create the log entry
+            # For delete, use the document key
+            todo_id = str(change_event.get('documentKey', {}).get('_id', ''))
+        
+        # Construct log entry
         return {
             'timestamp': timestamp,
             'operation': operation,
@@ -233,11 +218,15 @@ class TodoLogService:
         logger.info("Starting MongoDB change stream watcher thread")
 
         # Setup options for the change stream
-        options = {'fullDocument': 'updateLookup'}
+        pipeline = [
+            {'$match': {
+                'operationType': {'$in': ['insert', 'update', 'delete', 'replace']}
+            }}
+        ]
 
         try:
             # Create the change stream
-            with self.todos_collection.watch([], **options) as stream:
+            with self.todos_collection.watch(pipeline) as stream:
                 logger.info("Change stream established successfully")
 
                 # Process changes as they come in
