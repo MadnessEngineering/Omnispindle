@@ -130,3 +130,15 @@ Tool functions like add_todo_tool often just wrap the core logic from tools.py a
 
 #### __main__.py
 Minimal entry point, which is fine. Consider adding more robust command-line argument parsing (e.g., using argparse or typer) if more configuration options are needed at startup.
+
+## Todo Log Integration
+
+- [ ] Add direct log entry calls to all editor actions to ensure changes are properly logged
+  - Actions that create, update, delete, or complete todos should call TodoLogService methods
+  - Examples:
+    - `log_todo_create(todo_id, description, project, user_agent)`
+    - `log_todo_update(todo_id, description, project, changes, user_agent)`
+    - `log_todo_complete(todo_id, description, project, user_agent)`
+    - `log_todo_delete(todo_id, description, project, user_agent)`
+  - This is more reliable than using MQTT or MongoDB change streams for tracking changes
+  - The todo-log-tab in Node-RED has been updated to use the TodoLogService API instead of MQTT
