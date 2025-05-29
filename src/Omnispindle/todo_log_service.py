@@ -66,6 +66,7 @@ class TodoLogService:
         self.db = None
         self.todos_collection = None
         self.logs_collection = None
+        self.running = False  # Track service state
 
         logger.info(f"TodoLogService initialized with db={db_name}, todos={todos_collection}, logs={logs_collection}")
 
@@ -117,8 +118,8 @@ class TodoLogService:
             logger.error(f"Error initializing database: {str(e)}")
             return False
 
-    async def log_todo_action(self, operation: str, todo_id: str, todo_title: str, 
-                          project: str, changes: List[Dict] = None, 
+    async def log_todo_action(self, operation: str, todo_id: str, todo_title: str,
+                          project: str, changes: List[Dict] = None,
                           user_agent: str = None) -> bool:
         """
         Log a todo action directly.
@@ -145,16 +146,16 @@ class TodoLogService:
                 'changes': changes or [],
                 'userAgent': user_agent or 'Unknown'
             }
-            
+
             # Store in database
             self.logs_collection.insert_one(log_entry)
-            
+
             # Send MQTT notification if configured
             await self.notify_change(log_entry)
-            
+
             logger.info(f"Logged {operation} for todo {todo_id}")
             return True
-            
+
         except Exception as e:
             logger.error(f"Error logging todo action: {str(e)}")
             return False
@@ -189,8 +190,10 @@ class TodoLogService:
         success = await self.initialize_db()
         if not success:
             logger.error("Failed to initialize database, cannot start service")
+            self.running = False
             return False
         
+        self.running = True
         logger.info("TodoLogService started successfully")
         return True
 
@@ -203,6 +206,7 @@ class TodoLogService:
             self.mongo_client.close()
 
         logger.info("TodoLogService stopped")
+        self.running = False
 
     async def get_logs(self, filter_type: str = 'all', project: str = 'all',
                        page: int = 1, page_size: int = 20) -> Dict[str, Any]:
