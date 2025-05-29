@@ -475,10 +475,9 @@ async def get_todo(todo_id: str) -> str:
     #     formatted_todo["notes"] = todo["notes"]
     # else:
     #     formatted_todo["notes"] = ""
-    if todo["enhanced_description"]:
-        formatted_todo["enhanced_description"] = todo["enhanced_description"]
-    else:
-        formatted_todo["enhanced_description"] = False
+    # Check if enhanced_description exists and has content
+    enhanced_description = bool(todo.get("enhanced_description"))
+    formatted_todo["enhanced_description"] = enhanced_description
 
     # Add completion information if available (using compact format)
     if todo.get("completed_at"):
