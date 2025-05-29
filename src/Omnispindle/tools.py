@@ -1089,6 +1089,10 @@ async def query_todo_logs(filter_type: str = 'all', project: str = 'all',
         - projects: List of unique projects for filtering
     """
     try:
+        # Validate and normalize project name if not 'all'
+        if project != 'all':
+            project = validate_project_name(project)
+
         # Get the TodoLogService instance
         log_service = get_log_service()
 
