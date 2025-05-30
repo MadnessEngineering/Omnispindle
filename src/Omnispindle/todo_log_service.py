@@ -118,22 +118,21 @@ class TodoLogService:
             logger.error(f"Error initializing database: {str(e)}")
             return False
 
-    async def log_todo_action(self, operation: str, todo_id: str, todo_title: str,
-                          project: str, changes: List[Dict] = None,
-                          user_agent: str = None) -> bool:
+    async def log_todo_action(self, operation: str, todo_id: str, description: str,
+                             project: str, changes: List[Dict] = None, user_agent: str = None) -> bool:
         """
-        Log a todo action directly.
+        Log a todo action to the database and notify via MQTT.
         
         Args:
-            operation: The operation type ('create', 'update', 'delete', 'complete')
-            todo_id: The todo ID
-            todo_title: The todo title/description
-            project: The project name
-            changes: Optional list of changes for updates
-            user_agent: Optional user agent info
+            operation: The operation performed ('create', 'update', 'delete', 'complete')
+            todo_id: The ID of the todo
+            description: The description of the todo
+            project: The project the todo belongs to
+            changes: List of changes made (for update operations)
+            user_agent: The user agent performing the action
             
         Returns:
-            True if successful, False otherwise
+            True if logging was successful, False otherwise
         """
         try:
             # Create log entry
@@ -141,7 +140,7 @@ class TodoLogService:
                 'timestamp': datetime.now(UTC),
                 'operation': operation,
                 'todoId': todo_id,
-                'todoTitle': todo_title,
+                'description': description,
                 'project': project,
                 'changes': changes or [],
                 'userAgent': user_agent or 'Unknown'
@@ -192,7 +191,7 @@ class TodoLogService:
             logger.error("Failed to initialize database, cannot start service")
             self.running = False
             return False
-        
+
         self.running = True
         logger.info("TodoLogService started successfully")
         return True
@@ -307,31 +306,31 @@ async def stop_service():
     await service.stop()
 
 # Direct logging functions for use in tools
-async def log_todo_create(todo_id: str, todo_title: str, project: str, user_agent: str = None) -> bool:
+async def log_todo_create(todo_id: str, description: str, project: str, user_agent: str = None) -> bool:
     """
     Log a todo creation action.
     """
     service = get_service_instance()
-    return await service.log_todo_action('create', todo_id, todo_title, project, None, user_agent)
+    return await service.log_todo_action('create', todo_id, description, project, None, user_agent)
 
-async def log_todo_update(todo_id: str, todo_title: str, project: str, 
+async def log_todo_update(todo_id: str, description: str, project: str, 
                          changes: List[Dict] = None, user_agent: str = None) -> bool:
     """
     Log a todo update action.
     """
     service = get_service_instance()
-    return await service.log_todo_action('update', todo_id, todo_title, project, changes, user_agent)
+    return await service.log_todo_action('update', todo_id, description, project, changes, user_agent)
 
-async def log_todo_complete(todo_id: str, todo_title: str, project: str, user_agent: str = None) -> bool:
+async def log_todo_complete(todo_id: str, description: str, project: str, user_agent: str = None) -> bool:
     """
     Log a todo completion action.
     """
     service = get_service_instance()
-    return await service.log_todo_action('complete', todo_id, todo_title, project, None, user_agent)
+    return await service.log_todo_action('complete', todo_id, description, project, None, user_agent)
 
-async def log_todo_delete(todo_id: str, todo_title: str, project: str, user_agent: str = None) -> bool:
+async def log_todo_delete(todo_id: str, description: str, project: str, user_agent: str = None) -> bool:
     """
     Log a todo deletion action.
     """
     service = get_service_instance()
-    return await service.log_todo_action('delete', todo_id, todo_title, project, None, user_agent)
+    return await service.log_todo_action('delete', todo_id, description, project, None, user_agent)

@@ -1,6 +1,6 @@
-# FastMCP Todo Server
+# Omnispindle - Todo MCP Server
 
-A FastMCP-based Todo Server for the [Swarmonomicon](https://github.com/DanEdens/madness_interactive/tree/main/projects/common/Swarmonomicon) project. This server receives todo requests via FastMCP and stores them in MongoDB for processing by the Swarmonomicon todo worker.
+A FastMCP-based Todo Server for the [Madness Interactive](https://github.com/MadnessEngineering/Madness_Interactive) project. This server receives todo requests via FastMCP and stores them in MongoDB for processing by the Swarmonomicon todo worker.
 
 ## Features
 
@@ -63,7 +63,7 @@ You can add todos using FastMCP in several ways:
 1. Using FastMCP Python client:
    ```python
    from fastmcp import FastMCPClient
-   
+
    client = FastMCPClient()
    response = await client.call_tool("add_todo", {
        "description": "Example todo",
