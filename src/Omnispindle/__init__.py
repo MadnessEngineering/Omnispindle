@@ -47,6 +47,10 @@ logger.debug("About to import server module")
 from .server import Omnispindle, server as existing_server
 logger.debug("Server module imported successfully")
 
+# Get transport mode from environment
+MCP_TRANSPORT_MODE = os.getenv("MCP_TRANSPORT_MODE", "http")
+logger.info(f"Using MCP transport mode: {MCP_TRANSPORT_MODE}")
+
 # Ensure we only have one instance
 logger.debug(f"Existing server: {existing_server}, thread: {threading.current_thread().name}")
 server = existing_server
