@@ -1,28 +1,38 @@
 # Makefile for FastMCP Todo Server
 
-.PHONY: install run test coverage clean status
+.PHONY: install run run-dev test coverage clean status
 
-# Install dependencies
+# Install dependencies using uv
 install:
-	uv pip install -r requirements.txt
-	uv pip install -r requirements-dev.txt
-	uv
+	uv sync
 
-# Run the FastMCP server
+# Install development dependencies
+install-dev:
+	uv sync --dev
+
+# Run the FastMCP server using uv
 run:
-	python3.11 -m src.Omnispindle
+	uv run -m Omnispindle
+
+# Alternative run command using the console script
+run-script:
+	uv run omnispindle
+
+# Run in development mode with reload
+run-dev:
+	uv run -m Omnispindle
 
 # deploy
 deploy:
 	pm2 deploy ecosystem.config.js production
 
-# Run tests
+# Run tests using uv
 test:
-	python3.11 -m pytest tests/
+	uv run pytest tests/
 
-# Run tests with coverage
+# Run tests with coverage using uv
 coverage:
-	python3.11 -m pytest --cov=src tests/
+	uv run pytest --cov=src tests/
 
 # Clean up __pycache__ directories
 clean:

@@ -1,27 +1,27 @@
 # Omnispindle MCP Todo Server Dockerfile
-# Multi-stage build for better efficiency
+# Multi-stage build with UV package manager
 
-# Build stage for development dependencies
+# Build stage
 FROM python:3.11-slim as builder
 
 WORKDIR /app
 
-# Install build dependencies
+# Install build dependencies and uv
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     gcc \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements files
-COPY requirements.txt requirements-dev.txt ./
+# Install uv
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+ENV PATH="/root/.cargo/bin:$PATH"
 
-# Install dependencies into a virtual environment
-RUN python -m venv /opt/venv
-ENV PATH="/opt/venv/bin:$PATH"
+# Copy project configuration files
+COPY pyproject.toml uv.lock ./
 
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt && \
-    pip install --no-cache-dir -r requirements-dev.txt
+# Install dependencies using uv
+RUN uv sync --frozen --no-dev
 
 # Runtime stage
 FROM python:3.11-slim
@@ -29,14 +29,22 @@ FROM python:3.11-slim
 # Set working directory
 WORKDIR /app
 
-# Copy virtual environment from builder stage
-COPY --from=builder /opt/venv /opt/venv
-ENV PATH="/opt/venv/bin:$PATH"
-
 # Install runtime dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     mosquitto-clients \
+    curl \
     && rm -rf /var/lib/apt/lists/*
+
+# Install uv in runtime stage
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+ENV PATH="/root/.cargo/bin:$PATH"
+
+# Copy virtual environment from builder stage
+COPY --from=builder /app/.venv /app/.venv
+
+# Copy project files
+COPY pyproject.toml uv.lock ./
+COPY Omnispindle/ ./Omnispindle/
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1 \
@@ -50,13 +58,11 @@ ENV PYTHONUNBUFFERED=1 \
     MQTT_PORT=1883 \
     DeNa=omnispindle \
     HOST=0.0.0.0 \
-    PORT=8000
+    PORT=8000 \
+    PATH="/app/.venv/bin:$PATH"
 
 # Create non-root user
 RUN useradd -m -s /bin/bash appuser
-
-# Copy application code
-COPY --chown=appuser:appuser . .
 
 # Create configuration directory if it doesn't exist
 RUN mkdir -p /app/config && chown -R appuser:appuser /app
@@ -71,8 +77,8 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
 # Expose the needed ports
 EXPOSE 8080 8000 1883
 
-# Set the entrypoint
-CMD ["python", "-m", "src.Omnispindle"]
+# Set the entrypoint using uv and new package structure
+CMD ["uv", "run", "-m", "Omnispindle"]
 
 # Add metadata
 LABEL maintainer="Danedens31@gmail.com"

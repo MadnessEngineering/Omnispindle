@@ -3,15 +3,41 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "Omnispindle"
+name = "omnispindle"
 version = "0.1.0"
 description = "A FastMCP-based todo list server"
 requires-python = ">=3.11"
 dependencies = [
-    "fastmcp",
-    "pymongo",
-    "python-dotenv",
+    "fastmcp>=0.1.0",
+    "lmstudio",
+    "pymongo>=4.0.0",
+    "paho-mqtt>=2.0.0",
+    "python-dotenv>=0.19.0",
+    "uvicorn>=0.17.0",
+    "starlette>=0.17.1",
+    "scikit-learn>=0.0",
+    "numpy>=1.20.0",
+    "python-dateutil>=2.8.2",
 ]
 
+[project.scripts]
+omnispindle = "Omnispindle.__main__:main"
+
 [tool.hatch.build.targets.wheel]
-packages = ["src/Omnispindle"]
+packages = ["Omnispindle"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/Omnispindle",
+    "/README.md",
+]
+
+[tool.uv]
+dev-dependencies = [
+    "pytest==8.0.0",
+    "pytest-asyncio==0.23.5",
+    "black==24.1.1",
+    "flake8==7.0.0",
+    "mypy==1.8.0",
+    "pytest-cov",
+]
