@@ -79,7 +79,7 @@ def publish_mqtt_status(topic, message, retain=False):
 
 
 class Omnispindle(FastMCP):
-    def __init__(self, name: str = "todo-server", server_type: str = "sse"):
+    def __init__(self, name: str = "todo-server", server_type: str = "http"):
         global _init_counter, _init_stack_traces
         _init_counter += 1
         current_thread = threading.current_thread().name
@@ -370,7 +370,7 @@ class Omnispindle(FastMCP):
 _instance = None
 _instance_lock = threading.Lock()
 
-def get_server_instance(name: str = "todo-server", server_type: str = "sse") -> Omnispindle:
+def get_server_instance(name: str = "todo-server", server_type: str = "http") -> Omnispindle:
     """
     Get the singleton instance of the Omnispindle server.
     This ensures we only ever have one server instance.
@@ -395,5 +395,7 @@ def get_server_instance(name: str = "todo-server", server_type: str = "sse") -> 
 
 # Export the server instance
 logger.warning("🚀 About to create the server instance in module initialization")
-server = get_server_instance()
+transport_mode = os.getenv("MCP_TRANSPORT_MODE", "http")
+logger.info(f"Using MCP transport mode from environment: {transport_mode}")
+server = get_server_instance(server_type=transport_mode)
 logger.warning(f"🚀 Server instance created, init count = {_init_counter}")

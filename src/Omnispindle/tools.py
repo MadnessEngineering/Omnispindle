@@ -24,6 +24,9 @@ MONGODB_URI = os.getenv("MONGODB_URI", "mongodb://localhost:27017")
 MONGODB_DB = os.getenv("MONGODB_DB", "swarmonomicon")
 MONGODB_COLLECTION = os.getenv("MONGODB_COLLECTION", "todos")
 
+# MCP Configuration
+MCP_TOOL_TIMEOUT = int(os.getenv("MCP_TOOL_TIMEOUT", "30"))  # Default 30 seconds, configurable
+
 # Create MongoDB connection at module level
 mongo_client = MongoClient(MONGODB_URI)
 db = mongo_client[MONGODB_DB]
