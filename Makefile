@@ -11,6 +11,8 @@ install:
 # Run the FastMCP server
 run:
 	python3.11 -m src.Omnispindle
+	COMMIT_HASH=$(git rev-parse --short HEAD)
+	mosquitto_pub -h localhost -p 4140 -t "status/$(DeName)/commit" -m "{\"commit_hash\": \"$(COMMIT_HASH)\"}"
 
 # deploy
 deploy:
