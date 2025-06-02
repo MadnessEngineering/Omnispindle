@@ -1,124 +1,280 @@
-# Omnispindle - Todo MCP Server
+# Omnispindle - Advanced MCP Todo Management System
 
-A FastMCP-based Todo Server for the [Madness Interactive](https://github.com/MadnessEngineering/Madness_Interactive) project. This server receives todo requests via FastMCP and stores them in MongoDB for processing by the Swarmonomicon todo worker.
+A comprehensive **FastMCP-based todo management system** that serves as the central nervous system for multi-project task coordination. Part of the larger [Madness Interactive](https://github.com/MadnessEngineering/Madness_Interactive) ecosystem, Omnispindle combines AI-powered task insights, real-time MQTT messaging, and a sophisticated Node-RED dashboard to transform chaos into productivity.
 
-## Features
+## 🔮 Architecture Overview
 
-- FastMCP server for receiving todo requests
-- MongoDB integration for todo storage
-- Compatible with Swarmonomicon todo worker
-- Python-based implementation
+Omnispindle consists of multiple integrated components:
 
-## Installation
+- **MCP Server Core**: FastMCP-based server providing standardized tool interfaces for AI agents
+- **Todomill Projectorium**: Node-RED dashboard for visual task management and AI insights  
+- **MongoDB Backend**: Persistent storage for todos, lessons learned, and audit logs
+- **MQTT Integration**: Real-time messaging for cross-system coordination
+- **AI Assistant**: Integrated AI suggestions and task analysis capabilities
 
-1. Clone the repository:
+## ✨ Key Features
+
+### 🤖 **AI Agent Integration**
+- **MCP Tool Interface**: Standardized tools for AI agents to create, update, and manage todos
+- **Multi-Project Support**: Organize tasks across Madness_Interactive, Omnispindle, Swarmonomicon, and more
+- **Intelligent Suggestions**: AI-powered task analysis, effort estimation, and duplicate detection
+- **Automated Workflows**: Agent-driven task orchestration and status updates
+
+### 📊 **Visual Dashboard (Todomill Projectorium)**
+- **Interactive Node-RED Interface**: Rich web-based dashboard with filtering and sorting
+- **Real-time Updates**: Live task synchronization via MQTT messaging
+- **AI-Enhanced Views**: Visual indicators for AI suggestions and insights
+- **Project-based Organization**: Sidebar navigation and project-specific views
+
+### 📈 **Advanced Task Management**
+- **Comprehensive Metadata**: Priority, status, project assignment, and custom fields
+- **Audit Logging**: Complete history tracking for all task operations
+- **Lessons Learned**: Knowledge capture system for development insights
+- **Smart Scheduling**: AI-assisted deadline and time slot suggestions
+
+### 🔗 **System Integration**
+- **MQTT Messaging**: Pub/sub architecture for real-time coordination
+- **MongoDB Storage**: Scalable document storage with flexible querying
+- **Cross-Platform APIs**: RESTful and MCP interfaces for diverse integrations
+- **Docker Support**: Containerized deployment with docker-compose orchestration
+
+## 🚀 Quick Start
+
+### Installation
+
+1. **Clone the repository:**
    ```bash
    git clone https://github.com/DanEdens/Omnispindle.git
    cd Omnispindle
    ```
 
-2. Install uv (if not already installed):
+2. **Install with uv (recommended):**
    ```bash
    curl -LsSf https://astral.sh/uv/install.sh | sh
-   ```
-
-3. Create and activate a virtual environment with uv:
-   ```bash
    uv venv
    source .venv/bin/activate  # On Unix/macOS
-   # or
-   .venv\Scripts\activate  # On Windows
-   ```
-
-4. Install dependencies with uv:
-   ```bash
    uv pip install -r requirements.txt
    ```
 
-5. For development, install additional dependencies:
+3. **Configure environment:**
    ```bash
-   uv pip install -r requirements-dev.txt
+   cp .env.example .env
+   # Edit .env with your MongoDB and MQTT settings
    ```
 
-6. Create a `.env` file with your configuration:
+4. **Start with Docker (easiest):**
    ```bash
-   MONGODB_URI=mongodb://localhost:27017
-   MONGODB_DB=swarmonomicon
-   MONGODB_COLLECTION=todos
+   docker-compose up -d
    ```
 
-## Usage
+### Configuration
 
-### Starting the Server
+Create a `.env` file with your settings:
 
-1. Start the FastMCP server:
-   ```bash
-   python -m src.Omnispindle
-   ```
+```bash
+# MongoDB Configuration
+MONGODB_URI=mongodb://localhost:27017
+MONGODB_DB=todo_app
+MONGODB_COLLECTION=todos
 
-### Adding Todos
+# MQTT Configuration  
+MQTT_HOST=localhost
+MQTT_PORT=1883
 
-You can add todos using FastMCP in several ways:
+# AI Integration (optional)
+AI_API_ENDPOINT=http://localhost:1234/v1
+AI_MODEL=qwen2.5-7b-instruct
+```
 
-1. Using FastMCP Python client:
-   ```python
-   from fastmcp import FastMCPClient
+## 🛠 Usage
 
-   client = FastMCPClient()
-   response = await client.call_tool("add_todo", {
-       "description": "Example todo",
-       "priority": "high",  # optional, defaults to "medium"
-       "target_agent": "user"  # optional, defaults to "user"
-   })
-   ```
+### Starting the MCP Server
 
-2. Using MQTT directly:
-   ```bash
-   mosquitto_pub -t "mcp/todo/new" -m '{
-       "description": "Example todo",
-       "priority": "high",
-       "target_agent": "user"
-   }'
-   ```
+```bash
+# Development mode
+python -m src.Omnispindle
 
-### Development
+# Production mode
+uvicorn src.Omnispindle.server:app --host 0.0.0.0 --port 8000
+```
 
-1. Run tests:
-   ```bash
-   pytest tests/
-   ```
+### Using MCP Tools (for AI Agents)
 
-2. Run tests with coverage:
-   ```bash
-   pytest --cov=src tests/
-   ```
+The server exposes standardized MCP tools that AI agents can call:
 
-3. Run specific test file:
-   ```bash
-   pytest tests/test_todo_handler.py -v
-   ```
+```python
+# Example: AI agent creating a todo
+await add_todo_tool(
+    description="Implement user authentication",
+    project="Omnispindle", 
+    priority="High",
+    target_agent="developer",
+    metadata={"ticket": "AUTH-123", "tags": ["security", "backend"]}
+)
 
-## Integration with Swarmonomicon
+# Example: AI agent querying todos
+results = await query_todos_tool(
+    query_or_filter="project:Omnispindle",
+    fields_or_projection="all",
+    limit=50
+)
+```
 
-This server is part of the larger [Swarmonomicon](https://github.com/DanEdens/madness_interactive/tree/main/projects/common/Swarmonomicon) project, which provides:
+### API Usage
 
-- Task management and distribution
-- Agent-based task processing
-- Real-time updates via MQTT
-- Integration with various AI models
+```python
+from fastmcp import FastMCPClient
 
-For more information about the Swarmonomicon project and its features, check out the [main project documentation](https://github.com/DanEdens/madness_interactive/tree/main/projects/common/Swarmonomicon/README.md).
+# Connect to Omnispindle
+client = FastMCPClient("http://localhost:8000")
 
-## License
+# Create a new todo
+response = await client.call_tool("add_todo_tool", {
+    "description": "Fix critical bug in authentication",
+    "project": "Madness_interactive",
+    "priority": "High"
+})
 
-MIT License
+# Get project todos
+todos = await client.call_tool("list_project_todos_tool", {
+    "project": "Omnispindle",
+    "limit": 10
+})
+```
 
-## Contributing
+### Node-RED Dashboard
 
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests for new functionality
-5. Submit a pull request
+1. **Access the dashboard** at `http://localhost:1880/ui`
+2. **Import flows** from `Todomill_projectorium/ExportedNodeRedTabs/`
+3. **Configure MQTT** connection to point to your Omnispindle instance
 
-For more information about contributing to the Swarmonomicon project, see the [main project's contributing guidelines](https://github.com/DanEdens/madness_interactive/tree/main/projects/common/Swarmonomicon/CONTRIBUTING.md).
+## 📁 Project Structure
+
+```
+Omnispindle/
+├── src/Omnispindle/           # Main MCP server implementation
+│   ├── __init__.py           # Tool registration and initialization
+│   ├── server.py             # FastMCP server core
+│   ├── tools.py              # Todo and lesson management tools
+│   ├── ai_assistant.py       # AI integration and suggestions
+│   ├── scheduler.py          # Smart scheduling features
+│   ├── mqtt.py               # MQTT messaging integration
+│   └── todo_log_service.py   # Audit logging service
+├── Todomill_projectorium/     # Node-RED dashboard subrepo
+│   ├── ExportedNodeRedTabs/  # Node-RED flow definitions
+│   ├── JavascriptFromFunctionNode/  # Dashboard logic
+│   ├── HtmlFromTemplateNode/ # UI templates
+│   └── UIComponents/         # Reusable UI components
+├── tests/                    # Test suite
+├── config/                   # Configuration files
+├── docs/                     # Documentation
+├── docker-compose.yml        # Container orchestration
+└── pyproject.toml           # Project metadata
+```
+
+## 🔧 Development
+
+### Running Tests
+
+```bash
+# Run all tests
+pytest tests/
+
+# Run with coverage
+pytest --cov=src tests/
+
+# Run specific tests
+pytest tests/test_todo_log.py -v
+```
+
+### Working with the Node-RED Dashboard
+
+1. **Edit JavaScript/HTML** files in `Todomill_projectorium/`
+2. **Copy changes** to Node-RED editor
+3. **Export updated flows** to JSON files
+4. **Commit both** the extracted files and JSON exports
+
+### Adding New MCP Tools
+
+1. **Define the tool function** in `src/Omnispindle/tools.py`
+2. **Register the tool** in `src/Omnispindle/__init__.py`
+3. **Add tests** in `tests/`
+4. **Update documentation**
+
+## 🌐 Integration Examples
+
+### Swarmonomicon Integration
+
+```python
+# Omnispindle works with Swarmonomicon for distributed task processing
+from swarmonomicon import TaskAgent
+
+agent = TaskAgent("omnispindle-worker")
+agent.register_mcp_server("http://localhost:8000")
+
+# Agent can now create and manage todos via MCP
+await agent.execute_task("create_todo", {
+    "description": "Process data pipeline",
+    "project": "Swarmonomicon"
+})
+```
+
+### GitHub Issues Sync
+
+```python
+# Sync todos with GitHub issues
+todo_id = await add_todo_tool(
+    description="Fix authentication bug",
+    project="Madness_interactive",
+    metadata={"github_issue": 1234}
+)
+```
+
+### MQTT Event Streaming
+
+```bash
+# Subscribe to todo events
+mosquitto_sub -t "omnispindle/todos/+/+"
+
+# Publish todo creation request
+mosquitto_pub -t "omnispindle/todos/create" -m '{
+    "description": "Deploy to production",
+    "project": "Omnispindle",
+    "priority": "High"
+}'
+```
+
+## 🤝 Contributing
+
+1. **Fork the repository**
+2. **Create a feature branch**: `git checkout -b feature/amazing-feature`
+3. **Make your changes** and add tests
+4. **Run the test suite**: `pytest tests/`
+5. **Submit a pull request**
+
+### Development Guidelines
+
+- Follow [PEP 8](https://pep8.org/) for Python code style
+- Write tests for new features
+- Update documentation for API changes
+- Use semantic commit messages
+
+## 📄 License
+
+MIT License - see [LICENSE](LICENSE) file for details.
+
+## 🔗 Related Projects
+
+- **[Madness Interactive](https://github.com/MadnessEngineering/Madness_Interactive)** - Parent project ecosystem
+- **[Swarmonomicon](https://github.com/DanEdens/madness_interactive/tree/main/projects/common/Swarmonomicon)** - Distributed task processing system
+- **[FastMCP](https://github.com/jlowin/fastmcp)** - Model Context Protocol server framework
+
+## 📞 Support
+
+- **Issues**: [GitHub Issues](https://github.com/DanEdens/Omnispindle/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/DanEdens/Omnispindle/discussions)
+- **Documentation**: [docs/](docs/) directory
+
+---
+
+*"In the chaotic symphony of development tasks, Omnispindle conducts with AI-powered precision!"* 🎭✨
