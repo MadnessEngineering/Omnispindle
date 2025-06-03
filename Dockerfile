@@ -2,20 +2,18 @@
 # Multi-stage build with UV package manager
 
 # Build stage
-FROM python:3.11-slim as builder
+FROM python:3.11-slim AS builder
 
 WORKDIR /app
 
-# Install build dependencies and uv
+# Install build dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     gcc \
-    curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Install uv
-RUN curl -LsSf https://astral.sh/uv/install.sh | sh
-ENV PATH="/root/.cargo/bin:$PATH"
+# Install uv via pip
+RUN pip install uv
 
 # Copy project configuration files
 COPY pyproject.toml uv.lock ./
@@ -32,12 +30,10 @@ WORKDIR /app
 # Install runtime dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     mosquitto-clients \
-    curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Install uv in runtime stage
-RUN curl -LsSf https://astral.sh/uv/install.sh | sh
-ENV PATH="/root/.cargo/bin:$PATH"
+# Install uv via pip
+RUN pip install uv
 
 # Copy virtual environment from builder stage
 COPY --from=builder /app/.venv /app/.venv
