@@ -1,0 +1,535 @@
+---
+description:
+globs:
+alwaysApply: false
+---
+# MongoDB Technical Reference for Todomill
+
+## Database Configuration
+
+**Database**: `swarmonomicon` (from MONGODB_DB env var)
+**Collections**:
+- `todos` - Main todo item collection
+- `todo_logs` - Activity log entries
+- `lessons_learned` - Lessons collection
+- `tags_cache` - Tags caching
+
+## Data Schemas
+
+### Todo Collection Structure
+```javascript
+{
+  "id": "UUID-formatted string",                    // Primary identifier (not _id)
+  "description": "Task description text",
+  "project": "Project category name",               // Validated against VALID_PROJECTS
+  "status": "pending"|"completed",                  // Default: "pending"
+  "priority": "Low"|"Medium"|"High",                // Default: "Medium"
+  "target": "user"|"AI assistant name",             // Target agent
+  "created_at": 1640995200,                         // Unix timestamp (int)
+  "updated_at": 1640995200,                         // Unix timestamp (int, when updated)
+  "completed_at": 1640995200,                       // Unix timestamp (int, when completed)
+  "duration": "2h 30m",                             // Human-readable duration string
+  "duration_sec": 9000,                             // Duration in seconds
+  "metadata": { /* Optional additional fields */ },
+  "enhanced_description": "Enhanced description",   // Optional enhanced description
+  "notes": "Additional notes"                       // Optional notes
+}
+```
+
+### Todo Log Collection Structure
+```javascript
+{
+  "_id": "ObjectId",                                // MongoDB _id
+  "todoId": "UUID string",                          // Reference to todo item
+  "operation": "create"|"update"|"delete"|"complete",
+  "timestamp": "2024-01-01T12:00:00Z",              // ISO date string
+  "description": "Todo description at time of operation",
+  "project": "Project name",
+  "changes": [{                                     // For update operations
+    "field": "String",
+    "oldValue": "Mixed",
+    "newValue": "Mixed"
+  }],
+  "metadata": {
+    "userId": "String",                             // Who performed the action
+    "source": "web"|"api"|"automation",
+    "ip": "String",
+    "userAgent": "String"
+  },
+  "revertable": true,                               // Can this operation be reverted?
+  "reverted": {
+    "status": false,                                // Has this been reverted?
+    "revertedAt": "2024-01-01T12:00:00Z",
+    "revertedBy": "String",
+    "revertLogId": "ObjectId"                       // Reference to the revert log entry
+  }
+}
+```
+
+### Lessons Collection Structure
+```javascript
+{
+  "id": "UUID-formatted string",
+  "language": "Programming language or technology",
+  "topic": "Brief subject/title",
+  "lesson_learned": "Full lesson content",
+  "tags": ["tag1", "tag2"],                         // Array of strings
+  "created_at": 1640995200                          // Unix timestamp (int)
+}
+```
+
+## Valid Projects
+
+Projects are validated against this list (case-insensitive):
+```javascript
+VALID_PROJECTS = [
+    "madness_interactive", "regressiontestkit", "omnispindle",
+    "todomill_projectorium", "swarmonomicon", "hammerspoon",
+    "lab_management", "cogwyrm", "docker_implementation",
+    "documentation", "eventghost", "hammerghost",
+    "quality_assurance", "spindlewrit", "inventorium"
+]
+```
+
+## MongoDB4 Node-RED Integration
+
+### Node Configuration
+- **Connection**: mongodb-client connection
+- **Mode**: `'collection'` or `'db'`
+- **Collection**: Collection name (`todos`, `todo_logs`, etc.)
+- **Operation**: MongoDB operation (`find`, `insertOne`, `updateOne`, etc.)
+
+### Payload Structure for MongoDB4 Node
+```javascript
+// General format
+msg.payload = [arg1, arg2, ...]; // Array of function arguments
+
+// Examples:
+msg.collection = 'todos';
+msg.operation = 'findOne';
+msg.payload = [
+    { "id": todoId },           // query
+    { "projection": {"_id": 0} } // options
+];
+```
+
+### Common Operations
+
+#### Find Operations
+```javascript
+// Find one todo
+msg.collection = 'todos';
+msg.operation = 'findOne';
+msg.payload = [{ "id": todoId }];
+
+// Find with options
+msg.payload = [
+    { "status": "pending" },                    // query
+    {
+        "sort": {"created_at": -1},
+        "projection": {"description": 1, "project": 1},
+        "limit": 10,
+        "skip": 0
+    }
+];
+
+// Find todos by project
+msg.payload = [
+    { "project": "omnispindle" },
+    { "sort": {"created_at": -1} }
+];
+```
+
+#### Insert Operations
+```javascript
+// Insert single todo
+msg.collection = 'todos';
+msg.operation = 'insertOne';
+msg.payload = [{
+    "id": "uuid-string",
+    "description": "New task",
+    "project": "omnispindle",
+    "status": "pending",
+    "created_at": 1640995200
+}];
+
+// Insert log entry
+msg.collection = 'todo_logs';
+msg.operation = 'insertOne';
+msg.payload = [{
+    "todoId": "uuid-string",
+    "operation": "create",
+    "timestamp": new Date().toISOString(),
+    "description": "New task",
+    "project": "omnispindle"
+}];
+```
+
+#### Update Operations
+```javascript
+// Update todo
+msg.collection = 'todos';
+msg.operation = 'updateOne';
+msg.payload = [
+    { "id": todoId },                          // filter
+    {
+        "$set": {
+            "description": "Updated description",
+            "updated_at": Math.floor(Date.now() / 1000)
+        }
+    }
+];
+
+// Complete todo
+msg.payload = [
+    { "id": todoId },
+    {
+        "$set": {
+            "status": "completed",
+            "completed_at": Math.floor(Date.now() / 1000),
+            "duration": "2h 30m",
+            "duration_sec": 9000
+        }
+    }
+];
+```
+
+#### Delete Operations
+```javascript
+// Delete todo
+msg.collection = 'todos';
+msg.operation = 'deleteOne';
+msg.payload = [{ "id": todoId }];
+
+// Delete log entry
+msg.collection = 'todo_logs';
+msg.operation = 'deleteOne';
+msg.payload = [{ "_id": {"$oid": logId} }];
+```
+
+#### Aggregation Operations
+```javascript
+// Todo statistics by project
+msg.collection = 'todos';
+msg.operation = 'aggregate';
+msg.payload = [
+    [
+        { "$group": {
+            "_id": "$project",
+            "total": { "$sum": 1 },
+            "completed": {
+                "$sum": { "$cond": [{"$eq": ["$status", "completed"]}, 1, 0] }
+            }
+        }},
+        { "$sort": { "total": -1 } }
+    ]
+];
+
+// Recent activity log
+msg.collection = 'todo_logs';
+msg.payload = [
+    [
+        { "$match": { "timestamp": { "$gte": new Date(Date.now() - 7*24*60*60*1000) } } },
+        { "$sort": { "timestamp": -1 } },
+        { "$limit": 50 }
+    ]
+];
+```
+
+### BSON Data Types
+
+#### Setup in Node-RED settings.js
+```javascript
+functionGlobalContext: {
+    mongodb: require("node-red-contrib-mongodb4/node_modules/mongodb")
+}
+```
+
+#### Usage in Function Nodes
+```javascript
+const {ObjectId, Double, Timestamp} = global.get("mongodb");
+
+// Using ObjectId
+msg.payload = [{ "_id": new ObjectId(logId) }];
+
+// Using other BSON types
+msg.payload = [{
+    "_id": new ObjectId(),
+    "value": new Double(1.4),
+    "timestamp": new Timestamp()
+}];
+```
+
+#### ObjectId Handling
+```javascript
+// Convert string to ObjectId for queries
+const logId = msg.payload.logId;
+msg.payload = [{ "_id": {"$oid": logId} }];
+
+// Or use BSON ObjectId (preferred)
+msg.payload = [{ "_id": new ObjectId(logId) }];
+```
+
+## PyMongo Operations (Python MCP Server)
+
+### Database Connection
+```python
+from pymongo import MongoClient
+import os
+
+client = MongoClient(os.getenv('MONGODB_URI', 'mongodb://localhost:27017'))
+db = client[os.getenv('MONGODB_DB', 'swarmonomicon')]
+collection = db['todos']
+lessons_collection = db['lessons_learned']
+```
+
+### Todo Operations
+
+#### Finding Todos
+```python
+# Get specific todo by ID
+todo = collection.find_one({"id": todo_id})
+
+# List todos by status
+cursor = collection.find(
+    {"status": status.lower()},
+    limit=limit
+)
+results = list(cursor)
+
+# Search todos with regex
+search_query = {
+    "$or": [
+        {"description": {"$regex": query, "$options": "i"}},
+        {"project": {"$regex": project, "$options": "i"}}
+    ]
+}
+cursor = collection.find(search_query, limit=limit)
+```
+
+#### Creating Todos
+```python
+import uuid
+from datetime import datetime, UTC
+
+todo = {
+    "id": str(uuid.uuid4()),
+    "description": description,
+    "project": validate_project_name(project),
+    "priority": priority,  # "Low", "Medium", "High"
+    "status": "pending",
+    "target": target_agent,
+    "created_at": int(datetime.now(UTC).timestamp())
+}
+result = collection.insert_one(todo)
+```
+
+#### Updating Todos
+```python
+# Update specific fields
+updates = {
+    "description": new_description,
+    "priority": new_priority,
+    "updated_at": int(datetime.now(UTC).timestamp())
+}
+result = collection.update_one(
+    {"id": todo_id},
+    {"$set": updates}
+)
+
+# Mark as complete
+completed_at = int(datetime.now(UTC).timestamp())
+duration_sec = completed_at - todo['created_at']
+updates = {
+    "status": "completed",
+    "completed_at": completed_at,
+    "duration": format_duration(duration_sec),
+    "duration_sec": duration_sec,
+    "updated_at": completed_at
+}
+collection.update_one({"id": todo_id}, {"$set": updates})
+```
+
+### Lessons Operations
+```python
+# Create lesson
+lesson = {
+    "id": str(uuid.uuid4()),
+    "language": language,
+    "topic": topic,
+    "lesson_learned": lesson_learned,
+    "tags": tags or [],
+    "created_at": int(datetime.now(UTC).timestamp())
+}
+lessons_collection.insert_one(lesson)
+
+# Search lessons
+search_conditions = []
+for field in ["topic", "lesson_learned"]:
+    search_conditions.append({field: {"$regex": query, "$options": "i"}})
+search_query = {"$or": search_conditions}
+cursor = lessons_collection.find(search_query, limit=limit)
+```
+
+## Response Format Handling
+
+### MongoDB4 Node Response Formats
+```javascript
+// New MongoDB driver format
+{
+  "acknowledged": true,
+  "modifiedCount": 1,
+  "matchedCount": 1,
+  "upsertedCount": 0
+}
+
+// Legacy format (still supported)
+{
+  "result": {
+    "ok": 1,
+    "nModified": 1,
+    "n": 1
+  }
+}
+```
+
+### Response Handler Pattern
+```javascript
+// Handle both response formats
+const isSuccess = msg.payload && (
+    msg.payload.acknowledged ||                          // New format
+    (msg.payload.result && msg.payload.result.ok === 1) // Legacy format
+);
+
+const affected = msg.payload.modifiedCount ||
+                msg.payload.deletedCount ||
+                msg.payload.result?.nModified ||
+                msg.payload.result?.n || 0;
+```
+
+### PyMongo Response Objects
+```python
+# PyMongo returns result objects
+insert_result = collection.insert_one(document)
+# insert_result.inserted_id, insert_result.acknowledged
+
+update_result = collection.update_one(filter, update)
+# update_result.matched_count, update_result.modified_count
+
+delete_result = collection.delete_one(filter)
+# delete_result.deleted_count, delete_result.acknowledged
+```
+
+## Data Validation & Normalization
+
+### Project Name Validation
+```python
+def validate_project_name(project: str) -> str:
+    project_lower = project.lower()
+    valid_projects_lower = [p.lower() for p in VALID_PROJECTS]
+
+    if project_lower in valid_projects_lower:
+        return project_lower
+
+    # Fallback to default project
+    return "madness_interactive"
+```
+
+### Status Normalization
+```python
+def normalize_status(status: str) -> str:
+    return status.lower() if status.lower() in ["pending", "completed"] else "pending"
+```
+
+### Priority Validation
+```python
+def validate_priority(priority: str) -> str:
+    valid_priorities = ["Low", "Medium", "High"]
+    return priority if priority in valid_priorities else "Medium"
+```
+
+### Timestamp Handling
+```python
+# Create Unix timestamp
+timestamp = int(datetime.now(UTC).timestamp())
+
+# Format for display
+formatted = datetime.fromtimestamp(timestamp, UTC).strftime('%Y-%m-%d %H:%M:%S UTC')
+
+# Duration formatting
+def format_duration(seconds):
+    hours = seconds // 3600
+    minutes = (seconds % 3600) // 60
+
+    if hours > 0:
+        return f"{hours}h {minutes}m"
+    elif minutes > 0:
+        return f"{minutes}m"
+    else:
+        return f"{seconds}s"
+```
+
+## Performance Optimization
+
+### Indexes for Collections
+```javascript
+// Recommended indexes for todos collection
+db.todos.createIndex({ "id": 1 }, { unique: true })
+db.todos.createIndex({ "status": 1, "created_at": -1 })
+db.todos.createIndex({ "project": 1, "status": 1 })
+
+// Indexes for todo_logs collection
+db.todo_logs.createIndex({ "todoId": 1, "timestamp": -1 })
+db.todo_logs.createIndex({ "operation": 1, "timestamp": -1 })
+db.todo_logs.createIndex({ "timestamp": -1 })
+```
+
+### Query Optimization
+```javascript
+// Use projection to limit returned fields
+msg.payload = [
+    { "status": "pending" },
+    {
+        "projection": { "id": 1, "description": 1, "project": 1 },
+        "sort": { "created_at": -1 },
+        "limit": 20
+    }
+];
+
+// Use compound indexes for multiple field queries
+{ "project": "omnispindle", "status": "pending" }
+```
+
+## Error Handling
+
+### Database Connection Errors
+```javascript
+// MongoDB4 node error handling
+if (msg.error) {
+    msg.payload = {
+        success: false,
+        error: "Database connection failed",
+        code: "DB_CONNECTION_ERROR",
+        details: msg.error
+    };
+    return msg;
+}
+```
+
+### Validation Errors
+```python
+# PyMongo validation
+try:
+    result = collection.insert_one(document)
+    if result.acknowledged:
+        return create_response(True, {"id": document["id"]})
+    else:
+        return create_response(False, message="Insert not acknowledged")
+except Exception as e:
+    return create_response(False, message=f"Database error: {str(e)}")
+```
+
+## Related Resources
+- [Node-RED Development Guide](mdc:node-red-development-guide.mdc) - Backend integration
+- [UI Patterns](mdc:todomill-ui-patterns.mdc) - Frontend integration
+- [Development Index](mdc:todomill-development-index.mdc) - Main navigation
