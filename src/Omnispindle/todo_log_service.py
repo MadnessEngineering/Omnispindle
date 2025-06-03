@@ -321,12 +321,16 @@ async def log_todo_update(todo_id: str, description: str, project: str,
     service = get_service_instance()
     return await service.log_todo_action('update', todo_id, description, project, changes, user_agent)
 
-async def log_todo_complete(todo_id: str, description: str, project: str, user_agent: str = None) -> bool:
+async def log_todo_complete(todo_id: str, description: str, project: str, user_agent: str = None, comment: str = None) -> bool:
     """
     Log a todo completion action.
     """
     service = get_service_instance()
-    return await service.log_todo_action('complete', todo_id, description, project, None, user_agent)
+    changes = []
+    if comment:
+        changes.append({"field": "completion_comment", "value": comment})
+    
+    return await service.log_todo_action('complete', todo_id, description, project, changes, user_agent)
 
 async def log_todo_delete(todo_id: str, description: str, project: str, user_agent: str = None) -> bool:
     """

@@ -491,7 +491,7 @@ async def get_todo(todo_id: str) -> str:
 
     return create_response(True, formatted_todo)
 
-async def mark_todo_complete(todo_id: str, ctx: Context = None) -> str:
+async def mark_todo_complete(todo_id: str, comment: str = None, ctx: Context = None) -> str:
     """
     Mark a todo as completed.
     
@@ -500,6 +500,7 @@ async def mark_todo_complete(todo_id: str, ctx: Context = None) -> str:
     
     Parameters:
         todo_id: Identifier of the todo to mark complete
+        comment: Optional completion comment to provide context about the completion
         ctx: Optional context object with user agent info
         
     Returns:
@@ -531,6 +532,10 @@ async def mark_todo_complete(todo_id: str, ctx: Context = None) -> str:
         "updated_at": completed_at
     }
 
+    # Add completion comment if provided
+    if comment:
+        updates["completion_comment"] = comment
+
     try:
         result = collection.update_one(
             {"id": todo_id},
@@ -538,23 +543,28 @@ async def mark_todo_complete(todo_id: str, ctx: Context = None) -> str:
         )
 
         if result.modified_count == 1:
-            logging.info(f"Todo marked complete: {todo_id}")
+            logging.info(f"Todo marked complete: {todo_id}" + (f" with comment: {comment}" if comment else ""))
 
             # Log the todo completion
             user_agent = ctx.user_agent if ctx and hasattr(ctx, 'user_agent') else None
             description = existing_todo.get('description', 'Unknown')
             project = existing_todo.get('project', 'Unknown')
 
-            await log_todo_complete(todo_id, description, project, user_agent)
+            await log_todo_complete(todo_id, description, project, user_agent, comment)
 
             # Return a success response
+            response_data = {
+                "todo_id": todo_id,
+                "completed_at": datetime.fromtimestamp(completed_at, UTC).strftime("%Y-%m-%d %H:%M:%S"),
+                "duration": duration
+            }
+            
+            if comment:
+                response_data["completion_comment"] = comment
+
             return create_response(True,
-                {
-                    "todo_id": todo_id,
-                    "completed_at": datetime.fromtimestamp(completed_at, UTC).strftime("%Y-%m-%d %H:%M:%S"),
-                    "duration": duration
-                },
-                f"Todo {todo_id} marked as completed"
+                response_data,
+                f"Todo {todo_id} marked as completed" + (f" with comment: {comment}" if comment else "")
             )
         else:
             return create_response(False, message=f"Failed to mark todo {todo_id} as completed")
