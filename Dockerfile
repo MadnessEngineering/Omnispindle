@@ -10,6 +10,8 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     gcc \
+    git \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements files
@@ -50,7 +52,8 @@ ENV PYTHONUNBUFFERED=1 \
     MQTT_PORT=1883 \
     DeNa=omnispindle \
     HOST=0.0.0.0 \
-    PORT=8000
+    PORT=8000 \
+    PYTHONPATH=/app
 
 # Create non-root user
 RUN useradd -m -s /bin/bash appuser
@@ -83,3 +86,14 @@ LABEL org.opencontainers.image.licenses="MIT"
 LABEL org.opencontainers.image.vendor="Dan Edens"
 LABEL org.opencontainers.image.title="Omnispindle MCP Todo Server"
 LABEL org.opencontainers.image.description="FastMCP-based Todo Server for the Swarmonomicon project"
+
+# MCP-specific labels
+LABEL mcp.server.name="io.github.danedens31/omnispindle"
+LABEL mcp.server.version="0.1.0"
+LABEL mcp.protocol.version="2025-03-26"
+LABEL mcp.transport.stdio="true"
+LABEL mcp.transport.sse="true"
+LABEL mcp.features.tools="true"
+LABEL mcp.features.resources="false"
+LABEL mcp.features.prompts="false"
+LABEL mcp.capabilities="todo_management,project_coordination,mqtt_messaging,lesson_logging,ai_assistance,task_scheduling"

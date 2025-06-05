@@ -1,0 +1,133 @@
+{
+  "name": "io.github.danedens31/omnispindle",
+  "description": "A comprehensive FastMCP-based todo management system that serves as the central nervous system for multi-project task coordination. Features AI-powered task insights, real-time MQTT messaging, MongoDB backend, and sophisticated Node-RED dashboard integration.",
+  "version_detail": {
+    "version": "0.1.0",
+    "release_date": "2025-06-05T13:51:00Z",
+    "is_latest": true
+  },
+  "repository": {
+    "url": "https://github.com/DanEdens/Omnispindle",
+    "source": "github"
+  },
+  "packages": [
+    {
+      "registry_name": "docker",
+      "name": "danedens31/omnispindle",
+      "version": "0.1.0",
+      "runtime_hint": "docker",
+      "package_arguments": [
+        {
+          "description": "Host to bind the server to",
+          "is_required": false,
+          "format": "string",
+          "value": "0.0.0.0",
+          "default": "0.0.0.0",
+          "type": "environment",
+          "name": "HOST",
+          "value_hint": "0.0.0.0"
+        },
+        {
+          "description": "Port to bind the server to",
+          "is_required": false,
+          "format": "string",
+          "value": "8000",
+          "default": "8000",
+          "type": "environment",
+          "name": "PORT",
+          "value_hint": "8000"
+        }
+      ],
+      "environment_variables": [
+        {
+          "description": "MongoDB connection URI",
+          "name": "MONGODB_URI",
+          "is_required": false,
+          "default": "mongodb://localhost:27017"
+        },
+        {
+          "description": "MongoDB database name",
+          "name": "MONGODB_DB",
+          "is_required": false,
+          "default": "swarmonomicon"
+        },
+        {
+          "description": "MongoDB collection name",
+          "name": "MONGODB_COLLECTION",
+          "is_required": false,
+          "default": "todos"
+        },
+        {
+          "description": "MQTT broker host",
+          "name": "MQTT_HOST",
+          "is_required": false,
+          "default": "localhost"
+        },
+        {
+          "description": "MQTT broker port",
+          "name": "MQTT_PORT",
+          "is_required": false,
+          "default": "1883"
+        }
+      ]
+    },
+    {
+      "registry_name": "pypi",
+      "name": "omnispindle",
+      "version": "0.1.0",
+      "package_arguments": [
+        {
+          "description": "Python module to run",
+          "is_required": true,
+          "format": "string",
+          "value": "-m",
+          "default": "-m",
+          "type": "positional",
+          "value_hint": "-m"
+        },
+        {
+          "description": "Module path",
+          "is_required": true,
+          "format": "string",
+          "value": "src.Omnispindle",
+          "default": "src.Omnispindle",
+          "type": "positional",
+          "value_hint": "src.Omnispindle"
+        }
+      ],
+      "environment_variables": [
+        {
+          "description": "MongoDB connection URI",
+          "name": "MONGODB_URI",
+          "is_required": false,
+          "default": "mongodb://localhost:27017"
+        },
+        {
+          "description": "MongoDB database name",
+          "name": "MONGODB_DB",
+          "is_required": false,
+          "default": "swarmonomicon"
+        },
+        {
+          "description": "MQTT broker host",
+          "name": "MQTT_HOST",
+          "is_required": false,
+          "default": "localhost"
+        }
+      ]
+    }
+  ],
+  "capabilities": [
+    "todo_management",
+    "project_coordination",
+    "mqtt_messaging",
+    "lesson_logging",
+    "ai_assistance",
+    "task_scheduling"
+  ],
+  "transport_types": [
+    "sse",
+    "stdio"
+  ],
+  "license": "MIT"
+} 

@@ -38,6 +38,23 @@ Omnispindle consists of multiple integrated components:
 - **Cross-Platform APIs**: RESTful and MCP interfaces for diverse integrations
 - **Docker Support**: Containerized deployment with docker-compose orchestration
 
+## 💡 Use Cases
+
+### AI-Powered Side Quest Management
+
+One of Omnispindle's most powerful features is enabling AI agents to capture and manage spontaneous ideas and "side quests" without disrupting your main workflow. When you're deep in development and a brilliant idea strikes, or you're in a meeting and remember a critical task - AI agents can seamlessly capture, categorize, and schedule these thoughts.
+
+![Use Case Example: Saving a Side Quest for Later](../../docs/assets/images/Use-case-example-saving-a-side-quest-for-later.png)
+
+This MCP-powered workflow demonstrates how:
+- **AI agents automatically categorize** new tasks by project and priority
+- **Context-aware scheduling** suggests optimal timing based on your current workload  
+- **Cross-project coordination** ensures tasks are visible across your entire ecosystem
+- **Real-time dashboard updates** via MQTT keep all stakeholders informed
+- **Intelligent suggestions** help reduce redundancy and optimize task organization
+
+The captured tasks integrate seamlessly with the Todomill Projectorium dashboard, where you can review, refine, and execute them when you're ready to tackle them.
+
 ## 🚀 Quick Start
 
 ### Installation
@@ -87,6 +104,81 @@ AI_MODEL=qwen2.5-7b-instruct
 ```
 
 ## 🛠 Usage
+
+### MCP Integration (Claude Desktop)
+
+#### Docker Configuration
+
+Add to your Claude Desktop `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "omnispindle": {
+      "command": "docker",
+      "args": [
+        "run", "--rm", "-i", 
+        "--network", "host",
+        "-e", "MONGODB_URI=mongodb://localhost:27017",
+        "-e", "MONGODB_DB=swarmonomicon", 
+        "-e", "MQTT_HOST=localhost",
+        "danedens31/omnispindle:latest"
+      ]
+    }
+  }
+}
+```
+
+#### Docker Compose Configuration  
+
+```json
+{
+  "mcpServers": {
+    "omnispindle": {
+      "command": "docker",
+      "args": [
+        "run", "--rm", "-i",
+        "--env-file", "/path/to/your/.env",
+        "--network", "omnispindle_default",
+        "danedens31/omnispindle:latest"
+      ]
+    }
+  }
+}
+```
+
+#### Local Development Configuration
+
+```json
+{
+  "mcpServers": {
+    "omnispindle": {
+      "command": "python",
+      "args": ["-m", "src.Omnispindle"],
+      "cwd": "/path/to/Omnispindle",
+      "env": {
+        "MONGODB_URI": "mongodb://localhost:27017",
+        "MONGODB_DB": "swarmonomicon",
+        "MQTT_HOST": "localhost"
+      }
+    }
+  }
+}
+```
+
+### Available MCP Tools
+
+The server exposes the following tools for AI agents:
+
+- `add_todo_tool` - Create new tasks with metadata
+- `query_todos_tool` - Search and filter tasks
+- `update_todo_tool` - Modify existing tasks  
+- `mark_todo_complete_tool` - Complete tasks
+- `list_project_todos_tool` - Get tasks by project
+- `add_lesson_tool` - Capture lessons learned
+- `search_lessons_tool` - Query knowledge base
+- `mqtt_publish_tool` - Send real-time messages
+- `mqtt_get_tool` - Retrieve MQTT messages
 
 ### Starting the MCP Server
 
