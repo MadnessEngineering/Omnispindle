@@ -10,8 +10,6 @@
     "url": "https://github.com/DanEdens/Omnispindle",
     "source": "github"
   },
-  "homepage": "https://madnessinteractive.cc",
-  "documentation": "https://github.com/DanEdens/Omnispindle/blob/main/README.md",
   "packages": [
     {
       "registry_name": "docker",
@@ -74,23 +72,6 @@
       ]
     },
     {
-      "registry_name": "sse",
-      "name": "mcp.madnessinteractive.cc",
-      "version": "0.1.0",
-      "runtime_hint": "sse",
-      "package_arguments": [
-        {
-          "description": "Server Sent Events endpoint URL",
-          "is_required": true,
-          "format": "url",
-          "value": "https://mcp.madnessinteractive.cc/sse",
-          "default": "https://mcp.madnessinteractive.cc/sse",
-          "type": "positional",
-          "value_hint": "https://mcp.madnessinteractive.cc/sse"
-        }
-      ]
-    },
-    {
       "registry_name": "pypi",
       "name": "omnispindle",
       "version": "0.1.0",
@@ -149,9 +130,10 @@
     "stdio"
   ],
   "license": "MIT",
-  "domain_verification": {
-    "domain": "madnessinteractive.cc",
-    "verified": false,
-    "verification_method": "dns_txt"
+  "_future_domain": {
+    "homepage": "https://madnessinteractive.cc",
+    "project_page": "https://madnessinteractive.cc/omnispindle",
+    "mcp_endpoint": "https://mcp.madnessinteractive.cc",
+    "note": "Domain configuration ready for future deployment"
   }
 }

@@ -29,13 +29,21 @@ sudo usermod -aG docker $USER
 
 # Create nginx configuration for MCP server
 sudo tee /etc/nginx/sites-available/omnispindle << EOF
-# Main domain
+# Main domain - ready for your website
 server {
     listen 80;
     server_name ${DOMAIN} www.${DOMAIN};
     
-    location / {
+    # Omnispindle project redirect
+    location /omnispindle {
         return 301 https://github.com/DanEdens/Omnispindle;
+    }
+    
+    # Future website root - for now, show a placeholder
+    location / {
+        root /var/www/${DOMAIN};
+        index index.html index.htm;
+        try_files \$uri \$uri/ =404;
     }
     
     location /.well-known/acme-challenge/ {
@@ -85,6 +93,80 @@ sudo systemctl reload nginx
 # Get SSL certificates
 echo "📜 Obtaining SSL certificates..."
 sudo certbot --nginx -d ${DOMAIN} -d www.${DOMAIN} -d ${MCP_SUBDOMAIN} --email ${EMAIL} --agree-tos --non-interactive
+
+# Create website directory and placeholder page
+sudo mkdir -p /var/www/${DOMAIN}
+sudo tee /var/www/${DOMAIN}/index.html << EOF
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Madness Interactive - Coming Soon</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            text-align: center;
+        }
+        .container {
+            max-width: 600px;
+            padding: 2rem;
+        }
+        h1 {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        p {
+            font-size: 1.2rem;
+            margin-bottom: 2rem;
+            opacity: 0.9;
+        }
+        .cta {
+            background: rgba(255,255,255,0.2);
+            padding: 1rem 2rem;
+            border-radius: 10px;
+            backdrop-filter: blur(10px);
+            margin: 2rem 0;
+        }
+        a {
+            color: #ffd700;
+            text-decoration: none;
+            font-weight: bold;
+        }
+        a:hover {
+            text-shadow: 0 0 10px #ffd700;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎭 Madness Interactive</h1>
+        <p>AI-Powered Development Ecosystem</p>
+        
+        <div class="cta">
+            <h3>🔗 Quick Links</h3>
+            <p><a href="/omnispindle">Omnispindle MCP Server →</a></p>
+            <p><a href="https://mcp.madnessinteractive.cc">MCP API Endpoint →</a></p>
+        </div>
+        
+        <p><em>Full website coming soon...</em></p>
+    </div>
+</body>
+</html>
+EOF
+
+# Set proper permissions
+sudo chown -R www-data:www-data /var/www/${DOMAIN}
+sudo chmod -R 755 /var/www/${DOMAIN}
 
 # Create docker-compose override for production
 cat > docker-compose.prod.yml << EOF
@@ -187,8 +269,9 @@ EOF
 
 echo "✅ Domain setup complete!"
 echo ""
-echo "🌐 Your Omnispindle MCP Server will be available at:"
-echo "   • Main site: https://${DOMAIN}"
+echo "🌐 Your domain structure:"
+echo "   • Main site: https://${DOMAIN} (placeholder page ready for your website)"
+echo "   • Omnispindle project: https://${DOMAIN}/omnispindle (redirects to GitHub)"
 echo "   • MCP Server: https://${MCP_SUBDOMAIN}"
 echo "   • Health check: https://${MCP_SUBDOMAIN}/health"
 echo ""
@@ -197,6 +280,11 @@ echo "   1. Wait for DNS propagation (up to 24 hours)"
 echo "   2. Run: docker-compose -f docker-compose.prod.yml up -d"
 echo "   3. Test: curl https://${MCP_SUBDOMAIN}/health"
 echo "   4. Enable service: sudo systemctl enable omnispindle"
+echo ""
+echo "🎨 Website Development:"
+echo "   • Edit files in /var/www/${DOMAIN}/"
+echo "   • The placeholder page is live and ready to customize"
+echo "   • SSL certificates are configured for all domains"
 echo ""
 echo "🔧 To update the server:"
 echo "   docker-compose -f docker-compose.prod.yml pull && docker-compose -f docker-compose.prod.yml up -d" 
