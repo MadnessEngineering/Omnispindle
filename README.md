@@ -7,7 +7,7 @@ A comprehensive **FastMCP-based todo management system** that serves as the cent
 Omnispindle consists of multiple integrated components:
 
 - **MCP Server Core**: FastMCP-based server providing standardized tool interfaces for AI agents
-- **Todomill Projectorium**: Node-RED dashboard for visual task management and AI insights  
+- **Todomill Projectorium**: Node-RED dashboard for visual task management and AI insights
 - **MongoDB Backend**: Persistent storage for todos, lessons learned, and audit logs
 - **MQTT Integration**: Real-time messaging for cross-system coordination
 - **AI Assistant**: Integrated AI suggestions and task analysis capabilities
@@ -48,7 +48,7 @@ One of Omnispindle's most powerful features is enabling AI agents to capture and
 
 This MCP-powered workflow demonstrates how:
 - **AI agents automatically categorize** new tasks by project and priority
-- **Context-aware scheduling** suggests optimal timing based on your current workload  
+- **Context-aware scheduling** suggests optimal timing based on your current workload
 - **Cross-project coordination** ensures tasks are visible across your entire ecosystem
 - **Real-time dashboard updates** via MQTT keep all stakeholders informed
 - **Intelligent suggestions** help reduce redundancy and optimize task organization
@@ -94,7 +94,7 @@ MONGODB_URI=mongodb://localhost:27017
 MONGODB_DB=todo_app
 MONGODB_COLLECTION=todos
 
-# MQTT Configuration  
+# MQTT Configuration
 MQTT_HOST=localhost
 MQTT_PORT=1883
 
@@ -107,45 +107,6 @@ AI_MODEL=qwen2.5-7b-instruct
 
 ### MCP Integration (Claude Desktop)
 
-#### Production Configuration (Domain-based)
-
-Add to your Claude Desktop `claude_desktop_config.json`:
-
-```json
-{
-  "mcpServers": {
-    "omnispindle": {
-      "command": "docker",
-      "args": [
-        "run", "--rm", "-i", 
-        "--network", "host",
-        "-e", "MONGODB_URI=mongodb://localhost:27017",
-        "-e", "MONGODB_DB=swarmonomicon", 
-        "-e", "MQTT_HOST=localhost",
-        "danedens31/omnispindle:latest"
-      ]
-    }
-  }
-}
-```
-
-#### Remote Hosted Configuration
-
-```json
-{
-  "mcpServers": {
-    "omnispindle": {
-      "command": "curl",
-      "args": [
-        "-X", "POST",
-        "https://mcp.madnessinteractive.cc/mcp",
-        "-H", "Content-Type: application/json"
-      ]
-    }
-  }
-}
-```
-
 #### Docker Configuration
 
 Add to your Claude Desktop `claude_desktop_config.json`:
@@ -156,10 +117,10 @@ Add to your Claude Desktop `claude_desktop_config.json`:
     "omnispindle": {
       "command": "docker",
       "args": [
-        "run", "--rm", "-i", 
+        "run", "--rm", "-i",
         "--network", "host",
         "-e", "MONGODB_URI=mongodb://localhost:27017",
-        "-e", "MONGODB_DB=swarmonomicon", 
+        "-e", "MONGODB_DB=swarmonomicon",
         "-e", "MQTT_HOST=localhost",
         "danedens31/omnispindle:latest"
       ]
@@ -168,7 +129,7 @@ Add to your Claude Desktop `claude_desktop_config.json`:
 }
 ```
 
-#### Docker Compose Configuration  
+#### Docker Compose Configuration
 
 ```json
 {
@@ -211,7 +172,7 @@ The server exposes the following tools for AI agents:
 
 - `add_todo_tool` - Create new tasks with metadata
 - `query_todos_tool` - Search and filter tasks
-- `update_todo_tool` - Modify existing tasks  
+- `update_todo_tool` - Modify existing tasks
 - `mark_todo_complete_tool` - Complete tasks
 - `list_project_todos_tool` - Get tasks by project
 - `add_lesson_tool` - Capture lessons learned
@@ -237,7 +198,7 @@ The server exposes standardized MCP tools that AI agents can call:
 # Example: AI agent creating a todo
 await add_todo_tool(
     description="Implement user authentication",
-    project="Omnispindle", 
+    project="Omnispindle",
     priority="High",
     target_agent="developer",
     metadata={"ticket": "AUTH-123", "tags": ["security", "backend"]}
