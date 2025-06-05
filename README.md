@@ -107,6 +107,45 @@ AI_MODEL=qwen2.5-7b-instruct
 
 ### MCP Integration (Claude Desktop)
 
+#### Production Configuration (Domain-based)
+
+Add to your Claude Desktop `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "omnispindle": {
+      "command": "docker",
+      "args": [
+        "run", "--rm", "-i", 
+        "--network", "host",
+        "-e", "MONGODB_URI=mongodb://localhost:27017",
+        "-e", "MONGODB_DB=swarmonomicon", 
+        "-e", "MQTT_HOST=localhost",
+        "danedens31/omnispindle:latest"
+      ]
+    }
+  }
+}
+```
+
+#### Remote Hosted Configuration
+
+```json
+{
+  "mcpServers": {
+    "omnispindle": {
+      "command": "curl",
+      "args": [
+        "-X", "POST",
+        "https://mcp.madnessinteractive.cc/mcp",
+        "-H", "Content-Type: application/json"
+      ]
+    }
+  }
+}
+```
+
 #### Docker Configuration
 
 Add to your Claude Desktop `claude_desktop_config.json`:
