@@ -95,6 +95,7 @@ class TodoLogService:
                                 "timestamp": { "bsonType": "date" },
                                 "operation": { "bsonType": "string" },
                                 "todoId": { "bsonType": "string" },
+                                "description": { "bsonType": "string" },
                                 "todoTitle": { "bsonType": "string" },
                                 "project": { "bsonType": "string" },
                                 "changes": { "bsonType": "array" },
@@ -117,6 +118,34 @@ class TodoLogService:
         except Exception as e:
             logger.error(f"Error initializing database: {str(e)}")
             return False
+
+    def generate_title(self, description: str) -> str:
+        """
+        Generate a title from the description (matches Node-RED JavaScript logic).
+        First 60 chars, truncated at word boundary.
+        
+        Args:
+            description: The full description text
+            
+        Returns:
+            Truncated title string
+        """
+        if not description or description == 'Unknown':
+            return 'Unknown'
+        
+        # If description is short enough, return as-is
+        if len(description) <= 60:
+            return description
+        
+        # Truncate at 60 chars and find the last space to avoid cutting words
+        truncated = description[:60]
+        last_space = truncated.rfind(' ')
+        
+        # Only truncate at word if we have reasonable length
+        if last_space > 30:
+            return truncated[:last_space] + '...'
+        
+        return truncated + '...'
 
     async def log_todo_action(self, operation: str, todo_id: str, description: str,
                              project: str, changes: List[Dict] = None, user_agent: str = None) -> bool:
@@ -141,6 +170,7 @@ class TodoLogService:
                 'operation': operation,
                 'todoId': todo_id,
                 'description': description,
+                'todoTitle': self.generate_title(description),  # Add truncated title
                 'project': project,
                 'changes': changes or [],
                 'userAgent': user_agent or 'Unknown'
