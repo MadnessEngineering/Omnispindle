@@ -300,9 +300,20 @@ async def mark_todo_complete_tool(todo_id: str, ctx: Context = None) -> str:
     """
     Complete todo.
     
+    Marks a todo as completed and records completion metadata. When a todo is marked 
+    as completed, it will automatically be excluded from active project todo lists 
+    (list_project_todos_tool) to keep project views focused on actionable items.
+    
+    This function:
+    - Changes status from "pending" to "completed"
+    - Records completion timestamp
+    - Calculates and stores duration from creation to completion
+    - Logs the completion action for audit trail
+    - Removes the todo from active project views
+    
     todo_id: ID of todo to mark completed
     
-    → Returns: {todo_id, completed_at}
+    → Returns: {todo_id, completed_at, duration}
     """
     return await mark_todo_complete(todo_id, ctx)
 
@@ -402,6 +413,19 @@ async def search_lessons_tool(query: str, fields: list = None, limit: int = 100)
 async def list_project_todos_tool(project: str, limit: int = 5) -> str:
     """
     List recent todos by project.
+    
+    Returns active (non-completed) todos for a specific project, sorted by creation date 
+    with newest first. Completed todos are automatically excluded to keep the view 
+    focused on actionable work items.
+    
+    This is ideal for:
+    - Daily standup reviews
+    - Project status checks  
+    - Finding current work items
+    - Getting a quick project overview
+    
+    To see completed todos, use list_todos_by_status_tool with status="completed"
+    or query_todos_tool with a status filter.
     
     project: Project name to filter by
     limit: Max results (default: 5)
