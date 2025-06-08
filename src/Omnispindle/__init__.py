@@ -296,7 +296,7 @@ async def get_todo_tool(todo_id: str) -> str:
 
 
 @register_tool_once
-async def mark_todo_complete_tool(todo_id: str, ctx: Context = None) -> str:
+async def mark_todo_complete_tool(todo_id: str, comment: str = None, ctx: Context = None) -> str:
     """
     Complete todo.
     
@@ -304,10 +304,11 @@ async def mark_todo_complete_tool(todo_id: str, ctx: Context = None) -> str:
     a completion comment to document the solution or outcome.
     
     todo_id: ID of todo to mark completed
+    comment: Optional comment about the completion (e.g., solution notes, outcome details)
     
     → Returns: {todo_id, completed_at, duration}
     """
-    return await mark_todo_complete(todo_id, ctx)
+    return await mark_todo_complete(todo_id, comment=None, ctx=ctx)
 
 
 @register_tool_once
