@@ -308,7 +308,7 @@ async def mark_todo_complete_tool(todo_id: str, comment: str = None, ctx: Contex
     
     → Returns: {todo_id, completed_at, duration}
     """
-    return await mark_todo_complete(todo_id, comment=None, ctx=ctx)
+    return await mark_todo_complete(todo_id, comment, ctx)
 
 
 @register_tool_once
