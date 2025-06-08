@@ -303,8 +303,8 @@ async def mark_todo_complete_tool(todo_id: str, comment: str = None, ctx: Contex
     Marks a todo as completed and records completion time. Optionally accepts 
     a completion comment to document the solution or outcome.
     
-    todo_id: ID of todo to mark completed
-    comment: Optional comment about the completion (e.g., solution notes, outcome details)
+    todo_id: ID of todo to mark completed, str
+    comment: Str = None
     
     → Returns: {todo_id, completed_at, duration}
     """
