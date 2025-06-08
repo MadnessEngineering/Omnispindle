@@ -208,35 +208,35 @@ async def update_todo_tool(todo_id: str, updates: dict, ctx: Context = None) -> 
     return await update_todo(todo_id, updates, ctx)
 
 
-@register_tool_once
-async def mqtt_publish_tool(topic: str, message: str, ctx: Context = None, retain: bool = False) -> str:
-    """
-    Publish MQTT message.
-    
-    topic: Topic path to publish to
-    message: Content to send
-    retain: Keep for new subscribers (default: false)
-    
-    → Returns: {success, message?}
-    """
-    return await mqtt_publish(topic, message, ctx, retain)
+# @register_tool_once
+# async def mqtt_publish_tool(topic: str, message: str, ctx: Context = None, retain: bool = False) -> str:
+#     """
+#     Publish MQTT message.
+
+#     topic: Topic path to publish to
+#     message: Content to send
+#     retain: Keep for new subscribers (default: false)
+
+#     → Returns: {success, message?}
+#     """
+#     return await mqtt_publish(topic, message, ctx, retain)
 
 
-@register_tool_once
-async def mqtt_get_tool(topic: str) -> str:
-    """
-    Get latest MQTT message.
-    
-    topic: Topic to retrieve from
-    
-    → Returns: {success, data (or message if error)}
-    """
-    result = await mqtt_get(topic)
-    return json.dumps({
-        "success": result is not None,
-        "data": result,
-        "message": None if result is not None else "Failed to get MQTT message"
-    })
+# @register_tool_once
+# async def mqtt_get_tool(topic: str) -> str:
+#     """
+#     Get latest MQTT message.
+
+#     topic: Topic to retrieve from
+
+#     → Returns: {success, data (or message if error)}
+#     """
+#     result = await mqtt_get(topic)
+#     return json.dumps({
+#         "success": result is not None,
+#         "data": result,
+#         "message": None if result is not None else "Failed to get MQTT message"
+#     })
 
 
 @register_tool_once
