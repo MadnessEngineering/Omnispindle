@@ -485,7 +485,7 @@ async def get_todo(todo_id: str) -> str:
         # Only add duration when completed
         duration_seconds = todo["completed_at"] - todo["created_at"]
         formatted_todo["duration"] = _format_duration(duration_seconds)
-        
+
         # Include completion comment if it exists
         if todo.get("completion_comment"):
             formatted_todo["completion_comment"] = todo["completion_comment"]
@@ -535,7 +535,7 @@ async def mark_todo_complete(todo_id: str, comment: str = None, ctx: Context = N
         "duration_sec": duration_sec,
         "updated_at": completed_at
     }
-    
+
     # Add completion comment if provided
     if comment:
         updates["completion_comment"] = comment
@@ -562,7 +562,7 @@ async def mark_todo_complete(todo_id: str, comment: str = None, ctx: Context = N
                 "completed_at": datetime.fromtimestamp(completed_at, UTC).strftime("%Y-%m-%d %H:%M:%S"),
                 "duration": duration
             }
-            
+
             # Include comment in response if provided
             if comment:
                 response_data["completion_comment"] = comment
@@ -1028,6 +1028,7 @@ async def list_project_todos(project: str, limit: int = 5) -> str:
     
     Retrieves the most recently updated todos for a specific project.
     Results are sorted by the last update time (created or last modified).
+    Excludes completed todos to focus on active items.
     
     Parameters:
         project: Project name to filter by
@@ -1044,8 +1045,12 @@ async def list_project_todos(project: str, limit: int = 5) -> str:
 
     # Find todos for this project and sort by last update (created_at or updated_at if exists)
     # We use sort on created_at to get the newest todos first
+    # Exclude completed todos to focus on active items
     cursor = collection.find(
-        {"project": validated_project},
+        {
+            "project": validated_project,
+            "status": {"$ne": "completed"}  # Exclude completed todos
+        },
         sort=[("created_at", -1)],  # -1 means descending order, newest first
         limit=limit
     )
