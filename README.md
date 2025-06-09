@@ -1,4 +1,4 @@
-[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/danedens-omnispindle-badge.png)](https://mseep.ai/app/danedens-omnispindle)
+[![Verified on MseeP](https://mseep.ai/badge.svg)](https://mseep.ai/app/7cd85c5a-291d-4027-9497-78bffcb8fd4e)
 
 # Omnispindle - Advanced MCP Todo Management System
 
