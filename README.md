@@ -1,4 +1,7 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/danedens-omnispindle-badge.png)](https://mseep.ai/app/danedens-omnispindle)
+
 # Omnispindle - Advanced MCP Todo Management System
+
 
 A comprehensive **FastMCP-based todo management system** that serves as the central nervous system for multi-project task coordination. Part of the larger [Madness Interactive](https://github.com/MadnessEngineering/Madness_Interactive) ecosystem, Omnispindle combines AI-powered task insights, real-time MQTT messaging, and a sophisticated Node-RED dashboard to transform chaos into productivity.
 
