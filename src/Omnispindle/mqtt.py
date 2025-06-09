@@ -31,25 +31,32 @@ async def mqtt_publish(topic: str, message: str, ctx: Optional[Context] = None, 
         cmd = ["mosquitto_pub", "-h", MQTT_HOST, "-p", str(MQTT_PORT), "-t", topic, "-m", str(message)]
         if retain:
             cmd.append("-r")
-        subprocess.run(cmd, check=True)
+        subprocess.run(cmd, check=True, capture_output=True, text=True)
         
-        if ctx is not None:
+        # Safe context logging with error handling
+        if ctx:
             try:
-                await ctx.info(f"Published to MQTT topic: {topic}")
-            except Exception:
-                pass
-                
-        return True
-    except subprocess.SubprocessError as e:
-        error_msg = f"Failed to publish MQTT message: {str(e)}"
-        print(error_msg)
+                await ctx.info(f"MQTT published to {topic}: {message} (retain={retain})")
+            except Exception as log_error:
+                # Fallback to standard logging if context logging fails
+                print(f"MQTT published to {topic}: {message} (retain={retain})")
+                print(f"Context logging failed: {log_error}")
         
-        if ctx is not None:
+        return True
+    except subprocess.CalledProcessError as e:
+        error_msg = f"Failed to publish MQTT message: {str(e)}"
+        
+        # Safe context logging with error handling
+        if ctx:
             try:
                 await ctx.error(error_msg)
-            except Exception:
-                pass
-                
+            except Exception as log_error:
+                # Fallback to standard logging if context logging fails
+                print(error_msg)
+                print(f"Context logging failed: {log_error}")
+        else:
+            print(error_msg)
+            
         return False
 
 

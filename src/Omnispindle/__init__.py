@@ -15,15 +15,15 @@ import warnings
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# Filter out specific RuntimeWarnings about unawaited coroutines
-warnings.filterwarnings("ignore", category=RuntimeWarning, message=".*coroutine.*send_log_message.*was never awaited.*")
-
 # logging.getLogger('pymongo').setLevel(logging.WARNING)
 # logging.getLogger('asyncio').setLevel(logging.WARNING)
 # logging.getLogger('uvicorn').setLevel(logging.INFO)
 # logging.getLogger('uvicorn.access').setLevel(logging.WARNING)
 # logging.getLogger('uvicorn.error').setLevel(logging.INFO)
 # logging.getLogger('uvicorn.protocols').setLevel(logging.WARNING)
+
+# Filter out specific RuntimeWarnings about unawaited coroutines - moved after logging setup
+warnings.filterwarnings("ignore", category=RuntimeWarning, message=".*coroutine.*send_log_message.*was never awaited.*")
 
 # Detect if this module has already been initialized
 if globals().get('_MODULE_INITIALIZED', False):
