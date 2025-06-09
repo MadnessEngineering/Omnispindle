@@ -78,45 +78,86 @@ class TodoLogService:
             True if successful, False otherwise
         """
         try:
+            logger.info(f"Initializing database connection to {self.mongo_uri}")
+            
             # Create MongoDB connection
             self.mongo_client = MongoClient(self.mongo_uri)
+            
+            # Test the connection
+            try:
+                # Ping the database to ensure connection is working
+                self.mongo_client.admin.command('ping')
+                logger.debug("MongoDB connection successful")
+            except Exception as e:
+                logger.error(f"Failed to connect to MongoDB: {str(e)}")
+                return False
+            
             self.db = self.mongo_client[self.db_name]
             self.todos_collection = self.db[self.todos_collection_name]
+            
+            logger.debug(f"Connected to database '{self.db_name}'")
 
             # Create logs collection if it doesn't exist
             if self.logs_collection_name not in self.db.list_collection_names():
                 logger.info(f"Creating {self.logs_collection_name} collection")
-                self.db.create_collection(self.logs_collection_name,
-                    validator={
-                        "$jsonSchema": {
-                            "bsonType": "object",
-                            "required": ["timestamp", "operation", "todoId"],
-                            "properties": {
-                                "timestamp": { "bsonType": "date" },
-                                "operation": { "bsonType": "string" },
-                                "todoId": { "bsonType": "string" },
-                                "description": { "bsonType": "string" },
-                                "todoTitle": { "bsonType": "string" },
-                                "project": { "bsonType": "string" },
-                                "changes": { "bsonType": "array" },
-                                "userAgent": { "bsonType": "string" }
+                try:
+                    self.db.create_collection(self.logs_collection_name,
+                        validator={
+                            "$jsonSchema": {
+                                "bsonType": "object",
+                                "required": ["timestamp", "operation", "todoId"],
+                                "properties": {
+                                    "timestamp": { "bsonType": "date" },
+                                    "operation": { "bsonType": "string" },
+                                    "todoId": { "bsonType": "string" },
+                                    "description": { "bsonType": "string" },
+                                    "todoTitle": { "bsonType": "string" },
+                                    "project": { "bsonType": "string" },
+                                    "changes": { "bsonType": "array" },
+                                    "userAgent": { "bsonType": "string" }
+                                }
                             }
                         }
-                    }
-                )
+                    )
 
-                # Create indexes for efficient querying
-                self.db[self.logs_collection_name].create_index([("timestamp", pymongo.DESCENDING)])
-                self.db[self.logs_collection_name].create_index([("operation", pymongo.ASCENDING)])
-                self.db[self.logs_collection_name].create_index([("todoId", pymongo.ASCENDING)])
-                self.db[self.logs_collection_name].create_index([("project", pymongo.ASCENDING)])
+                    # Create indexes for efficient querying
+                    self.db[self.logs_collection_name].create_index([("timestamp", pymongo.DESCENDING)])
+                    self.db[self.logs_collection_name].create_index([("operation", pymongo.ASCENDING)])
+                    self.db[self.logs_collection_name].create_index([("todoId", pymongo.ASCENDING)])
+                    self.db[self.logs_collection_name].create_index([("project", pymongo.ASCENDING)])
+                    logger.info(f"Created indexes for {self.logs_collection_name} collection")
+                    
+                except Exception as e:
+                    logger.warning(f"Failed to create collection with validator, creating simple collection: {str(e)}")
+                    # Fallback: create collection without validator
+                    self.db.create_collection(self.logs_collection_name)
+            else:
+                logger.debug(f"Collection {self.logs_collection_name} already exists")
 
             self.logs_collection = self.db[self.logs_collection_name]
-            logger.info("Database connections initialized successfully")
+            
+            # Verify the collection is accessible
+            try:
+                count = self.logs_collection.count_documents({})
+                logger.info(f"Database connections initialized successfully. Found {count} existing log entries.")
+            except Exception as e:
+                logger.error(f"Failed to access logs collection: {str(e)}")
+                return False
+                
             return True
 
         except Exception as e:
             logger.error(f"Error initializing database: {str(e)}")
+            # Clean up partial initialization
+            if hasattr(self, 'mongo_client') and self.mongo_client:
+                try:
+                    self.mongo_client.close()
+                except:
+                    pass
+                self.mongo_client = None
+            self.db = None
+            self.todos_collection = None
+            self.logs_collection = None
             return False
 
     def generate_title(self, description: str) -> str:
@@ -164,6 +205,14 @@ class TodoLogService:
             True if logging was successful, False otherwise
         """
         try:
+            # Ensure the service is initialized before attempting to log
+            if not self.running or self.logs_collection is None:
+                logger.debug("TodoLogService not initialized, attempting to start...")
+                success = await self.start()
+                if not success:
+                    logger.warning("Failed to initialize TodoLogService for logging")
+                    return False
+
             # Create log entry
             log_entry = {
                 'timestamp': datetime.now(UTC),
@@ -251,6 +300,22 @@ class TodoLogService:
         Returns:
             Dict with logs data
         """
+        # Ensure the service is initialized before attempting to get logs
+        if not self.running or self.logs_collection is None:
+            logger.debug("TodoLogService not initialized in get_logs, attempting to start...")
+            success = await self.start()
+            if not success:
+                logger.warning("Failed to initialize TodoLogService for getting logs")
+                return {
+                    'error': 'TodoLogService initialization failed',
+                    'logEntries': [],
+                    'totalCount': 0,
+                    'page': page,
+                    'pageSize': page_size,
+                    'hasMore': False,
+                    'projects': []
+                }
+
         # Build the query
         query = {}
 
@@ -300,7 +365,12 @@ class TodoLogService:
             logger.error(f"Error getting logs: {str(e)}")
             return {
                 'error': str(e),
-                'logEntries': []
+                'logEntries': [],
+                'totalCount': 0,
+                'page': page,
+                'pageSize': page_size,
+                'hasMore': False,
+                'projects': []
             }
 
 
@@ -341,6 +411,13 @@ async def log_todo_create(todo_id: str, description: str, project: str, user_age
     Log a todo creation action.
     """
     service = get_service_instance()
+    # Ensure service is initialized
+    if not service.running or service.logs_collection is None:
+        logger.debug("TodoLogService not initialized in log_todo_create, attempting to start...")
+        success = await service.start()
+        if not success:
+            logger.warning("Failed to initialize TodoLogService for logging todo creation")
+            return False
     return await service.log_todo_action('create', todo_id, description, project, None, user_agent)
 
 async def log_todo_update(todo_id: str, description: str, project: str, 
@@ -349,6 +426,13 @@ async def log_todo_update(todo_id: str, description: str, project: str,
     Log a todo update action.
     """
     service = get_service_instance()
+    # Ensure service is initialized
+    if not service.running or service.logs_collection is None:
+        logger.debug("TodoLogService not initialized in log_todo_update, attempting to start...")
+        success = await service.start()
+        if not success:
+            logger.warning("Failed to initialize TodoLogService for logging todo update")
+            return False
     return await service.log_todo_action('update', todo_id, description, project, changes, user_agent)
 
 async def log_todo_complete(todo_id: str, description: str, project: str, user_agent: str = None) -> bool:
@@ -356,6 +440,13 @@ async def log_todo_complete(todo_id: str, description: str, project: str, user_a
     Log a todo completion action.
     """
     service = get_service_instance()
+    # Ensure service is initialized
+    if not service.running or service.logs_collection is None:
+        logger.debug("TodoLogService not initialized in log_todo_complete, attempting to start...")
+        success = await service.start()
+        if not success:
+            logger.warning("Failed to initialize TodoLogService for logging todo completion")
+            return False
     return await service.log_todo_action('complete', todo_id, description, project, None, user_agent)
 
 async def log_todo_delete(todo_id: str, description: str, project: str, user_agent: str = None) -> bool:
@@ -363,4 +454,11 @@ async def log_todo_delete(todo_id: str, description: str, project: str, user_age
     Log a todo deletion action.
     """
     service = get_service_instance()
+    # Ensure service is initialized
+    if not service.running or service.logs_collection is None:
+        logger.debug("TodoLogService not initialized in log_todo_delete, attempting to start...")
+        success = await service.start()
+        if not success:
+            logger.warning("Failed to initialize TodoLogService for logging todo deletion")
+            return False
     return await service.log_todo_action('delete', todo_id, description, project, None, user_agent)
