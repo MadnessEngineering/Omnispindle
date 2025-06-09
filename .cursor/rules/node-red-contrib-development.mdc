@@ -1,0 +1,332 @@
+---
+description:
+globs:
+alwaysApply: false
+---
+# Node-RED Contrib Package Development Rules
+
+## Project Overview
+Node-RED contrib packages extend Node-RED functionality by providing custom nodes for specific services, APIs, or protocols. This rule set covers best practices for creating professional-grade contrib packages based on the [node-red-contrib-balena-cli](mdc:Todomill_projectorium/node-red-contrib-balena-cli) implementation.
+
+## Project Structure Standards
+
+### Core File Organization
+```
+node-red-contrib-{service-name}/
+├── package.json                 # NPM package configuration
+├── README.md                   # Documentation and usage guide
+├── {service}-credentials.js/.html    # Configuration node for authentication
+├── {service}-{operation}.js/.html    # Operation-specific nodes
+└── nodes/                      # Alternative: organize nodes in subdirectory
+    ├── {service}-{operation}.js
+    └── {service}-{operation}.html
+```
+
+### Package Configuration
+Reference [package.json](mdc:Todomill_projectorium/node-red-contrib-balena-cli/package.json) for:
+- Proper Node-RED registration in `node-red.nodes`
+- Required dependencies (child_process, node-cache, etc.)
+- Semantic versioning and NPM metadata
+- Keywords for discoverability
+
+## Node Development Patterns
+
+### JavaScript Node Structure
+Follow the pattern from [balena-device.js](mdc:Todomill_projectorium/node-red-contrib-balena-cli/nodes/balena-device.js):
+
+```javascript
+module.exports = function(RED) {
+    "use strict";
+
+    const { exec, spawn } = require('child_process');
+    const NodeCache = require('node-cache');
+
+    function ServiceOperationNode(config) {
+        RED.nodes.createNode(this, config);
+        const node = this;
+
+        // Configuration extraction
+        node.operation = config.operation || "default";
+        node.credentials = RED.nodes.getNode(config.credentials);
+
+        // Status tracking function
+        function updateStatus(text, color = "grey") {
+            node.status({ fill: color, shape: "dot", text: text });
+        }
+
+        // Main message handler with error handling
+        node.on('input', async function(msg, send, done) {
+            try {
+                updateStatus("Processing...", "blue");
+                // Operation logic here
+                updateStatus("Completed", "green");
+                send(msg);
+                done();
+            } catch (error) {
+                updateStatus(`Error: ${error.message}`, "red");
+                node.error(error.message, msg);
+                done(error);
+            }
+        });
+
+        updateStatus("Ready");
+    }
+
+    RED.nodes.registerType("service-operation", ServiceOperationNode);
+};
+```
+
+### HTML Configuration Structure
+Follow the pattern from [balena-device.html](mdc:Todomill_projectorium/node-red-contrib-balena-cli/nodes/balena-device.html):
+
+#### Registration Script
+```javascript
+RED.nodes.registerType('service-operation', {
+    category: 'service-category',
+    color: '#HEX_COLOR',
+    defaults: {
+        name: {value: ""},
+        operation: {value: "default", required: true},
+        credentials: {value: "", type: "service-credentials"}
+    },
+    inputs: 1,
+    outputs: 1,
+    icon: "font-awesome/fa-icon",
+    label: function() {
+        return this.name || "service-operation: " + this.operation;
+    }
+});
+```
+
+#### Configuration Template
+Include comprehensive form fields, operation descriptions, and field visibility management based on selected operations.
+
+#### Help Documentation
+Provide detailed help sections covering operations, input/output formats, configuration options, and requirements.
+
+## Authentication & Credentials
+
+### Credentials Configuration Node
+Reference [balena-credentials.js](mdc:Todomill_projectorium/node-red-contrib-balena-cli/balena-credentials.js) for:
+- Multiple authentication methods (token, username/password)
+- Secure credential storage using Node-RED's credentials system
+- Auto-login functionality
+- Environment variable support
+- Authentication status checking
+
+### Integration Pattern
+```javascript
+// In operation nodes
+node.credentials = RED.nodes.getNode(config.credentials);
+
+// Check credentials availability
+if (!node.credentials) {
+    throw new Error("Service credentials configuration is required");
+}
+
+// Use credentials for command execution
+const execOptions = {
+    env: node.credentials ? node.credentials.getAuthEnv() : process.env
+};
+```
+
+## Core Features Implementation
+
+### Caching System
+Implement intelligent caching for read operations:
+```javascript
+const cache = node.enableCaching ? new NodeCache({
+    stdTTL: node.cacheDuration,
+    checkperiod: 60
+}) : null;
+
+// Cache key generation
+function generateCacheKey(operation, identifier, params = {}) {
+    const keyData = { operation, identifier, ...params };
+    return `${operation}_${JSON.stringify(keyData)}`;
+}
+```
+
+### Status Management
+Provide clear visual feedback:
+- **Grey dot**: Ready/idle state
+- **Blue dot**: Processing operations
+- **Green dot**: Successful completion
+- **Red dot**: Error conditions
+
+### Error Handling
+Implement comprehensive error handling:
+- Input validation
+- Command timeout management
+- Service-specific error parsing
+- Graceful degradation
+- User-friendly error messages
+
+### Command Execution
+Use consistent patterns for external command execution:
+```javascript
+function executeCommand(command, options = {}) {
+    return new Promise((resolve, reject) => {
+        const timeoutId = setTimeout(() => {
+            reject(new Error(`Command timed out after ${node.timeout}ms`));
+        }, node.timeout);
+
+        exec(command, options, (error, stdout, stderr) => {
+            clearTimeout(timeoutId);
+            if (error) {
+                reject(new Error(`CLI error: ${error.message}\nStderr: ${stderr}`));
+                return;
+            }
+            // Parse response based on output format
+            resolve(parseResponse(stdout));
+        });
+    });
+}
+```
+
+## Operation Design Patterns
+
+### Multi-Operation Nodes
+Structure operations as objects with consistent interfaces:
+```javascript
+const operations = {
+    list: async (params) => { /* implementation */ },
+    info: async (params) => { /* implementation */ },
+    create: async (params) => { /* implementation */ },
+    delete: async (params) => { /* implementation */ }
+};
+```
+
+### Parameter Handling
+Support multiple input methods:
+```javascript
+const params = {
+    identifier: inputData?.identifier || node.identifier || msg.identifier,
+    operation: inputData?.operation || msg.operation || node.operation
+};
+```
+
+### Output Formats
+Support both JSON and text outputs based on user configuration.
+
+## UI/UX Best Practices
+
+### Dynamic Form Behavior
+Implement field visibility based on selected operations using jQuery:
+```javascript
+function updateFieldVisibility(operation) {
+    // Hide all optional fields
+    $(".optional-field").hide();
+
+    // Show relevant fields based on operation
+    switch(operation) {
+        case "create":
+            $("#required-for-create").show();
+            break;
+        // Additional cases
+    }
+}
+```
+
+### Color Coding
+Use consistent color schemes:
+- **Blue (#00AEEF)**: Device/hardware operations
+- **Green (#4CAF50)**: Management/fleet operations
+- **Orange (#FFA500)**: Connection/communication operations
+- **Purple (#9C27B0)**: Configuration/variables
+- **Deep Orange (#FF5722)**: Deployment/build operations
+
+### Icons
+Use appropriate Font Awesome icons:
+- `fa-microchip`: Device operations
+- `fa-ship`: Fleet/group operations
+- `fa-terminal`: SSH/command operations
+- `fa-cog`: Configuration operations
+- `fa-rocket`: Deployment operations
+
+## Documentation Standards
+
+### README Structure
+Include comprehensive documentation covering:
+- Installation methods (npm, palette manager, manual)
+- Quick start examples
+- Complete API documentation
+- Troubleshooting guides
+- Contributing guidelines
+
+### Inline Documentation
+Provide detailed help text in HTML files covering:
+- Operation descriptions
+- Input/output specifications
+- Configuration options
+- Usage examples
+- Requirements and dependencies
+
+## Performance Considerations
+
+### Caching Strategy
+- Cache read operations to reduce API calls
+- Configurable cache duration
+- Automatic cache cleanup
+- Cache key uniqueness
+
+### Timeout Management
+- Configurable timeouts for different operation types
+- Longer timeouts for build/deployment operations
+- Immediate timeout feedback
+
+### Resource Management
+- Proper cleanup in node close handlers
+- Memory management for large responses
+- Background process handling
+
+## Testing & Quality
+
+### Validation Requirements
+- Input parameter validation
+- Configuration validation
+- Error scenario testing
+- Authentication testing
+
+### Code Quality
+- Use async/await for all asynchronous operations
+- Implement proper error boundaries
+- Follow Node-RED naming conventions
+- Maintain backward compatibility
+
+## Extension Guidelines
+
+### Adding New Operations
+1. Add operation to the operations object
+2. Update HTML form with new option
+3. Implement field visibility logic
+4. Add comprehensive help documentation
+5. Update README with new functionality
+
+### Adding New Authentication Methods
+1. Extend credentials node configuration
+2. Update authentication logic
+3. Add form fields and validation
+4. Test integration with existing operations
+
+### Service-Specific Adaptations
+- Replace service-specific terminology
+- Adapt authentication methods to service requirements
+- Customize error handling for service APIs
+- Implement service-specific caching strategies
+
+## Security Considerations
+
+### Credential Management
+- Use Node-RED's secure credential storage
+- Never log sensitive information
+- Validate all user inputs
+- Implement proper error messages without exposing internals
+
+### Command Injection Prevention
+- Sanitize all command parameters
+- Use parameterized command construction
+- Validate input formats
+- Escape shell metacharacters
+
+This rule set provides a comprehensive foundation for creating professional Node-RED contrib packages that follow established patterns and best practices.
