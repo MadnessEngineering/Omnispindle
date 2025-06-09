@@ -1,0 +1,119 @@
+---
+description:
+globs:
+alwaysApply: false
+---
+# Todomill Development Index
+
+## Project Overview
+Todomill is a Node-RED dashboard for todo management with MongoDB backend integration. This index guides you to the right documentation for your development needs.
+
+## Development Areas
+
+### 🎨 **Frontend Development**
+**When to use**: Adding UI elements, modifying dashboard appearance, user interactions
+**See**: [Todomill UI Patterns](mdc:todomill-ui-patterns.mdc)
+- HTML template patterns for Node-RED UI nodes
+- CSS styling guidelines (Material Design)
+- JavaScript patterns for Angular-based dashboard
+- Confirmation dialogs and loading states
+- User interaction patterns
+
+### ⚙️ **Backend Integration**
+**When to use**: Connecting UI to database, message routing, data processing
+**See**: [Node-RED Development Guide](mdc:node-red-development-guide.mdc)
+- Node-RED flow patterns and message routing
+- Request/response handling
+- Validation and error handling
+- Security and authorization patterns
+- Integration with UI components
+
+### 🗄️ **Database Operations**
+**When to use**: Working with MongoDB, data schemas, database queries
+**See**: [MongoDB Technical Reference](mdc:mongodb-technical-reference.mdc)
+- MongoDB collection structures and schemas
+- PyMongo operations and patterns
+- MongoDB4 Node-RED node usage
+- Data validation and normalization
+- BSON types and ObjectId handling
+
+## Quick Start Guides
+
+### Adding a New UI Feature
+1. **Plan**: Review [UI Patterns](mdc:todomill-ui-patterns.mdc) for HTML/CSS/JS structure
+2. **Implement**: Create UI elements following established patterns
+3. **Connect**: Use [Node-RED Guide](mdc:node-red-development-guide.mdc) for backend integration
+4. **Data**: Reference [MongoDB Guide](mdc:mongodb-technical-reference.mdc) for database operations
+
+### Modifying Existing Features
+1. **Locate**: Find relevant files in `HtmlFromTemplateNode/` or `JavascriptFromFunctionNode/`
+2. **Understand**: Check message flow patterns in Node-RED documentation
+3. **Modify**: Follow established patterns for consistency
+4. **Test**: Verify database operations and UI updates
+
+### Troubleshooting
+- **UI Issues**: Check Angular scope, CSS conflicts → [UI Patterns](mdc:todomill-ui-patterns.mdc)
+- **Message Flow**: Debug Node-RED topics and routing → [Node-RED Guide](mdc:node-red-development-guide.mdc)
+- **Database Errors**: Validate queries and schemas → [MongoDB Reference](mdc:mongodb-technical-reference.mdc)
+
+## File Structure Quick Reference
+
+```
+Todomill_projectorium/
+├── HtmlFromTemplateNode/     # UI templates (modify these)
+│   ├── TodoLog.html         # Log display and actions
+│   └── TodoEdit.html        # Todo editing interface
+├── JavascriptFromFunctionNode/ # Backend logic (modify these)
+│   └── EditActions.js       # Action routing logic
+└── ExportedNodeRedTabs/     # Flow exports (reference only)
+    └── todo-dash-masterfile.json
+```
+
+## Development Workflow
+
+### Standard Process
+1. **Edit**: Modify `.html` or `.js` files in appropriate directories
+2. **Deploy**: Copy changes to Node-RED GUI manually
+3. **Test**: Verify functionality in dashboard
+4. **Export**: Update JSON files for version control (optional)
+
+### Message Topics Convention
+- `todo/[entity]/[action]/request` - UI to backend
+- `todo/[entity]/[action]/response` - Backend to UI
+- `todo/dashboard/[component]` - Data to UI components
+
+## Common Patterns
+
+### Adding Action Buttons
+```html
+<button ng-click="confirmAction(entry)" ng-disabled="entry.loading">
+    <span ng-if="!entry.loading">Action</span>
+    <span ng-if="entry.loading">Loading...</span>
+</button>
+```
+
+### Message Handling
+```javascript
+scope.$watch('msg', function(newMsg) {
+    if (newMsg.topic === 'todo/action/response') {
+        scope.handleResponse(newMsg);
+    }
+});
+```
+
+### Database Operations
+```javascript
+msg.payload = [{
+    "operation": "findOne",
+    "collection": "todos",
+    "query": {"id": todoId}
+}];
+```
+
+## Related Documentation
+- [TodoLog Implementation Example](mdc:Todomill_projectorium/HtmlFromTemplateNode/TodoLog.html) - Real-world implementation
+- [Project Structure](mdc:subrepo-project-structure) - Overall project layout
+- [MongoDB Collections](mdc:mongodb-technical-reference.mdc#collections) - Data schemas
+
+---
+**Next Steps**: Choose your development area above and follow the specific guide for detailed patterns and examples.

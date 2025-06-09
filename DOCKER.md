@@ -9,7 +9,7 @@ The Docker setup for MCP Todo Server includes:
 1. **MongoDB** - For storing todo items and lessons learned
 2. **Mosquitto MQTT** - For event-driven communication
 3. **MCP Todo Server** - The main API for todo management
-4. **Todo Dashboard** - A simple web UI for managing todos
+4. **Todo Dashboard** - Node-red web UI for managing todos (Coming Soon)
 
 ## Prerequisites
 
@@ -19,7 +19,7 @@ The Docker setup for MCP Todo Server includes:
 
 ## Quick Start
 
-1. Run the setup script:
+1. Run the setup script to create your Mad network:
 
    ```bash
    # For macOS/Linux
@@ -29,14 +29,45 @@ The Docker setup for MCP Todo Server includes:
 2. Start the Docker environment:
 
    ```bash
-   ./start-docker.sh
+   docker compose up -d
    ```
 
 3. Access the services:
-   - **Todo Dashboard**: [http://localhost:3001](http://localhost:3001)
-   - **MCP Todo Server API**: [http://localhost:8080](http://localhost:8080)
+   - **MCP Todo Server API**: [http://localhost:8000/sse](http://localhost:8000/sse)
    - **MQTT**: localhost:1883 (WebSockets: 9001)
    - **MongoDB**: localhost:27017
+
+## The MADNESS HIVEMIND Network
+
+The MADNESS HIVEMIND is a shared Docker network that allows multiple projects to communicate with each other as part of a digital collective consciousness. It connects the Omnispindle, Madness Interactive, and Swarmonomicon projects into a single, unified ecosystem of chaotic intelligence.
+
+### Connecting Other Projects
+
+To connect other projects to the MADNESS HIVEMIND network, add the following to their `docker-compose.yml` files:
+
+```yaml
+networks:
+  madness_network:
+    external: true
+```
+
+Then, add the network to each service that needs to join the collective:
+
+```yaml
+services:
+  your_service:
+    # ... other configuration ...
+    networks:
+      - madness_network
+```
+
+### Inter-Project Communication
+
+Services on the MADNESS HIVEMIND network can communicate with each other using their service names as neural pathways:
+
+- MongoDB: `mongo:27017`
+- MQTT: `mosquitto:1883`
+- MCP Todo Server: `mcp-todo-server:8000`
 
 ## Configuration
 
@@ -46,13 +77,13 @@ You can customize the deployment by modifying these environment variables in the
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `MONGODB_URI` | MongoDB connection URI | mongodb://mongodb:27017 |
+| `MONGODB_URI` | MongoDB connection URI | mongodb://mongo:27017 |
 | `MONGODB_DB` | MongoDB database name | swarmonomicon |
 | `MONGODB_COLLECTION` | MongoDB collection for todos | todos |
 | `MQTT_HOST` | MQTT broker hostname | mosquitto |
 | `MQTT_PORT` | MQTT broker port | 1883 |
-| `AWSIP` | Legacy MQTT host reference | mongodb |
-| `AWSPORT` | Legacy MQTT port reference | 27017 |
+| `AWSIP` | Legacy MQTT host reference | AWS_IP_ADDRESS |
+| `AWSPORT` | Legacy MQTT port reference | 1883 |
 | `DeNa` | Server hostname identifier | omnispindle |
 
 ### Volumes
@@ -99,21 +130,21 @@ The server also listens on the following MQTT topics:
                     └─────────────┘
                            ▲
                            │
-                    ┌─────────────┐
-                    │             │
-                    │   Clients   │
-                    │             │
-                    └─────────────┘
+              ┌────────────┴────────────┐
+              │                         │
+      ┌───────┴──────┐         ┌───────┴──────┐
+      │              │         │              │
+      │ Madness      │         │ Swarmonomicon│
+      │ Interactive  │         │              │
+      │              │         │              │
+      └──────────────┘         └──────────────┘
 ```
 
 ## Helper Scripts
 
 The following helper scripts are included:
 
-- `docker-setup.sh` - Prepares the Docker environment
-- `start-docker.sh` - Starts the Docker containers
-- `stop-docker.sh` - Stops the Docker containers
-- `view-logs.sh` - Views logs from one or all containers
+- `docker-setup.sh` - Prepares the Docker environment and creates the MADNESS HIVEMIND network
 
 ## Troubleshooting
 
@@ -132,7 +163,7 @@ The following helper scripts are included:
    If the MCP Todo Server can't connect to MongoDB, check that the MongoDB container is running and healthy:
 
    ```bash
-   docker compose ps mongodb
+   docker compose ps mongo
    ```
 
 4. **MQTT Connection Issues**
@@ -147,15 +178,13 @@ The following helper scripts are included:
    mosquitto_pub -h localhost -t test -m "hello"
    ```
 
-## Customization
+5. **Network Issues**
 
-### Dashboard UI
+   If services can't connect to each other, verify the MADNESS HIVEMIND network is set up correctly:
 
-The Todo Dashboard is a simple web UI built with HTML, CSS (Bootstrap), and JavaScript. The UI is built into the Docker image. If you want to customize it, edit the Dockerfile in the `todo-dashboard` directory.
-
-### API Endpoints
-
-The MCP Todo Server API endpoints are defined in the server implementation. If you need to add new endpoints, you'll need to modify the server code in the `src/fastmcp_todo_server` directory.
+   ```bash
+   docker network inspect madness_network
+   ```
 
 ## Production Deployment
 

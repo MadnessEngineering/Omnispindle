@@ -71,13 +71,18 @@ from .tools import list_lessons
 from .tools import list_todos_by_status
 from .tools import mark_todo_complete
 from .tools import query_todos
+from .tools import query_todo_logs
 from .tools import search_lessons
 from .tools import search_todos
 from .tools import update_lesson
 from .tools import update_todo
+from .tools import list_project_todos
 from .mqtt import mqtt_publish
 from .mqtt import mqtt_get
 from pymongo import MongoClient
+
+# Import the TodoLogService for initialization
+from .todo_log_service import get_service_instance as get_log_service
 
 # Import the AI assistant functions (WIP)
 # from .ai_assistant import get_todo_suggestions
@@ -128,11 +133,12 @@ async def add_todo_tool(description: str, project: str, priority: str = "Medium"
     metadata: { "ticket": "ticket number", "tags": ["tag1", "tag2"], "notes": "notes" }
     → Returns: {todo_id, truncated_description, project}
     """
-    # Create TODO about these comments with mcp tools to test this
-    # normalize_project_name(project)
-    # Check with regex if can match the full name from the list of projects
-    # If not, try to use local AI models to infer the project name from existing list
-    # If still not found, return error to the mcp call with a full list
+    # Project name will be validated and normalized in tools.py
+    # This includes:
+    # 1. Conversion to lowercase for consistent storage
+    # 2. Validation against known project list
+    # 3. Partial matching for typos/case differences
+    # 4. Fallback to madness_interactive if no match found
     try:
         result = await add_todo(description, project, priority, target_agent, metadata, ctx)
 
@@ -161,18 +167,32 @@ async def add_todo_tool(description: str, project: str, priority: str = "Medium"
 
 
 @register_tool_once
-async def query_todos_tool(filter: dict = None, projection: dict = None, limit: int = 100) -> str:
+async def query_todos_tool(query_or_filter=None, fields_or_projection=None, limit: int = 100, ctx: Context = None) -> str:
     """
-    Query todos with filters.
+    Query or search todos with flexible options.
     
-    filter: MongoDB query dict (e.g. {"status": "pending"})
-    projection: Fields to include/exclude
+    query_or_filter: Can be either:
+                    - MongoDB query dict (e.g. {"status": "pending"})
+                    - Text string to search for when fields_or_projection is a list
+                      Special formats:
+                      - Use "project:ProjectName" to search for todos in specific project
+    fields_or_projection: Can be either:
+                    - MongoDB projection dict for filtering fields to return
+                    - List of fields to search in when query_or_filter is a text string
+                      Special values supported:
+                      - "all" to search all text fields
     limit: Max results (default: 100)
     
-    → Returns: {count, items[{id, description, project, status, priority}]}
+    → Returns: {count, items[...]} when filtering or {count, query, matches[...]} when searching
     """
-    result = await query_todos(filter, projection, limit)
-    return json.dumps(result, default=str)
+    # Determine if this is a search or query operation based on parameter types
+    if isinstance(query_or_filter, str):
+        # This is a search operation with a text query
+        return await search_todos(query_or_filter, fields_or_projection, limit, ctx)
+    else:
+        # This is a filter operation with a MongoDB filter
+        result = await query_todos(query_or_filter, fields_or_projection, limit, ctx)
+        return json.dumps(result, default=str)
 
 
 @register_tool_once
@@ -188,35 +208,35 @@ async def update_todo_tool(todo_id: str, updates: dict, ctx: Context = None) -> 
     return await update_todo(todo_id, updates, ctx)
 
 
-@register_tool_once
-async def mqtt_publish_tool(topic: str, message: str, ctx: Context = None, retain: bool = False) -> str:
-    """
-    Publish MQTT message.
-    
-    topic: Topic path to publish to
-    message: Content to send
-    retain: Keep for new subscribers (default: false)
-    
-    → Returns: {success, message?}
-    """
-    return await mqtt_publish(topic, message, ctx, retain)
+# @register_tool_once
+# async def mqtt_publish_tool(topic: str, message: str, ctx: Context = None, retain: bool = False) -> str:
+#     """
+#     Publish MQTT message.
+
+#     topic: Topic path to publish to
+#     message: Content to send
+#     retain: Keep for new subscribers (default: false)
+
+#     → Returns: {success, message?}
+#     """
+#     return await mqtt_publish(topic, message, ctx, retain)
 
 
-@register_tool_once
-async def mqtt_get_tool(topic: str) -> str:
-    """
-    Get latest MQTT message.
-    
-    topic: Topic to retrieve from
-    
-    → Returns: {success, data (or message if error)}
-    """
-    result = await mqtt_get(topic)
-    return json.dumps({
-        "success": result is not None,
-        "data": result,
-        "message": None if result is not None else "Failed to get MQTT message"
-    })
+# @register_tool_once
+# async def mqtt_get_tool(topic: str) -> str:
+#     """
+#     Get latest MQTT message.
+
+#     topic: Topic to retrieve from
+
+#     → Returns: {success, data (or message if error)}
+#     """
+#     result = await mqtt_get(topic)
+#     return json.dumps({
+#         "success": result is not None,
+#         "data": result,
+#         "message": None if result is not None else "Failed to get MQTT message"
+#     })
 
 
 @register_tool_once
@@ -276,15 +296,19 @@ async def get_todo_tool(todo_id: str) -> str:
 
 
 @register_tool_once
-async def mark_todo_complete_tool(todo_id: str, ctx: Context = None) -> str:
+async def mark_todo_complete_tool(todo_id: str, comment: str = None, ctx: Context = None) -> str:
     """
     Complete todo.
     
-    todo_id: ID of todo to mark completed
+    Marks a todo as completed and records completion time. Optionally accepts 
+    a completion comment to document the solution or outcome.
     
-    → Returns: {todo_id, completed_at}
+    todo_id: ID of todo to mark completed, str
+    comment: Str = None
+    
+    → Returns: {todo_id, completed_at, duration}
     """
-    return await mark_todo_complete(todo_id, ctx)
+    return await mark_todo_complete(todo_id, comment, ctx)
 
 
 @register_tool_once
@@ -294,7 +318,7 @@ async def list_todos_by_status_tool(status: str, limit: int = 100) -> str:
     
     status: Filter value ("initial"|"pending"|"completed"|"review")
     limit: Max results (default: 100)
-    
+
     → Returns: {count, status, items[{id, desc, project}], projects?}
     """
     return await list_todos_by_status(status, limit)
@@ -304,12 +328,12 @@ async def list_todos_by_status_tool(status: str, limit: int = 100) -> str:
 async def add_lesson_tool(language: str, topic: str, lesson_learned: str, tags: list = None, ctx: Context = None) -> str:
     """
     Create lesson.
-    
+
     language: Technology or language name
     topic: Brief title/subject
     lesson_learned: Full lesson content
     tags: Optional categorization tags
-    
+
     → Returns: {lesson_id, topic}
     """
     return await add_lesson(language, topic, lesson_learned, tags, ctx)
@@ -319,9 +343,9 @@ async def add_lesson_tool(language: str, topic: str, lesson_learned: str, tags: 
 async def get_lesson_tool(lesson_id: str) -> str:
     """
     Get lesson details.
-    
+
     lesson_id: ID of lesson to retrieve
-    
+
     → Returns: {id, language, topic, lesson_learned, tags, created}
     """
     return await get_lesson(lesson_id)
@@ -331,10 +355,10 @@ async def get_lesson_tool(lesson_id: str) -> str:
 async def update_lesson_tool(lesson_id: str, updates: dict, ctx: Context = None) -> str:
     """
     Update lesson.
-    
+
     lesson_id: ID of lesson to update
     updates: Fields to change {field: new_value}
-    
+
     → Returns: {success, message}
     """
     return await update_lesson(lesson_id, updates, ctx)
@@ -344,9 +368,9 @@ async def update_lesson_tool(lesson_id: str, updates: dict, ctx: Context = None)
 async def delete_lesson_tool(lesson_id: str, ctx: Context = None) -> str:
     """
     Delete lesson.
-    
+
     lesson_id: ID of lesson to remove
-    
+
     → Returns: {success, message}
     """
     return await delete_lesson(lesson_id, ctx)
@@ -356,50 +380,68 @@ async def delete_lesson_tool(lesson_id: str, ctx: Context = None) -> str:
 async def list_lessons_tool(limit: int = 100) -> str:
     """
     List all lessons.
-    
+
     limit: Max results (default: 100)
-    
+
     → Returns: {count, items[{id, language, topic, tags, preview}]}
     """
     return await list_lessons(limit)
 
 
 @register_tool_once
-async def search_todos_tool(query: str, fields: list = None, limit: int = 100) -> str:
-    """
-    Search todos by text.
-    
-    query: Text to search for
-    fields: Fields to search in (default: ["description"])
-    limit: Max results (default: 100)
-    
-    → Returns: {count, query, matches[{id, description, project, status}]}
-    """
-    return await search_todos(query, fields, limit)
-
-
-@register_tool_once
 async def search_lessons_tool(query: str, fields: list = None, limit: int = 100) -> str:
     """
     Search lessons by text.
-    
+
     query: Text to search for
     fields: Fields to search in (default: ["topic", "lesson_learned"])
     limit: Max results (default: 100)
-    
+
     → Returns: {count, query, matches[{id, language, topic, preview, tags}]}
     """
     return await search_lessons(query, fields, limit)
 
 
+@register_tool_once
+async def list_project_todos_tool(project: str, limit: int = 5) -> str:
+    """
+    List recent todos by project.
+    
+    Returns active (non-completed) todos for a specific project, sorted by creation date 
+    with newest first. Completed todos are automatically excluded to keep the view 
+    focused on actionable work items.
+    
+    project: Project name to filter by
+    limit: Max results (default: 5)
+    
+    → Returns: {count, project, items[{id, description, status, created_at}]}
+    """
+    return await list_project_todos(project, limit)
+
+
+@register_tool_once
+async def query_todo_logs_tool(filter_type: str = 'all', project: str = 'all', page: int = 1, page_size: int = 20, ctx: Context = None) -> str:
+    """
+    Query todo logs with filtering options.
+    
+    filter_type: Operation type filter ('all', 'create', 'update', 'delete', 'complete')
+    project: Project name to filter by ('all' for all projects)
+    page: Page number (1-based)
+    page_size: Number of items per page (default: 20)
+    
+    → Returns: {logEntries, totalCount, page, pageSize, hasMore, projects}
+    """
+    return await query_todo_logs(filter_type, project, page, page_size, ctx)
+
+
 async def run_server() -> Callable:
     """
     Run the FastMCP server.
-    
+
     This function initializes and starts the FastMCP server by calling the run_server method
     on the Omnispindle instance. It handles server setup and ensures that all tools are
     properly registered before starting.
-    
+
     Returns:
         Callable: An ASGI application that can handle HTTP, WebSocket, and lifespan requests.
         If the underlying run_sse_async() method returns None, a fallback ASGI application
@@ -460,3 +502,20 @@ async def run_server() -> Callable:
     _run_server_result = result
 
     return result
+
+# Automatically start the TodoLogService when the module is imported
+async def _init_todo_log_service():
+    """Initialize the TodoLogService."""
+    log_service = get_log_service()
+    try:
+        await log_service.start()
+        logger.info("TodoLogService started at module initialization")
+    except Exception as e:
+        logger.error(f"Failed to start TodoLogService: {str(e)}")
+
+# Schedule the initialization
+loop = asyncio.get_event_loop()
+try:
+    loop.create_task(_init_todo_log_service())
+except Exception as e:
+    logger.error(f"Failed to schedule TodoLogService initialization: {str(e)}")
