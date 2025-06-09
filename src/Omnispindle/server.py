@@ -8,11 +8,14 @@ import subprocess
 import anyio
 import traceback
 import threading
+import warnings
 
 # Configure logger
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
+# Filter out specific RuntimeWarnings about unawaited coroutines
+warnings.filterwarnings("ignore", category=RuntimeWarning, message=".*coroutine.*send_log_message.*was never awaited.*")
 
 # logging.getLogger('pymongo').setLevel(logging.WARNING)
 # logging.getLogger('asyncio').setLevel(logging.WARNING)

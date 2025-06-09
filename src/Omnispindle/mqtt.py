@@ -35,7 +35,7 @@ async def mqtt_publish(topic: str, message: str, ctx: Optional[Context] = None, 
         
         if ctx is not None:
             try:
-                ctx.info(f"Published to MQTT topic: {topic}")
+                await ctx.info(f"Published to MQTT topic: {topic}")
             except Exception:
                 pass
                 
@@ -46,7 +46,7 @@ async def mqtt_publish(topic: str, message: str, ctx: Optional[Context] = None, 
         
         if ctx is not None:
             try:
-                ctx.error(error_msg)
+                await ctx.error(error_msg)
             except Exception:
                 pass
                 

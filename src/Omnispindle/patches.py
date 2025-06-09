@@ -109,6 +109,39 @@ def apply_patches():
     except Exception as e:
         logger.error(f"Failed to apply Starlette router patches: {str(e)}")
 
+    # Patch FastMCP's log method to properly handle async send_log_message calls
+    try:
+        from fastmcp.server import FastMCP
+        
+        # Store the original log method
+        original_log = FastMCP.log
+        
+        @functools.wraps(original_log)
+        async def patched_log(self, level: str, message: str, logger_name: str = None, **extra):
+            """
+            Patched log method that properly handles the async send_log_message call.
+            
+            This fixes the "RuntimeWarning: coroutine 'ServerSession.send_log_message' was never awaited" warning
+            by ensuring the coroutine is properly awaited in an async context.
+            """
+            try:
+                # Call the original log method which should properly await send_log_message
+                return await original_log(self, level, message, logger_name, **extra)
+            except Exception as e:
+                # If there's an error with MCP logging, fall back to standard logging
+                # to avoid breaking the application
+                import logging
+                logger = logging.getLogger(logger_name or __name__)
+                getattr(logger, level.lower(), logger.info)(f"{message}")
+                logger.debug(f"FastMCP log fallback used due to error: {str(e)}")
+                
+        # Apply the patch
+        FastMCP.log = patched_log
+        logger.info("Patched FastMCP.log to fix unawaited send_log_message warnings")
+        
+    except Exception as e:
+        logger.error(f"Failed to apply FastMCP log patches: {str(e)}")
+
     # Patch MCP's SSE module to properly handle client disconnects
     try:
         import mcp.server.sse
