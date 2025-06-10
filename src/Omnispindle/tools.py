@@ -441,8 +441,8 @@ async def get_todo(todo_id: str) -> str:
     """
     Get a specific todo by ID.
     
-    Retrieves detailed information about a todo item including its 
-    description, status, priority, and creation/completion information.
+    Retrieves detailed information about a todo item, returning different fields
+    based on the todo's status to optimize context usage for AI agents.
     
     Parameters:
         todo_id: Unique identifier of the todo to retrieve
@@ -453,8 +453,17 @@ async def get_todo(todo_id: str) -> str:
         - description: Full task description
         - project: Project category 
         - status: Current status (initial, pending, completed)
-        - enhanced_description: Boolean indicating if the description is enhanced
-        - notes: Notes about the todo
+        - enhanced_description: Detailed description with markdown (if exists and not empty)
+        
+        For active todos (not completed):
+        - priority: Task priority level
+        - target: Target agent/user
+        - metadata: Additional task metadata (if exists)
+        
+        For completed todos:
+        - completed: Completion timestamp
+        - duration: Formatted duration from creation to completion
+        - completion_comment: Optional comment about completion (if exists)
     """
     todo = collection.find_one({"id": todo_id})
 
@@ -467,28 +476,34 @@ async def get_todo(todo_id: str) -> str:
         "description": todo["description"],
         "project": todo["project"],
         "status": todo["status"],
-
     }
 
-    # if "notes"
-    # if todo["notes"]:
-    #     formatted_todo["notes"] = todo["notes"]
-    # else:
-    #     formatted_todo["notes"] = ""
-    # Check if enhanced_description exists and has content
-    enhanced_description = bool(todo.get("enhanced_description"))
-    formatted_todo["enhanced_description"] = enhanced_description
+    # Add enhanced_description if it exists and has content
+    enhanced_description = todo.get("enhanced_description")
+    if enhanced_description and enhanced_description.strip():
+        formatted_todo["enhanced_description"] = enhanced_description
 
-    # Add completion information if available (using compact format)
+    # Add different fields based on status to optimize context
     if todo.get("completed_at"):
+        # For completed todos, focus on completion info
         formatted_todo["completed"] = todo["completed_at"]
-        # Only add duration when completed
         duration_seconds = todo["completed_at"] - todo["created_at"]
         formatted_todo["duration"] = _format_duration(duration_seconds)
 
         # Include completion comment if it exists
         if todo.get("completion_comment"):
             formatted_todo["completion_comment"] = todo["completion_comment"]
+    else:
+        # For active todos, include more working fields
+        if todo.get("priority"):
+            formatted_todo["priority"] = todo["priority"]
+
+        if todo.get("target"):
+            formatted_todo["target"] = todo["target"]
+
+        # Include metadata for active todos if it exists
+        if todo.get("metadata"):
+            formatted_todo["metadata"] = todo["metadata"]
 
     # MQTT publish without try/except to reduce code verbosity
     await mqtt_publish(f"status/{os.getenv('DeNa')}/omnispindle/get_todo", f"todo_id: {todo_id}")

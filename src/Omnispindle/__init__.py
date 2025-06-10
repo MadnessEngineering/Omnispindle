@@ -258,43 +258,18 @@ async def delete_todo_tool(todo_id: str, ctx: Context = None) -> str:
 @register_tool_once
 async def get_todo_tool(todo_id: str) -> str:
     """
-    Get todo details.
+    Get todo details. 
+
     
     todo_id: ID of todo to retrieve
     
-    → Returns: {id, description, project, status, priority, target, created, [completed, duration]}
+    → Returns: {id, description, project, status, enhanced_description, priority, target, metadata} or {id, description, project, status, completed, duration, completion_comment}
     """
     result = await get_todo(todo_id)
 
-    # Optimize the result with focused AI agent hints
-    try:
-        data = json.loads(result)
-        if data.get("success") and "data" in data:
-            todo_data = data["data"]
-
-            # Add compact AI hints
-            status = todo_data.get("status", "unknown")
-            ticket = todo_data.get("ticket", "unknown")
-            priority = todo_data.get("priority", "unknown")
-
-            todo_data["ai_hints"] = {
-                "status": status,
-                "templates": [
-                    f"{priority} task in {todo_data.get('project')}",
-                    f"Task is {status}"
-                ]
-            }
-
-            # Only add next actions if task is actionable
-            if status in ["initial", "pending"]:
-                todo_data["next"] = ["update_todo_tool", "mark_todo_complete_tool", "delete_todo_tool"]
-            elif status == "completed":
-                todo_data["next"] = ["get_todo_tool", "update_todo_tool", "delete_todo_tool"]
-
-            data["data"] = todo_data
-            result = json.dumps(data)
-    except Exception as e:
-        print(f"Error optimizing get_todo response: {str(e)}")
+    # The underlying get_todo function now returns optimized fields based on status
+    # For active todos: id, description, project, status, enhanced_description, priority, target, metadata
+    # For completed todos: id, description, project, status, completed, duration, completion_comment
 
     return result
 
