@@ -1,6 +1,6 @@
 # Makefile for FastMCP Todo Server
 
-.PHONY: install run test coverage clean status deploy
+.PHONY: install run test coverage clean status deploy deploy-dry-run deploy-force
 
 # Install dependencies
 install:
@@ -16,16 +16,23 @@ run:
 
 # deploy
 deploy:
-	rsync -avI /Users/d.edens/lab/madness_interactive/projects/python/Omnispindle/Todomill_projectorium/Html ubuntu@($AWSIP:/home/ubuntu/.node-red/projects/saws-flow/src/
-	rsync -avI /Users/d.edens/lab/madness_interactive/projects/python/Omnispindle/Todomill_projectorium/Javascript ubuntu@$AWSIP:~/.node-red/projects/saws-flow/src/
+	cd Todomill_projectorium && make deploy
+
+# deploy-dry-run
+deploy-dry-run:
+	cd Todomill_projectorium && make deploy-dry-run
+
+# deploy-force
+deploy-force:
+	cd Todomill_projectorium && make deploy-force
 
 # Run tests
 test:
-	python3.11 -m pytest tests/
+	python -m pytest tests/
 
 # Run tests with coverage
 coverage:
-	python3.11 -m pytest --cov=src tests/
+	python -m pytest --cov=src tests/
 
 # Clean up __pycache__ directories
 clean:
@@ -36,3 +43,9 @@ status:
 	git submodule foreach "git status"
 	ssh eaws "pm2 ls"
 	ssh saws "pm2 ls"
+
+sync:
+	git submodule foreach "git pull || echo No changes"
+	ssh eaws "cd ~/Omnispindle && git pull"
+	ssh eaws "pm2 restart Omnispindle"
+	sleep 2 && ssh eaws "pm2 logs Omnispindle --lines 10 && exit"
