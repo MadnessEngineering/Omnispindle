@@ -72,6 +72,7 @@ from .tools import delete_todo
 from .tools import get_lesson
 from .tools import get_todo
 from .tools import list_lessons
+from .tools import list_projects
 from .tools import list_todos_by_status
 from .tools import mark_todo_complete
 from .tools import query_todos
@@ -132,7 +133,7 @@ def register_tool_once(tool_func):
 @register_tool_once
 async def add_todo_tool(description: str, project: str, priority: str = "Medium", target_agent: str = "user", metadata: dict = None, ctx: Context = None) -> str:
     """    
-    project: [ Madness_interactive, Omnispindle, Swarmonomicon, todomill_projectorium, RegressionTestKit, Dirname, Repo_name ]
+    project: [ Madness_interactive, Omnispindle, Swarmonomicon, todomill_projectorium, RegressionTestKit, etc ]
     priority: "Low"|"Medium"|"High" (default: Medium)
     metadata: { "ticket": "ticket number", "tags": ["tag1", "tag2"], "notes": "notes" }
     → Returns: {success, todo_id, message}
@@ -409,6 +410,22 @@ async def query_todo_logs_tool(filter_type: str = 'all', project: str = 'all', p
     → Returns: {logEntries, totalCount, page, pageSize, hasMore, projects}
     """
     return await query_todo_logs(filter_type, project, page, page_size, ctx)
+
+
+@register_tool_once
+async def list_projects_tool(include_details: bool = False, active_only: bool = True) -> str:
+    """
+    List all valid projects from the centralized project management system.
+    
+    This tool provides access to the centralized list of projects that can be used 
+    for todos and other operations. Replaces hardcoded project lists across all systems.
+    
+    include_details: If True, include project metadata (display_name, created_at, etc.)
+    active_only: If True, only return active projects (default: True)
+    
+    → Returns: {count, projects, cached} where projects is array of project names or detailed objects
+    """
+    return await list_projects(include_details, active_only)
 
 
 async def run_server() -> Callable:

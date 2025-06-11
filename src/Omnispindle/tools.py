@@ -30,12 +30,16 @@ db = mongo_client[MONGODB_DB]
 collection = db[MONGODB_COLLECTION]
 lessons_collection = db["lessons_learned"]
 tags_cache_collection = db["tags_cache"]
+projects_collection = db["projects"]
 
 # Cache constants
 TAGS_CACHE_KEY = "all_lesson_tags"
 TAGS_CACHE_EXPIRY = 43200  # Cache expiry in seconds (12 hours)
+PROJECTS_CACHE_KEY = "all_valid_projects"
+PROJECTS_CACHE_EXPIRY = 43200  # Cache expiry in seconds (12 hours)
 
 # Valid project list - all lowercase for case-insensitive matching
+# TODO: This will be migrated to MongoDB and deprecated
 VALID_PROJECTS = [
     "madness_interactive",
     "regressiontestkit",
@@ -158,9 +162,157 @@ def get_all_lesson_tags():
         logging.error(f"Failed to aggregate lesson tags: {str(e)}")
         return []
 
+# Project management functions
+def cache_projects(projects_list):
+    """
+    Cache the list of valid projects in MongoDB.
+    
+    Args:
+        projects_list: List of project names to cache
+    """
+    try:
+        cache_entry = {
+            "key": PROJECTS_CACHE_KEY,
+            "projects": list(projects_list),
+            "updated_at": int(datetime.now(UTC).timestamp())
+        }
+
+        tags_cache_collection.update_one(
+            {"key": PROJECTS_CACHE_KEY},
+            {"$set": cache_entry},
+            upsert=True
+        )
+        return True
+    except Exception as e:
+        logging.error(f"Failed to cache projects: {str(e)}")
+        return False
+
+def get_cached_projects():
+    """
+    Retrieve the cached list of valid projects from MongoDB.
+    
+    Returns:
+        List of project names if cache exists and is valid, None otherwise
+    """
+    try:
+        cache_entry = tags_cache_collection.find_one({"key": PROJECTS_CACHE_KEY})
+
+        if not cache_entry:
+            return None
+
+        # Check if cache is expired
+        current_time = int(datetime.now(UTC).timestamp())
+        if current_time - cache_entry["updated_at"] > PROJECTS_CACHE_EXPIRY:
+            invalidate_projects_cache()
+            return None
+
+        return cache_entry["projects"]
+    except Exception as e:
+        logging.error(f"Failed to retrieve cached projects: {str(e)}")
+        return None
+
+def invalidate_projects_cache():
+    """
+    Invalidate the projects cache in MongoDB.
+    
+    Returns:
+        True if successful, False otherwise
+    """
+    try:
+        tags_cache_collection.delete_one({"key": PROJECTS_CACHE_KEY})
+        return True
+    except Exception as e:
+        logging.error(f"Failed to invalidate projects cache: {str(e)}")
+        return False
+
+def initialize_projects_collection():
+    """
+    Initialize the projects collection with the current VALID_PROJECTS list.
+    This is a one-time migration function.
+    
+    Returns:
+        True if successful, False otherwise
+    """
+    try:
+        # Check if projects collection is already populated
+        existing_count = projects_collection.count_documents({})
+        if existing_count > 0:
+            logging.info(f"Projects collection already has {existing_count} projects")
+            return True
+
+        # Insert all valid projects
+        current_time = int(datetime.now(UTC).timestamp())
+        projects_to_insert = []
+        
+        for project_name in VALID_PROJECTS:
+            project_doc = {
+                "id": project_name,
+                "name": project_name,
+                "display_name": project_name.replace("_", " ").title(),
+                "active": True,
+                "created_at": current_time,
+                "updated_at": current_time
+            }
+            projects_to_insert.append(project_doc)
+
+        # Bulk insert all projects
+        projects_collection.insert_many(projects_to_insert)
+        logging.info(f"Initialized projects collection with {len(projects_to_insert)} projects")
+        
+        # Cache the project names
+        cache_projects(VALID_PROJECTS)
+        
+        return True
+    except Exception as e:
+        logging.error(f"Failed to initialize projects collection: {str(e)}")
+        return False
+
+def get_all_projects(active_only: bool = True):
+    """
+    Get all valid projects, with caching.
+    
+    First tries to fetch from cache, falls back to database if needed.
+    Also initializes the database if it's empty.
+    
+    Args:
+        active_only: If True, only return active projects (default: True)
+    
+    Returns:
+        List of project names
+    """
+    # Try to get from cache first
+    cached_projects = get_cached_projects()
+    if cached_projects is not None:
+        return cached_projects
+
+    # If not in cache, query from database
+    try:
+        # Initialize collection if it's empty
+        if projects_collection.count_documents({}) == 0:
+            initialize_projects_collection()
+
+        # Query projects from database
+        query = {"active": True} if active_only else {}
+        cursor = projects_collection.find(query, {"id": 1, "_id": 0})
+        project_names = [doc["id"] for doc in cursor]
+
+        # Fallback to VALID_PROJECTS if database query fails
+        if not project_names:
+            logging.warning("No projects found in database, falling back to VALID_PROJECTS")
+            project_names = VALID_PROJECTS.copy()
+
+        # Cache the results for future use
+        cache_projects(project_names)
+        return project_names
+    except Exception as e:
+        logging.error(f"Failed to get projects from database: {str(e)}")
+        # Fallback to hardcoded list
+        return VALID_PROJECTS.copy()
+
 def validate_project_name(project: str) -> str:
     """
     Validates and normalizes project names to ensure they match the allowed projects.
+    Now uses the centralized project management system.
     
     Args:
         project: Project name to validate (any case)
@@ -175,12 +327,15 @@ def validate_project_name(project: str) -> str:
     # Convert to lowercase for case-insensitive matching
     project_lower = project.lower()
 
+    # Get valid projects from centralized system
+    valid_projects = get_all_projects()
+
     # Direct match with valid projects
-    if project_lower in VALID_PROJECTS:
+    if project_lower in valid_projects:
         return project_lower
 
     # Try to find a partial match (common issue with typos)
-    for valid_proj in VALID_PROJECTS:
+    for valid_proj in valid_projects:
         if valid_proj in project_lower or project_lower in valid_proj:
             logging.info(f"Project '{project}' matched to '{valid_proj}' instead")
             return valid_proj
@@ -1146,3 +1301,76 @@ async def query_todo_logs(filter_type: str = 'all', project: str = 'all',
 
     except Exception as e:
         return create_response(False, message=f"Failed to query todo logs: {str(e)}", return_context=False)
+
+async def list_projects(include_details: bool = False, active_only: bool = True) -> str:
+    """
+    List all valid projects from the centralized project management system.
+    
+    Retrieves the list of projects that can be used for todos and other operations.
+    This replaces the hardcoded VALID_PROJECTS list with a database-driven approach.
+    
+    Parameters:
+        include_details: If True, include project metadata (display_name, created_at, etc.)
+        active_only: If True, only return active projects (default: True)
+        
+    Returns:
+        JSON containing:
+        - count: Number of projects found
+        - projects: Array of project names (or detailed objects if include_details=True)
+        - cached: Boolean indicating if result was served from cache
+    """
+    try:
+        # Check if we're serving from cache
+        cached_projects = get_cached_projects()
+        served_from_cache = cached_projects is not None
+
+        if include_details:
+            # Get detailed project information from database
+            try:
+                # Initialize collection if needed
+                if projects_collection.count_documents({}) == 0:
+                    initialize_projects_collection()
+
+                # Query detailed project information
+                query = {"active": True} if active_only else {}
+                cursor = projects_collection.find(query)
+                projects = []
+                
+                for doc in cursor:
+                    project = {
+                        "id": doc["id"],
+                        "name": doc["name"],
+                        "display_name": doc["display_name"],
+                        "active": doc["active"],
+                        "created_at": datetime.fromtimestamp(doc["created_at"], UTC).strftime("%Y-%m-%d")
+                    }
+                    projects.append(project)
+
+                return create_response(True, {
+                    "count": len(projects),
+                    "projects": projects,
+                    "cached": False  # Detailed queries are not cached
+                })
+            except Exception as e:
+                logging.error(f"Failed to get detailed projects: {str(e)}")
+                # Fallback to simple list
+                project_names = get_all_projects(active_only)
+                simple_projects = [{"id": name, "name": name, "display_name": name.replace("_", " ").title(), "active": True} for name in project_names]
+                return create_response(True, {
+                    "count": len(simple_projects),
+                    "projects": simple_projects,
+                    "cached": served_from_cache
+                })
+        else:
+            # Get simple list of project names
+            project_names = get_all_projects(active_only)
+            return create_response(True, {
+                "count": len(project_names),
+                "projects": project_names,
+                "cached": served_from_cache
+            })
+
+    except Exception as e:
+        error_msg = f"Failed to list projects: {str(e)}"
+        logging.error(error_msg)
+        return create_response(False, message=error_msg)
