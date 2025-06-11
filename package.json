@@ -1,0 +1,22 @@
+{
+  "name": "omnispindle-pm2-actions",
+  "version": "1.0.0",
+  "description": "PM2 Custom Actions for Omnispindle deployment automation",
+  "main": "pm2-actions.js",
+  "scripts": {
+    "start": "node pm2-actions.js",
+    "install-deps": "npm install"
+  },
+  "dependencies": {
+    "@pm2/io": "^5.0.0"
+  },
+  "keywords": [
+    "pm2",
+    "custom-actions",
+    "omnispindle",
+    "deployment",
+    "automation"
+  ],
+  "author": "Madness Interactive",
+  "license": "MIT"
+} 

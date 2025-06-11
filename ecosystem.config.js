@@ -11,8 +11,15 @@ module.exports = {
             NODE_ENV: 'production'
         }
     }, {
-        script: './service-worker/',
-        watch: ['./service-worker']
+        name: 'Omnispindle-Actions',
+        script: 'pm2-actions.js',
+        watch: false,
+        env: {
+            NODE_ENV: 'development'
+        },
+        env_production: {
+            NODE_ENV: 'production'
+        }
     }],
 
     deploy: {
@@ -23,7 +30,7 @@ module.exports = {
             repo: 'git@github.com:danedens/omnispindle.git',
             path: '/home/ubuntu/Omnispindle',
             'pre-deploy-local': 'whoami',
-            'post-deploy': 'pm2 restart Omnispindle',
+            'post-deploy': 'npm install && pm2 restart Omnispindle && pm2 restart Omnispindle-Actions',
             'pre-setup': ''
         },
         development: {
@@ -31,7 +38,7 @@ module.exports = {
             host: 'localhost',
             repo: 'git@github.com:danedens/omnispindle.git',
             path: '/Users/d.edens/lab/madness_interactive/projects/python/Omnispindle',
-            'post-deploy': 'pip install -r requirements.txt && pm2 reload ecosystem.config.js --env development',
+            'post-deploy': 'pip install -r requirements.txt && npm install && pm2 reload ecosystem.config.js --env development',
             'pre-setup': ''
         }
     }
