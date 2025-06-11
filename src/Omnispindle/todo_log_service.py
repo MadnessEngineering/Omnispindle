@@ -249,6 +249,10 @@ class TodoLogService:
             # Convert datetime to string for JSON serialization
             log_data = log_entry.copy()
             log_data['timestamp'] = log_data['timestamp'].isoformat()
+            
+            # Convert ObjectId to string if present
+            if '_id' in log_data:
+                log_data['_id'] = str(log_data['_id'])
 
             # Publish to MQTT
             topic = f"todo/log/new_entry"
