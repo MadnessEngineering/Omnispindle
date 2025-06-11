@@ -50,6 +50,7 @@ from .middleware import (
 # Configure logger
 MQTT_HOST = os.getenv("MQTT_HOST", "localhost")
 MQTT_PORT = int(os.getenv("MQTT_PORT", 1883))
+DEVICE_NAME = os.getenv("DeNa", os.uname().nodename)
 
 # For debugging double initialization
 _init_counter = 0
@@ -108,8 +109,7 @@ class Omnispindle(FastMCP):
         logger.info("Starting FastMCP server")
 
         try:
-            hostname = os.getenv("DeNa", os.uname().nodename)
-            topic = f"status/{hostname}/todo-server/alive"
+            topic = f"status/{DEVICE_NAME}/alive"
             logger.debug(f"Publishing online status to topic: {topic}")
             publish_mqtt_status(topic, "1")
 
@@ -332,7 +332,7 @@ class Omnispindle(FastMCP):
             # Publish offline status with retain flag in case of error
             try:
                 hostname = os.getenv("HOSTNAME", os.uname().nodename)
-                topic = f"status/{hostname}/todo-server/alive"
+                topic = f"status/{hostname}/alive"
                 logger.info(f"Publishing offline status to {topic} (retained)")
                 publish_mqtt_status(topic, "0", retain=True)
                 logger.debug(f"Published offline status to {topic} (retained)")

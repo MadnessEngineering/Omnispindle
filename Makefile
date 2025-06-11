@@ -1,5 +1,8 @@
 # Makefile for FastMCP Todo Server
 
+# set default device name to Omnispindle
+DeNa ?= omnispindle
+
 .PHONY: install run test coverage clean status deploy deploy-dry-run deploy-force
 
 # Install dependencies
@@ -12,7 +15,7 @@ install:
 run:
 	python3.11 -m src.Omnispindle
 	COMMIT_HASH=$(git rev-parse --short HEAD)
-	mosquitto_pub -h localhost -p 4140 -t "status/$(DeName)/commit" -m "{\"commit_hash\": \"$(COMMIT_HASH)\"}"
+	mosquitto_pub -h localhost -p 4140 -t "status/$(DeNa)/commit" -m "{\"commit_hash\": \"$(COMMIT_HASH)\"}"
 
 # deploy
 deploy:

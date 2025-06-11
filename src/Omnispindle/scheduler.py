@@ -710,7 +710,7 @@ async def suggest_deadline(todo_id: str) -> str:
     """
     try:
         result = scheduler.suggest_deadline(todo_id)
-        await mqtt_publish(f"status/{os.getenv('DeNa')}-mcp/suggest_deadline", json.dumps({"todo_id": todo_id, "result": result}))
+        await mqtt_publish(f"status/{os.getenv('DeNa')}/suggest_deadline", json.dumps({"todo_id": todo_id, "result": result}))
         return json.dumps(result)
     except Exception as e:
         logger.error(f"Error suggesting deadline for todo {todo_id}: {e}")
@@ -730,7 +730,7 @@ async def suggest_time_slot(todo_id: str, date: Optional[str] = None) -> str:
     """
     try:
         result = scheduler.suggest_time_slot(todo_id, date)
-        await mqtt_publish(f"status/{os.getenv('DeNa')}-mcp/suggest_time_slot", json.dumps({"todo_id": todo_id, "date": date, "result": result}))
+        await mqtt_publish(f"status/{os.getenv('DeNa')}/suggest_time_slot", json.dumps({"todo_id": todo_id, "date": date, "result": result}))
         return json.dumps(result)
     except Exception as e:
         logger.error(f"Error suggesting time slot for todo {todo_id}: {e}")
@@ -749,7 +749,7 @@ async def generate_daily_schedule(date: Optional[str] = None) -> str:
     """
     try:
         result = scheduler.generate_daily_schedule(date)
-        await mqtt_publish(f"status/{os.getenv('DeNa')}-mcp/generate_daily_schedule", json.dumps({"date": date, "result": result}))
+        await mqtt_publish(f"status/{os.getenv('DeNa')}/generate_daily_schedule", json.dumps({"date": date, "result": result}))
         return json.dumps(result)
     except Exception as e:
         logger.error(f"Error generating daily schedule: {e}")
