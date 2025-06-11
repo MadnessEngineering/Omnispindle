@@ -135,7 +135,7 @@ async def add_todo_tool(description: str, project: str, priority: str = "Medium"
     project: [ Madness_interactive, Omnispindle, Swarmonomicon, todomill_projectorium, RegressionTestKit, Dirname, Repo_name ]
     priority: "Low"|"Medium"|"High" (default: Medium)
     metadata: { "ticket": "ticket number", "tags": ["tag1", "tag2"], "notes": "notes" }
-    → Returns: {todo_id, truncated_description, project}
+    → Returns: {success, todo_id, message}
     """
     # Project name will be validated and normalized in tools.py
     # This includes:
@@ -146,23 +146,21 @@ async def add_todo_tool(description: str, project: str, priority: str = "Medium"
     try:
         result = await add_todo(description, project, priority, target_agent, metadata, ctx)
 
-        # Enhance the result with minimal but effective AI agent hints
+        # Simplify the response to just return the todo_id and success message
         try:
             data = json.loads(result)
             if data.get("success") and "data" in data:
-                todo_data = data["data"]
-                todo_id = todo_data.get("todo_id")
-                todo_truncated_desc = todo_data.get("description")
-                todo_project = todo_data.get("project")
-
-                data["data"] = {
+                todo_id = data["data"].get("todo_id")
+                return json.dumps({
+                    "success": True,
                     "todo_id": todo_id,
-                    "description": todo_truncated_desc,
-                    "project": todo_project,
-                }
-                return json.dumps(data)
+                    "message": "Todo created successfully"
+                })
         except Exception as e:
-            print(f"Error enhancing add_todo response: {str(e)}")
+            print(f"Error simplifying add_todo response: {str(e)}")
+
+        # Fallback to original result if parsing fails
+        return result
 
     except Exception as e:
         import traceback
