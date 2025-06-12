@@ -8,7 +8,7 @@ import asyncio
 import anyio
 import threading
 import traceback
-from typing import Callable, Optional
+from typing import Callable, Optional, Union
 import warnings
 
 # Set up logging
@@ -73,7 +73,6 @@ from .tools import get_lesson
 from .tools import get_todo
 from .tools import list_lessons
 from .tools import list_projects
-from .tools import list_projects_for_filemanager
 from .tools import list_todos_by_status
 from .tools import mark_todo_complete
 from .tools import query_todos
@@ -414,35 +413,15 @@ async def query_todo_logs_tool(filter_type: str = 'all', project: str = 'all', p
 
 
 @register_tool_once
-async def list_projects_tool(include_details: bool = False, active_only: bool = True) -> str:
+async def list_projects_tool(include_details: Union[bool, str] = False, madness_root: str = "/Users/d.edens/lab/madness_interactive") -> str:
     """
     List all valid projects from the centralized project management system.
     
-    This tool provides access to the centralized list of projects that can be used 
-    for todos and other operations. Replaces hardcoded project lists across all systems.
+    include_details: False for project names only, True for detailed metadata, "filemanager" for FileManager format
     
-    include_details: If True, include project metadata (display_name, created_at, etc.)
-    active_only: If True, only return active projects (default: True)
-    
-    → Returns: {count, projects, cached} where projects is array of project names or detailed objects
+    → Returns: {count, projects, cached}
     """
-    return await list_projects(include_details, active_only)
-
-
-@register_tool_once
-async def list_projects_for_filemanager_tool(madness_root: str = "/Users/d.edens/lab/madness_interactive") -> str:
-    """
-    List projects specifically formatted for FileManager with absolute paths and git URLs.
-    
-    This tool provides project data in the format expected by Hammerspoon FileManager,
-    converting relative paths to absolute paths based on the madness root directory.
-    Includes git repository URLs and project descriptions.
-    
-    madness_root: Absolute path to the madness_interactive root directory
-    
-    → Returns: {count, projects, cached} where projects contains {name, path, display_name, git_url, description}
-    """
-    return await list_projects_for_filemanager(madness_root)
+    return await list_projects(include_details, madness_root)
 
 
 async def run_server() -> Callable:

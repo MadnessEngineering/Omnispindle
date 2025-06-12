@@ -4,6 +4,7 @@ import ssl
 import subprocess
 import uuid
 from datetime import datetime, UTC
+from typing import Union
 
 import logging
 from dotenv import load_dotenv
@@ -243,7 +244,7 @@ def initialize_projects_collection():
         # Insert all valid projects with enhanced metadata
         current_time = int(datetime.now(UTC).timestamp())
         projects_to_insert = []
-        
+
         # Enhanced project definitions with git URLs and paths
         project_definitions = {
             "madness_interactive": {
@@ -252,7 +253,7 @@ def initialize_projects_collection():
                 "description": "Main Madness Interactive project hub"
             },
             "regressiontestkit": {
-                "git_url": "https://github.com/d-edens/regressiontestkit.git", 
+                "git_url": "https://github.com/d-edens/regressiontestkit.git",
                 "relative_path": "../regressiontestkit",
                 "description": "Regression testing framework"
             },
@@ -268,7 +269,7 @@ def initialize_projects_collection():
             },
             "swarmonomicon": {
                 "git_url": "https://github.com/d-edens/swarmonomicon.git",
-                "relative_path": "projects/common/Swarmonomicon", 
+                "relative_path": "projects/common/Swarmonomicon",
                 "description": "AI agent swarm coordination system"
             },
             "hammerspoon": {
@@ -303,7 +304,7 @@ def initialize_projects_collection():
             },
             "hammerghost": {
                 "git_url": None,
-                "relative_path": "projects/lua/hammerghost", 
+                "relative_path": "projects/lua/hammerghost",
                 "description": "Hammerspoon-EventGhost bridge"
             },
             "quality_assurance": {
@@ -322,10 +323,10 @@ def initialize_projects_collection():
                 "description": "Asset and inventory management"
             }
         }
-        
+
         for project_name in VALID_PROJECTS:
             project_def = project_definitions.get(project_name, {})
-            
+
             project_doc = {
                 "id": project_name,
                 "name": project_name,
@@ -342,24 +343,21 @@ def initialize_projects_collection():
         # Bulk insert all projects
         projects_collection.insert_many(projects_to_insert)
         logging.info(f"Initialized projects collection with {len(projects_to_insert)} projects")
-        
+
         # Cache the project names
         cache_projects(VALID_PROJECTS)
-        
+
         return True
     except Exception as e:
         logging.error(f"Failed to initialize projects collection: {str(e)}")
         return False
 
-def get_all_projects(active_only: bool = True):
+def get_all_projects():
     """
     Get all valid projects, with caching.
     
     First tries to fetch from cache, falls back to database if needed.
     Also initializes the database if it's empty.
-    
-    Args:
-        active_only: If True, only return active projects (default: True)
     
     Returns:
         List of project names
@@ -376,8 +374,7 @@ def get_all_projects(active_only: bool = True):
             initialize_projects_collection()
 
         # Query projects from database
-        query = {"active": True} if active_only else {}
-        cursor = projects_collection.find(query, {"id": 1, "_id": 0})
+        cursor = projects_collection.find({}, {"id": 1, "_id": 0})
         project_names = [doc["id"] for doc in cursor]
 
         # Fallback to VALID_PROJECTS if database query fails
@@ -1386,7 +1383,7 @@ async def query_todo_logs(filter_type: str = 'all', project: str = 'all',
     except Exception as e:
         return create_response(False, message=f"Failed to query todo logs: {str(e)}", return_context=False)
 
-async def list_projects(include_details: bool = False, active_only: bool = True) -> str:
+async def list_projects(include_details: Union[bool, str] = False, madness_root: str = "/Users/d.edens/lab/madness_interactive") -> str:
     """
     List all valid projects from the centralized project management system.
     
@@ -1394,13 +1391,14 @@ async def list_projects(include_details: bool = False, active_only: bool = True)
     This replaces the hardcoded VALID_PROJECTS list with a database-driven approach.
     
     Parameters:
-        include_details: If True, include project metadata (display_name, created_at, etc.)
-        active_only: If True, only return active projects (default: True)
+        include_details: If False, returns project names only. If True, returns detailed metadata.
+                        If "filemanager", returns FileManager format with absolute paths.
+        madness_root: Absolute path to the madness_interactive root directory (for filemanager mode)
         
     Returns:
         JSON containing:
         - count: Number of projects found
-        - projects: Array of project names (or detailed objects if include_details=True)
+        - projects: Array of project names, detailed objects, or FileManager objects
         - cached: Boolean indicating if result was served from cache
     """
     try:
@@ -1408,7 +1406,57 @@ async def list_projects(include_details: bool = False, active_only: bool = True)
         cached_projects = get_cached_projects()
         served_from_cache = cached_projects is not None
 
-        if include_details:
+        if include_details == "filemanager":
+            # FileManager-specific format with absolute paths
+            try:
+                # Initialize collection if needed
+                if projects_collection.count_documents({}) == 0:
+                    initialize_projects_collection()
+
+                # Get all projects with path information
+                cursor = projects_collection.find({})
+                projects = []
+                
+                for doc in cursor:
+                    relative_path = doc.get("relative_path", "")
+                    
+                    # Calculate absolute path
+                    if relative_path == "":
+                        # Root project (madness_interactive)
+                        absolute_path = madness_root
+                    elif relative_path.startswith("../"):
+                        # Parent directory project (like regressiontestkit)
+                        absolute_path = os.path.join(os.path.dirname(madness_root), relative_path[3:])
+                    else:
+                        # Project within madness root
+                        absolute_path = os.path.join(madness_root, relative_path)
+                    
+                    project = {
+                        "name": doc["id"],
+                        "path": absolute_path,
+                        "display_name": doc["display_name"],
+                        "git_url": doc.get("git_url"),
+                        "description": doc.get("description")
+                    }
+                    projects.append(project)
+
+                return create_response(True, {
+                    "count": len(projects),
+                    "projects": projects,
+                    "cached": served_from_cache
+                })
+            except Exception as e:
+                logging.error(f"Failed to get FileManager projects: {str(e)}")
+                # Fallback to simple list
+                project_names = get_all_projects()
+                simple_projects = [{"name": name, "path": madness_root, "display_name": name.replace("_", " ").title()} for name in project_names]
+                return create_response(True, {
+                    "count": len(simple_projects),
+                    "projects": simple_projects,
+                    "cached": served_from_cache
+                })
+
+        elif include_details:
             # Get detailed project information from database
             try:
                 # Initialize collection if needed
@@ -1416,8 +1464,7 @@ async def list_projects(include_details: bool = False, active_only: bool = True)
                     initialize_projects_collection()
 
                 # Query detailed project information
-                query = {"active": True} if active_only else {}
-                cursor = projects_collection.find(query)
+                cursor = projects_collection.find({})
                 projects = []
                 
                 for doc in cursor:
@@ -1425,7 +1472,6 @@ async def list_projects(include_details: bool = False, active_only: bool = True)
                         "id": doc["id"],
                         "name": doc["name"],
                         "display_name": doc["display_name"],
-                        "active": doc["active"],
                         "git_url": doc.get("git_url"),
                         "relative_path": doc.get("relative_path"),
                         "description": doc.get("description"),
@@ -1441,8 +1487,8 @@ async def list_projects(include_details: bool = False, active_only: bool = True)
             except Exception as e:
                 logging.error(f"Failed to get detailed projects: {str(e)}")
                 # Fallback to simple list
-                project_names = get_all_projects(active_only)
-                simple_projects = [{"id": name, "name": name, "display_name": name.replace("_", " ").title(), "active": True} for name in project_names]
+                project_names = get_all_projects()
+                simple_projects = [{"id": name, "name": name, "display_name": name.replace("_", " ").title()} for name in project_names]
                 return create_response(True, {
                     "count": len(simple_projects),
                     "projects": simple_projects,
@@ -1450,7 +1496,7 @@ async def list_projects(include_details: bool = False, active_only: bool = True)
                 })
         else:
             # Get simple list of project names
-            project_names = get_all_projects(active_only)
+            project_names = get_all_projects()
             return create_response(True, {
                 "count": len(project_names),
                 "projects": project_names,
@@ -1459,68 +1505,5 @@ async def list_projects(include_details: bool = False, active_only: bool = True)
 
     except Exception as e:
         error_msg = f"Failed to list projects: {str(e)}"
-        logging.error(error_msg)
-        return create_response(False, message=error_msg)
-
-async def list_projects_for_filemanager(madness_root: str = "/Users/d.edens/lab/madness_interactive") -> str:
-    """
-    List projects specifically formatted for FileManager with absolute paths.
-    
-    Converts relative paths to absolute paths based on the madness root directory.
-    This function is designed to replace the hardcoded project lists in FileManager.lua.
-    
-    Parameters:
-        madness_root: Absolute path to the madness_interactive root directory
-        
-    Returns:
-        JSON containing:
-        - count: Number of projects found  
-        - projects: Array of project objects with name and absolute path
-        - cached: Boolean indicating if result was served from cache
-    """
-    try:
-        # Initialize collection if needed
-        if projects_collection.count_documents({}) == 0:
-            initialize_projects_collection()
-
-        # Get active projects with path information
-        cursor = projects_collection.find({"active": True})
-        projects = []
-        
-        for doc in cursor:
-            relative_path = doc.get("relative_path", "")
-            
-            # Calculate absolute path
-            if relative_path == "":
-                # Root project (madness_interactive)
-                absolute_path = madness_root
-            elif relative_path.startswith("../"):
-                # Parent directory project (like regressiontestkit)
-                absolute_path = os.path.join(os.path.dirname(madness_root), relative_path[3:])
-            else:
-                # Project within madness root
-                absolute_path = os.path.join(madness_root, relative_path)
-            
-            project = {
-                "name": doc["id"],
-                "path": absolute_path,
-                "display_name": doc["display_name"],
-                "git_url": doc.get("git_url"),
-                "description": doc.get("description")
-            }
-            projects.append(project)
-
-        # Check if result was served from cache
-        cached_projects = get_cached_projects()
-        served_from_cache = cached_projects is not None
-
-        return create_response(True, {
-            "count": len(projects),
-            "projects": projects,
-            "cached": served_from_cache
-        })
-
-    except Exception as e:
-        error_msg = f"Failed to list projects for FileManager: {str(e)}"
         logging.error(error_msg)
         return create_response(False, message=error_msg)
