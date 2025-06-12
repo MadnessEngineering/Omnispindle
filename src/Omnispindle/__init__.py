@@ -73,6 +73,7 @@ from .tools import get_lesson
 from .tools import get_todo
 from .tools import list_lessons
 from .tools import list_projects
+from .tools import list_projects_for_filemanager
 from .tools import list_todos_by_status
 from .tools import mark_todo_complete
 from .tools import query_todos
@@ -426,6 +427,22 @@ async def list_projects_tool(include_details: bool = False, active_only: bool = 
     → Returns: {count, projects, cached} where projects is array of project names or detailed objects
     """
     return await list_projects(include_details, active_only)
+
+
+@register_tool_once
+async def list_projects_for_filemanager_tool(madness_root: str = "/Users/d.edens/lab/madness_interactive") -> str:
+    """
+    List projects specifically formatted for FileManager with absolute paths and git URLs.
+    
+    This tool provides project data in the format expected by Hammerspoon FileManager,
+    converting relative paths to absolute paths based on the madness root directory.
+    Includes git repository URLs and project descriptions.
+    
+    madness_root: Absolute path to the madness_interactive root directory
+    
+    → Returns: {count, projects, cached} where projects contains {name, path, display_name, git_url, description}
+    """
+    return await list_projects_for_filemanager(madness_root)
 
 
 async def run_server() -> Callable:

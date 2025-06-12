@@ -228,7 +228,7 @@ def invalidate_projects_cache():
 def initialize_projects_collection():
     """
     Initialize the projects collection with the current VALID_PROJECTS list.
-    This is a one-time migration function.
+    This is a one-time migration function that includes git URLs and paths.
     
     Returns:
         True if successful, False otherwise
@@ -240,16 +240,100 @@ def initialize_projects_collection():
             logging.info(f"Projects collection already has {existing_count} projects")
             return True
 
-        # Insert all valid projects
+        # Insert all valid projects with enhanced metadata
         current_time = int(datetime.now(UTC).timestamp())
         projects_to_insert = []
         
+        # Enhanced project definitions with git URLs and paths
+        project_definitions = {
+            "madness_interactive": {
+                "git_url": "https://github.com/d-edens/madness_interactive.git",
+                "relative_path": "",
+                "description": "Main Madness Interactive project hub"
+            },
+            "regressiontestkit": {
+                "git_url": "https://github.com/d-edens/regressiontestkit.git", 
+                "relative_path": "../regressiontestkit",
+                "description": "Regression testing framework"
+            },
+            "omnispindle": {
+                "git_url": "https://github.com/d-edens/madness_interactive.git",
+                "relative_path": "projects/python/Omnispindle",
+                "description": "MCP server for todo management"
+            },
+            "todomill_projectorium": {
+                "git_url": "https://github.com/d-edens/todomill_projectorium.git",
+                "relative_path": "projects/python/Omnispindle/Todomill_projectorium",
+                "description": "Node-RED dashboard for todo management"
+            },
+            "swarmonomicon": {
+                "git_url": "https://github.com/d-edens/swarmonomicon.git",
+                "relative_path": "projects/common/Swarmonomicon", 
+                "description": "AI agent swarm coordination system"
+            },
+            "hammerspoon": {
+                "git_url": "https://github.com/d-edens/hammerspoon-config.git",
+                "relative_path": "projects/lua/hammerspoon",
+                "description": "Hammerspoon automation scripts"
+            },
+            "lab_management": {
+                "git_url": None,
+                "relative_path": "lab",
+                "description": "Lab infrastructure management"
+            },
+            "cogwyrm": {
+                "git_url": "https://github.com/d-edens/cogwyrm.git",
+                "relative_path": "projects/mobile/Cogwyrm",
+                "description": "Mobile application project"
+            },
+            "docker_implementation": {
+                "git_url": None,
+                "relative_path": "docker",
+                "description": "Docker containerization configs"
+            },
+            "documentation": {
+                "git_url": None,
+                "relative_path": "docs",
+                "description": "Project documentation"
+            },
+            "eventghost": {
+                "git_url": "https://github.com/d-edens/eventghost-rust.git",
+                "relative_path": "projects/rust/EventGhost-Rust",
+                "description": "EventGhost automation in Rust"
+            },
+            "hammerghost": {
+                "git_url": None,
+                "relative_path": "projects/lua/hammerghost", 
+                "description": "Hammerspoon-EventGhost bridge"
+            },
+            "quality_assurance": {
+                "git_url": None,
+                "relative_path": "qa",
+                "description": "Quality assurance tools and processes"
+            },
+            "spindlewrit": {
+                "git_url": None,
+                "relative_path": "projects/common/spindlewrit",
+                "description": "Documentation generation tools"
+            },
+            "inventorium": {
+                "git_url": "https://github.com/d-edens/inventorium.git",
+                "relative_path": "projects/common/Inventorium",
+                "description": "Asset and inventory management"
+            }
+        }
+        
         for project_name in VALID_PROJECTS:
+            project_def = project_definitions.get(project_name, {})
+            
             project_doc = {
                 "id": project_name,
                 "name": project_name,
                 "display_name": project_name.replace("_", " ").title(),
                 "active": True,
+                "git_url": project_def.get("git_url"),
+                "relative_path": project_def.get("relative_path", f"projects/{project_name}"),
+                "description": project_def.get("description", f"{project_name} project"),
                 "created_at": current_time,
                 "updated_at": current_time
             }
@@ -1342,6 +1426,9 @@ async def list_projects(include_details: bool = False, active_only: bool = True)
                         "name": doc["name"],
                         "display_name": doc["display_name"],
                         "active": doc["active"],
+                        "git_url": doc.get("git_url"),
+                        "relative_path": doc.get("relative_path"),
+                        "description": doc.get("description"),
                         "created_at": datetime.fromtimestamp(doc["created_at"], UTC).strftime("%Y-%m-%d")
                     }
                     projects.append(project)
@@ -1372,5 +1459,68 @@ async def list_projects(include_details: bool = False, active_only: bool = True)
 
     except Exception as e:
         error_msg = f"Failed to list projects: {str(e)}"
+        logging.error(error_msg)
+        return create_response(False, message=error_msg)
+
+async def list_projects_for_filemanager(madness_root: str = "/Users/d.edens/lab/madness_interactive") -> str:
+    """
+    List projects specifically formatted for FileManager with absolute paths.
+    
+    Converts relative paths to absolute paths based on the madness root directory.
+    This function is designed to replace the hardcoded project lists in FileManager.lua.
+    
+    Parameters:
+        madness_root: Absolute path to the madness_interactive root directory
+        
+    Returns:
+        JSON containing:
+        - count: Number of projects found  
+        - projects: Array of project objects with name and absolute path
+        - cached: Boolean indicating if result was served from cache
+    """
+    try:
+        # Initialize collection if needed
+        if projects_collection.count_documents({}) == 0:
+            initialize_projects_collection()
+
+        # Get active projects with path information
+        cursor = projects_collection.find({"active": True})
+        projects = []
+        
+        for doc in cursor:
+            relative_path = doc.get("relative_path", "")
+            
+            # Calculate absolute path
+            if relative_path == "":
+                # Root project (madness_interactive)
+                absolute_path = madness_root
+            elif relative_path.startswith("../"):
+                # Parent directory project (like regressiontestkit)
+                absolute_path = os.path.join(os.path.dirname(madness_root), relative_path[3:])
+            else:
+                # Project within madness root
+                absolute_path = os.path.join(madness_root, relative_path)
+            
+            project = {
+                "name": doc["id"],
+                "path": absolute_path,
+                "display_name": doc["display_name"],
+                "git_url": doc.get("git_url"),
+                "description": doc.get("description")
+            }
+            projects.append(project)
+
+        # Check if result was served from cache
+        cached_projects = get_cached_projects()
+        served_from_cache = cached_projects is not None
+
+        return create_response(True, {
+            "count": len(projects),
+            "projects": projects,
+            "cached": served_from_cache
+        })
+
+    except Exception as e:
+        error_msg = f"Failed to list projects for FileManager: {str(e)}"
         logging.error(error_msg)
         return create_response(False, message=error_msg)
