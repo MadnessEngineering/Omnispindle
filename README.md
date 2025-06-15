@@ -1,10 +1,31 @@
 [![Verified on MseeP](https://mseep.ai/badge.svg)](https://mseep.ai/app/7cd85c5a-291d-4027-9497-78bffcb8fd4e)
 
-# Omnispindle - Advanced MCP Todo Management System
+# Omnispindle - The pen of a Mad Man's Todo List (and probably a few other things 🤷)
 
 
 A comprehensive **FastMCP-based todo management system** that serves as a central nervous system for multi-project task coordination.
 Part of the larger [Madness Interactive](https://github.com/MadnessEngineering/Madness_Interactive) ecosystem, Omnispindle combines AI-powered task insights, an MCP toolbelt, and a sophisticated Node-RED dashboard to transform chaos into productivity.
+
+Example of a todo output from Claude Sonnet 4.0 without anything being additional being added to the prompt:
+
+```json
+  {
+    "project": "Omnispindle",
+    "description": "ANALYSIS: Node-RED routing issues - need to fix link-in/link-out patterns for project operations to match todo operation patterns",
+    "priority": "High",
+    "metadata": {
+      "ticket": "routing-analysis",
+      "tags": [
+        "node-red",
+        "routing",
+        "analysis",
+        "link-nodes"
+      ]
+    }
+  }
+  Result:
+  {"success": true, "todo_id": "af007427-9ebb-4304-8d95-5cafc4a855dd", "message": "Todo created successfully"}
+```
 
 ## 🔮 Architecture Overview
 
