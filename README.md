@@ -3,8 +3,9 @@
 # Omnispindle - The pen of a Mad Man's Todo List (and probably a few other things 🤷)
 
 
-A comprehensive **FastMCP-based todo management system** that serves as a central nervous system for multi-project task coordination.
-Part of the larger [Madness Interactive](https://github.com/MadnessEngineering/Madness_Interactive) ecosystem, Omnispindle combines AI-powered task insights, an MCP toolbelt, and a sophisticated Node-RED dashboard to transform chaos into productivity.
+A comprehensive **FastMCP-based todo management system** that serves as a central nervous system
+for multi-project task coordination.
+Part of the [Madness Interactive](https://github.com/MadnessEngineering/Madness_Interactive) ecosystem, Omnispindle combines AI-powered task insights, an MCP toolbelt, and task board to transform chaos into productivity.
 
 Example of a todo output from Claude Sonnet 4.0 without anything being additional being added to the prompt:
 
