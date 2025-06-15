@@ -33,7 +33,7 @@ Example of a todo output from Claude Sonnet 4.0 without anything being additiona
 Omnispindle consists of multiple integrated components:
 
 - **MCP Server Core**: FastMCP-based server providing standardized tool interfaces for AI agents
-- **Todomill Projectorium**: Node-RED dashboard for visual task management and AI insights
+- **Todomill Projectorium**: Task dashboard for visual task management and AI insights
 - **MongoDB Backend**: Persistent storage for todos, lessons learned, and audit logs
 - **MQTT Integration**: Real-time messaging for cross-system coordination
 - **AI Assistant**: Integrated AI suggestions and task analysis capabilities
@@ -42,33 +42,32 @@ Omnispindle consists of multiple integrated components:
 
 ### 🤖 **AI Agent Integration**
 - **MCP Tool Interface**: Standardized tools for AI agents to create, update, and manage todos
-- **Multi-Project Support**: Organize tasks across Madness_Interactive, Omnispindle, Swarmonomicon, and more
-- **Intelligent Suggestions**: AI-powered task analysis, effort estimation, and duplicate detection
+- **Multi-Project Support**: Organize tasks across Madness_Interactive, Omnispindle, Swarmonomicon, and your own.
+- **Intelligent Suggestions**: AI-powered task analysis and duplicate detection, refactor suggestion
+- **Lessons Learned**: Knowledge capture system for development insights
 - **Automated Workflows**: Agent-driven task orchestration and status updates
 
 ### 📊 **Visual Dashboard (Todomill Projectorium)**
-- **Interactive Node-RED Interface**: Rich web-based dashboard with filtering and sorting
+
+- **Interactive Interface**: Rich web-based dashboard with filtering and sorting, controlable via all the commonly expected AI chatbot features (like "show me the todos for the project 'Omnispindle'")
 - **Real-time Updates**: Live task synchronization via MQTT messaging
 - **AI-Enhanced Views**: Visual indicators for AI suggestions and insights
 - **Project-based Organization**: Sidebar navigation and project-specific views
 
-### 📈 **Advanced Task Management**
+### 🔗 **System Integration**
+
+- **MQTT Messaging**: Pub/sub architecture for real-time coordination
 - **Comprehensive Metadata**: Priority, status, project assignment, and custom fields
 - **Audit Logging**: Complete history tracking for all task operations
-- **Lessons Learned**: Knowledge capture system for development insights
-- **Smart Scheduling**: AI-assisted deadline and time slot suggestions
-
-### 🔗 **System Integration**
-- **MQTT Messaging**: Pub/sub architecture for real-time coordination
 - **MongoDB Storage**: Scalable document storage with flexible querying
 - **Cross-Platform APIs**: RESTful and MCP interfaces for diverse integrations
 - **Docker Support**: Containerized deployment with docker-compose orchestration
 
-## 💡 Use Cases
+<!-- ## 💡 Use Cases
 
 ### AI-Powered Side Quest Management
 
-One of Omnispindle's most powerful features is enabling AI agents to capture and manage spontaneous ideas and "side quests" without disrupting your main workflow. When you're deep in development and a brilliant idea strikes, or you're in a meeting and remember a critical task - AI agents can seamlessly capture, categorize, and schedule these thoughts.
+One of Omnispindle's goals is enabling AI agents to capture and manage spontaneous ideas and "side quests" without disrupting your main workflow. When you're deep in development and a brilliant idea strikes, or you're in a meeting and remember a critical task - AI agents can seamlessly capture, categorize, and schedule these thoughts.
 
 ![Use Case Example: Saving a Side Quest for Later](../../docs/assets/images/Use-case-example-saving-a-side-quest-for-later.png)
 
@@ -77,7 +76,7 @@ This MCP-powered workflow demonstrates how:
 - **Context-aware scheduling** suggests optimal timing based on your current workload
 - **Cross-project coordination** ensures tasks are visible across your entire ecosystem
 - **Real-time dashboard updates** via MQTT keep all stakeholders informed
-- **Intelligent suggestions** help reduce redundancy and optimize task organization
+- **Intelligent suggestions** help reduce redundancy and optimize task organization -->
 
 The captured tasks integrate seamlessly with the Todomill Projectorium dashboard, where you can review, refine, and execute them when you're ready to tackle them.
 
