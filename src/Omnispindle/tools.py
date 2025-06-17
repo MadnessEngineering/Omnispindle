@@ -716,7 +716,7 @@ async def get_todo(todo_id: str) -> str:
 
     # Add enhanced_description if it exists and has content
     enhanced_description = todo.get("enhanced_description")
-    if enhanced_description and enhanced_description.strip():
+    if enhanced_description and isinstance(enhanced_description, str) and enhanced_description.strip():
         formatted_todo["enhanced_description"] = enhanced_description
 
     # Add different fields based on status to optimize context
