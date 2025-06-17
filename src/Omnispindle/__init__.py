@@ -71,13 +71,12 @@ from .tools import delete_lesson
 from .tools import delete_todo
 from .tools import get_lesson
 from .tools import get_todo
-from .tools import list_lessons
+from .tools import grep_lessons
 from .tools import list_projects
 from .tools import list_todos_by_status
 from .tools import mark_todo_complete
 from .tools import query_todos
 from .tools import query_todo_logs
-from .tools import search_lessons
 from .tools import search_todos
 from .tools import update_lesson
 from .tools import update_todo
@@ -395,19 +394,6 @@ async def mark_todo_complete_tool(todo_id: str, comment: str = None, ctx: Contex
 
 
 @register_tool_once
-async def list_todos_by_status_tool(status: str, limit: int = 100) -> str:
-    """
-    List todos by status.
-    
-    status: Filter value ("initial"|"pending"|"completed"|"review")
-    limit: Max results (default: 100)
-
-    → Returns: {count, status, items[{id, desc, project}], projects?}
-    """
-    return await list_todos_by_status(status, limit)
-
-
-@register_tool_once
 async def add_lesson_tool(language: str, topic: str, lesson_learned: str, tags: list = None, ctx: Context = None) -> str:
     """
     Create lesson.
@@ -457,6 +443,19 @@ async def delete_lesson_tool(lesson_id: str, ctx: Context = None) -> str:
     → Returns: {success, message}
     """
     return await delete_lesson(lesson_id, ctx)
+
+
+@register_tool_once
+async def grep_lessons_tool(pattern: str, limit: int = 20) -> str:
+    """
+    Search lessons by pattern or keywords.
+
+    pattern: Search pattern or keywords to find in lessons
+    limit: Max results (default: 20)
+
+    → Returns: {count, pattern, matches[{id, language, topic, preview, tags}]}
+    """
+    return await grep_lessons(pattern, limit)
 
 
 @register_tool_once

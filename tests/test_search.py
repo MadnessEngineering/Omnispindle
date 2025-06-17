@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 
 # Add src directory to Python path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../src')))
-from fastmcp_todo_server.tools import search_todos, search_lessons
+from fastmcp_todo_server.tools import search_todos, grep_lessons
 
 # Load environment variables
 load_dotenv()
@@ -142,29 +142,6 @@ async def test_search_todos():
     assert found, "No todos found with 'search' in the description"
 
 @pytest.mark.asyncio
-async def test_search_lessons():
-    """Test search_lessons functionality"""
-    # Search for lessons with "mongodb" in any field
-    result = await search_lessons("mongodb")
-    result_dict = json.loads(result)
-    
-    assert result_dict["status"] == "success"
-    # We might have other lessons with "mongodb" in the fields,
-    # so we don't assert an exact count
-    assert "count" in result_dict
-    assert "lessons" in result_dict
-    
-    # Check if at least one lesson contains "mongodb" in the topic or lesson_learned
-    found = False
-    for lesson in result_dict["lessons"]:
-        if ("mongodb" in lesson["topic"].lower() or 
-            "mongodb" in lesson["lesson_learned"].lower()):
-            found = True
-            break
-    
-    assert found, "No lessons found with 'mongodb' in the topic or lesson_learned"
-
-@pytest.mark.asyncio
 async def test_search_todos_custom_fields():
     """Test search_todos with custom fields"""
     # Search for todos with "high" in the priority field
@@ -180,19 +157,58 @@ async def test_search_todos_custom_fields():
         assert "high" in todo["priority"].lower()
 
 @pytest.mark.asyncio
-async def test_search_lessons_custom_fields():
-    """Test search_lessons with custom fields"""
-    # Search for lessons in the "python" language
-    result = await search_lessons("python", fields=["language"])
-    result_dict = json.loads(result)
+async def test_grep_lessons():
+    """Test grep_lessons functionality"""
     
-    assert result_dict["status"] == "success"
-    assert "count" in result_dict
-    assert "lessons" in result_dict
+    result = await grep_lessons("mongodb")
     
-    # Check if all returned lessons are in "python" language
-    for lesson in result_dict["lessons"]:
-        assert "python" in lesson["language"].lower()
+    # Parse the JSON response
+    response = json.loads(result)
+    
+    # Verify response structure
+    assert response["success"] is True
+    assert "data" in response
+    
+    data = response["data"]
+    assert "count" in data
+    assert "pattern" in data
+    assert "matches" in data
+    assert data["pattern"] == "mongodb"
+    
+    # Verify matches structure if any results found
+    if data["count"] > 0:
+        match = data["matches"][0]
+        assert "id" in match
+        assert "language" in match
+        assert "topic" in match
+        assert "preview" in match
+        assert "tags" in match
+        
+        # Verify preview is truncated appropriately
+        assert len(match["preview"]) <= 63  # 60 chars + "..."
+    
+    print(f"✓ Found {data['count']} lessons matching 'mongodb'")
+
+
+@pytest.mark.asyncio
+async def test_grep_lessons_no_results():
+    """Test grep_lessons with pattern that should return no results"""
+    
+    result = await grep_lessons("nonexistentpattern12345")
+    
+    # Parse the JSON response
+    response = json.loads(result)
+    
+    # Verify response structure
+    assert response["success"] is True
+    assert "data" in response
+    
+    data = response["data"]
+    assert data["count"] == 0
+    assert data["pattern"] == "nonexistentpattern12345"
+    assert data["matches"] == []
+    
+    print("✓ No results found for non-existent pattern (as expected)")
 
 # Run tests
 if __name__ == "__main__":
