@@ -716,7 +716,7 @@ async def get_todo(todo_id: str) -> str:
 
     # Add enhanced_description if it exists and has content
     enhanced_description = todo.get("enhanced_description")
-    if enhanced_description and enhanced_description.strip():
+    if enhanced_description and isinstance(enhanced_description, str) and enhanced_description.strip():
         formatted_todo["enhanced_description"] = enhanced_description
 
     # Add different fields based on status to optimize context
@@ -1045,63 +1045,6 @@ async def delete_lesson(lesson_id: str, ctx: Context = None) -> str:
 
     return create_response(True, message=f"Lesson {lesson_id} deleted")
 
-async def list_lessons(limit: int = 100) -> str:
-    """
-    List all lessons learned.
-    
-    Retrieves a collection of lessons with preview content.
-    Each lesson includes a truncated preview of its content to reduce response size.
-    Additionally returns a list of all unique tags across all lessons.
-    
-    Parameters:
-        limit: Maximum number of lessons to return (default: 100)
-        
-    Returns:
-        JSON containing:
-        - count: Number of lessons found
-        - items: Array of lessons with preview content, including:
-          - id: Lesson identifier
-          - language: Programming language or technology
-          - topic: Subject or title
-          - tags: List of categorization tags
-          - preview: Truncated content preview
-        - all_tags: List of all unique tags across all lessons
-    """
-    cursor = lessons_collection.find(limit=limit)
-    results = list(cursor)
-
-    # Create a summary format
-    summary = {
-        "count": len(results),
-        "items": []
-    }
-
-    # Add simplified lesson items
-    for lesson in results:
-        # Extract tags from the lesson
-        lesson_tags = lesson.get("tags", [])
-
-        summary["items"].append({
-            "id": lesson["id"],
-            "language": lesson["language"],
-            "topic": lesson["topic"],
-            "tags": lesson_tags,
-            "preview": lesson["lesson_learned"][:40] + ("..." if len(lesson["lesson_learned"]) > 40 else "")
-        })
-
-    # Get all unique tags using the cached mechanism
-    summary["all_tags"] = get_all_lesson_tags()
-
-    # MQTT publish as confirmation after listing lessons
-    try:
-        mqtt_message = f"limit: {limit}"
-        await mqtt_publish(f"status/{os.getenv('DeNa')}/omnispindle/list_lessons", mqtt_message, ctx=None)
-    except Exception as e:
-        # Log the error but don't fail the entire operation
-        print(f"MQTT publish error (non-fatal): {str(e)}")
-
-    return create_response(True, summary)
-
 async def search_todos(query: str, fields: list = None, limit: int = 100, ctx=None) -> str:
     """
     Search todos with text search capabilities.
@@ -1206,22 +1149,21 @@ async def search_todos(query: str, fields: list = None, limit: int = 100, ctx=No
 
     return create_response(True, summary)
 
-async def search_lessons(query: str, fields: list = None, limit: int = 100) -> str:
+async def grep_lessons(pattern: str, limit: int = 20) -> str:
     """
-    Search lessons with text search capabilities.
+    Search lessons with grep-style pattern matching.
     
-    Performs a case-insensitive text search across specified fields in lessons.
-    Uses regex pattern matching to find lessons matching the query string.
+    Performs a case-insensitive text search across topic and lesson_learned fields.
+    Uses regex pattern matching to find lessons containing the pattern.
     
     Parameters:
-        query: Text string to search for
-        fields: List of fields to search in (default: ["topic", "lesson_learned"])
-        limit: Maximum number of lessons to return (default: 100)
+        pattern: Text pattern or keywords to search for
+        limit: Maximum number of lessons to return (default: 20)
         
     Returns:
         JSON containing:
         - count: Number of matching lessons
-        - query: The search query that was used
+        - pattern: The search pattern that was used
         - matches: Array of lessons matching the search criteria with fields:
           - id: Lesson identifier
           - language: Programming language or technology 
@@ -1229,18 +1171,16 @@ async def search_lessons(query: str, fields: list = None, limit: int = 100) -> s
           - preview: Truncated content preview
           - tags: Categorization tags
     """
-    if not fields:
-        fields = ["topic", "lesson_learned"]
-
     # Create a regex pattern for case-insensitive search
-    regex_pattern = {"$regex": query, "$options": "i"}
+    regex_pattern = {"$regex": pattern, "$options": "i"}
 
-    # Build the query with OR conditions for each field
-    search_conditions = []
-    for field in fields:
-        search_conditions.append({field: regex_pattern})
-
-    search_query = {"$or": search_conditions}
+    # Search in both topic and lesson_learned fields
+    search_query = {
+        "$or": [
+            {"topic": regex_pattern},
+            {"lesson_learned": regex_pattern}
+        ]
+    }
 
     # Execute the search
     cursor = lessons_collection.find(search_query, limit=limit)
@@ -1249,7 +1189,7 @@ async def search_lessons(query: str, fields: list = None, limit: int = 100) -> s
     # Create a compact summary of results
     summary = {
         "count": len(results),
-        "query": query,
+        "pattern": pattern,
         "matches": []
     }
 
@@ -1259,14 +1199,14 @@ async def search_lessons(query: str, fields: list = None, limit: int = 100) -> s
             "id": lesson["id"],
             "language": lesson["language"],
             "topic": lesson["topic"],
-            "preview": lesson["lesson_learned"][:40] + ("..." if len(lesson["lesson_learned"]) > 40 else ""),
+            "preview": lesson["lesson_learned"][:60] + ("..." if len(lesson["lesson_learned"]) > 60 else ""),
             "tags": lesson.get("tags", [])
         })
 
     # MQTT publish as confirmation after searching lessons
     try:
-        mqtt_message = f"query: {query}, fields: {fields}, limit: {limit}"
-        await mqtt_publish(f"status/{os.getenv('DeNa')}/omnispindle/search_lessons", mqtt_message, ctx=None)
+        mqtt_message = f"pattern: {pattern}, limit: {limit}, found: {len(results)}"
+        await mqtt_publish(f"status/{os.getenv('DeNa')}/omnispindle/grep_lessons", mqtt_message, ctx=None)
     except Exception as e:
         # Log the error but don't fail the entire operation
         print(f"MQTT publish error (non-fatal): {str(e)}")

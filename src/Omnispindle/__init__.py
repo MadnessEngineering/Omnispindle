@@ -71,13 +71,12 @@ from .tools import delete_lesson
 from .tools import delete_todo
 from .tools import get_lesson
 from .tools import get_todo
-from .tools import list_lessons
+from .tools import grep_lessons
 from .tools import list_projects
 from .tools import list_todos_by_status
 from .tools import mark_todo_complete
 from .tools import query_todos
 from .tools import query_todo_logs
-from .tools import search_lessons
 from .tools import search_todos
 from .tools import update_lesson
 from .tools import update_todo
@@ -132,11 +131,53 @@ def register_tool_once(tool_func):
 
 @register_tool_once
 async def add_todo_tool(description: str, project: str, priority: str = "Medium", target_agent: str = "user", metadata: dict = None, ctx: Context = None) -> str:
-    """    
-    project: [ Madness_interactive, Omnispindle, Swarmonomicon, todomill_projectorium, RegressionTestKit, etc ]
-    priority: "Low"|"Medium"|"High" (default: Medium)
-    metadata: { "ticket": "ticket number", "tags": ["tag1", "tag2"], "notes": "notes" }
-    → Returns: {success, todo_id, message}
+    """
+    Create a new todo with automatic project validation and normalization.
+    
+    Args:
+        description (str): Full task description (required)
+        project (str): Project name - will be validated and normalized (required)
+        priority (str): Task priority level - "Low"|"Medium"|"High" (default: "Medium")
+        target_agent (str): Target agent/user for the task (default: "user")
+        metadata (dict): Additional task metadata (optional)
+        ctx: Context object with user agent info (optional)
+    
+    **Project Validation:**
+    - Input is case-insensitive and flexible
+    - Valid projects: [ Madness_interactive, Omnispindle, Swarmonomicon, todomill_projectorium, RegressionTestKit, etc ]
+    - Supports partial matching for typos/case differences
+    - Automatically converts to lowercase for consistent storage
+    - Falls back to "madness_interactive" if no match found
+    
+    **Metadata Structure (optional):**
+    {
+      "ticket": "JIRA-123",           // Ticket/issue number
+      "tags": ["bug-fix", "urgent"],  // Categorization tags  
+      "notes": "Additional context",  // Extra notes
+      "due_date": "2024-01-15",      // Optional deadline
+      "estimated_hours": 2.5         // Time estimate
+    }
+    
+    **Return Format:**
+    {
+      "success": true,
+      "todo_id": "uuid-string",
+      "message": "Todo created successfully"
+    }
+    
+    **Error Cases:**
+    - Missing description: {"success": false, "message": "Description required"}
+    - Missing project: {"success": false, "message": "Project required"} 
+    - Invalid priority: Accepts any value but normalizes to Low/Medium/High
+    
+    **Example Usage:**
+    add_todo_tool(
+      "Fix authentication bug", 
+      "omnispindle",
+      "High", 
+      "user",
+      {"tags": ["security", "bug-fix"], "ticket": "SEC-123"}
+    )
     """
     # Project name will be validated and normalized in tools.py
     # This includes:
@@ -172,21 +213,42 @@ async def add_todo_tool(description: str, project: str, priority: str = "Medium"
 @register_tool_once
 async def query_todos_tool(query_or_filter=None, fields_or_projection=None, limit: int = 100, ctx: Context = None) -> str:
     """
-    Query or search todos with flexible options.
+    Query or search todos with flexible dual-mode operation.
     
-    query_or_filter: Can be either:
-                    - MongoDB query dict (e.g. {"status": "pending"})
-                    - Text string to search for when fields_or_projection is a list
-                      Special formats:
-                      - Use "project:ProjectName" to search for todos in specific project
-    fields_or_projection: Can be either:
-                    - MongoDB projection dict for filtering fields to return
-                    - List of fields to search in when query_or_filter is a text string
-                      Special values supported:
-                      - "all" to search all text fields
-    limit: Max results (default: 100)
+    **MODE 1: Text Search** (when query_or_filter is string)
+    - query_or_filter (str): Text to search for in todo content
+      * Special format "project:ProjectName" to search within specific project
+      * Regular text searches across multiple fields
+    - fields_or_projection (list): Fields to search in 
+      * ["description", "enhanced_description"] (default)
+      * ["all"] to search all text fields
+    - Returns: {count, query, matches[{id, description, project, status, preview}]}
     
-    → Returns: {count, items[...]} when filtering or {count, query, matches[...]} when searching
+    **MODE 2: Database Filter** (when query_or_filter is dict/None)
+    - query_or_filter (dict): MongoDB query filter
+      * Example: {"status": "pending"} 
+      * Example: {"project": "omnispindle", "priority": "High"}
+      * None = no filter (get all)
+    - fields_or_projection (dict): MongoDB projection to limit returned fields
+      * Example: {"id": 1, "description": 1, "project": 1}
+      * None = return all fields
+    - Returns: {count, items[{...full todo objects...}]}
+    
+    Args:
+        query_or_filter: String for search mode, dict for filter mode, None for all
+        fields_or_projection: List for search fields, dict for projection, None for defaults
+        limit: Maximum results to return (default: 100)
+        ctx: Context object (optional)
+    
+    **Search Mode Examples:**
+    query_todos_tool("authentication", ["description"]) # Search descriptions
+    query_todos_tool("project:omnispindle") # Search within project
+    query_todos_tool("bug fix", ["all"]) # Search all text fields
+    
+    **Filter Mode Examples:**  
+    query_todos_tool({"status": "pending"}) # Get pending todos
+    query_todos_tool({"priority": "High"}, {"id": 1, "description": 1}) # High priority with limited fields
+    query_todos_tool(None, None, 50) # Get first 50 todos (all fields)
     """
     # Determine if this is a search or query operation based on parameter types
     if isinstance(query_or_filter, str):
@@ -257,12 +319,54 @@ async def delete_todo_tool(todo_id: str, ctx: Context = None) -> str:
 @register_tool_once
 async def get_todo_tool(todo_id: str) -> str:
     """
-    Get todo details. 
+    Get todo details with status-optimized field selection.
 
+    Args:
+        todo_id: Unique identifier of the todo to retrieve (string)
     
-    todo_id: ID of todo to retrieve
+    Returns:
+        JSON string containing todo details with fields that vary by status:
+        
+        **Always Present:**
+        - id (str): Unique identifier
+        - description (str): Main task description  
+        - project (str): Project name (lowercase)
+        - status (str): Current status ("initial"|"pending"|"completed"|"review")
+        
+        **Conditionally Present:**
+        - enhanced_description (str): Detailed markdown description for AI agents
+          * Only included if field exists AND contains non-empty string content
+          * Note: Some todos may have boolean false/true instead of strings (data inconsistency)
+          * Use this field for context when generating prompts for next AI agent
+        
+        **For Active Todos (status != "completed"):**
+        - priority (str): Task priority ("Low"|"Medium"|"High") - if set
+        - target (str): Target agent/user - if set  
+        - metadata (dict): Additional task metadata - if exists
+          * Common fields: {"tags": ["tag1"], "notes": "...", "ticket": "..."}
+        
+        **For Completed Todos:**
+        - completed (int): Unix timestamp of completion
+        - duration (str): Human-readable duration ("5 minutes", "2 hours")
+        - completion_comment (str): Solution/outcome notes - if provided
+        
+        **Error Response:**
+        - success: false, message: "Todo not found"
     
-    → Returns: {id, description, project, status, enhanced_description, priority, target, metadata} or {id, description, project, status, completed, duration, completion_comment}
+    Example Active Todo Response:
+    {
+      "success": true,
+      "data": {
+        "id": "abc123",
+        "description": "Fix the widget",
+        "project": "omnispindle", 
+        "status": "pending",
+        "enhanced_description": "## Technical Details\n- Check widget.py line 42\n- Update tests",
+        "priority": "High",
+        "target": "user",
+        "metadata": {"tags": ["bug-fix"], "notes": "Critical issue"}
+      }
+    }
     """
     result = await get_todo(todo_id)
 
@@ -287,19 +391,6 @@ async def mark_todo_complete_tool(todo_id: str, comment: str = None, ctx: Contex
     → Returns: {todo_id, completed_at, duration}
     """
     return await mark_todo_complete(todo_id, comment, ctx)
-
-
-@register_tool_once
-async def list_todos_by_status_tool(status: str, limit: int = 100) -> str:
-    """
-    List todos by status.
-    
-    status: Filter value ("initial"|"pending"|"completed"|"review")
-    limit: Max results (default: 100)
-
-    → Returns: {count, status, items[{id, desc, project}], projects?}
-    """
-    return await list_todos_by_status(status, limit)
 
 
 @register_tool_once
@@ -352,6 +443,19 @@ async def delete_lesson_tool(lesson_id: str, ctx: Context = None) -> str:
     → Returns: {success, message}
     """
     return await delete_lesson(lesson_id, ctx)
+
+
+@register_tool_once
+async def grep_lessons_tool(pattern: str, limit: int = 20) -> str:
+    """
+    Search lessons by pattern or keywords.
+
+    pattern: Search pattern or keywords to find in lessons
+    limit: Max results (default: 20)
+
+    → Returns: {count, pattern, matches[{id, language, topic, preview, tags}]}
+    """
+    return await grep_lessons(pattern, limit)
 
 
 @register_tool_once
