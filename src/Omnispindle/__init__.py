@@ -25,6 +25,40 @@ logger = logging.getLogger(__name__)
 # Filter out specific RuntimeWarnings about unawaited coroutines - moved after logging setup
 warnings.filterwarnings("ignore", category=RuntimeWarning, message=".*coroutine.*send_log_message.*was never awaited.*")
 
+# Add aggressive filters for ServerErrorMiddleware and debug mode warnings
+warnings.filterwarnings("ignore", category=UserWarning, message=".*ServerErrorMiddleware.*")
+warnings.filterwarnings("ignore", category=RuntimeWarning, message=".*debug.*")
+
+# Set up a custom logging filter to suppress repetitive ServerErrorMiddleware messages
+class ServerErrorMiddlewareFilter(logging.Filter):
+    """Filter to suppress repetitive ServerErrorMiddleware debug messages"""
+    def __init__(self):
+        super().__init__()
+        self.last_message = None
+        self.message_count = 0
+        self.max_repeats = 3  # Allow first 3 occurrences, then suppress
+
+    def filter(self, record):
+        # Suppress ServerErrorMiddleware debug messages after the first few
+        if hasattr(record, 'name') and 'starlette' in record.name.lower():
+            if any(keyword in record.getMessage().lower() for keyword in
+                   ['servererror', 'debug', 'traceback', 'middleware']):
+                if record.getMessage() == self.last_message:
+                    self.message_count += 1
+                    if self.message_count > self.max_repeats:
+                        return False  # Suppress this message
+                else:
+                    self.last_message = record.getMessage()
+                    self.message_count = 1
+        return True
+
+# Apply the filter to relevant loggers
+server_error_filter = ServerErrorMiddlewareFilter()
+logging.getLogger('starlette').addFilter(server_error_filter)
+logging.getLogger('starlette.middleware').addFilter(server_error_filter)
+logging.getLogger('starlette.middleware.errors').addFilter(server_error_filter)
+logging.getLogger('uvicorn').addFilter(server_error_filter)
+
 # Detect if this module has already been initialized
 if globals().get('_MODULE_INITIALIZED', False):
     logger.warning("WARNING: Omnispindle/__init__.py is being loaded AGAIN!")
