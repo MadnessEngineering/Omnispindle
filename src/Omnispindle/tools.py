@@ -11,6 +11,7 @@ from dotenv import load_dotenv
 from fastmcp import Context
 from pymongo import MongoClient
 
+from .database import db_connection
 from .mqtt import mqtt_publish
 from .utils import _format_duration
 from .utils import create_response
@@ -20,18 +21,12 @@ from .todo_log_service import log_todo_create, log_todo_update, log_todo_complet
 # Load environment variables
 load_dotenv()
 
-# MongoDB configuration
-MONGODB_URI = os.getenv("MONGODB_URI", "mongodb://localhost:27017")
-MONGODB_DB = os.getenv("MONGODB_DB", "swarmonomicon")
-MONGODB_COLLECTION = os.getenv("MONGODB_COLLECTION", "todos")
-
-# Create MongoDB connection at module level
-mongo_client = MongoClient(MONGODB_URI)
-db = mongo_client[MONGODB_DB]
-collection = db[MONGODB_COLLECTION]
-lessons_collection = db["lessons_learned"]
-tags_cache_collection = db["tags_cache"]
-projects_collection = db["projects"]
+# Use the centralized database connection
+collection = db_connection.todos
+lessons_collection = db_connection.lessons
+tags_cache_collection = db_connection.tags_cache
+projects_collection = db_connection.projects
+explanations_collection = db_connection.explanations
 
 # Cache constants
 TAGS_CACHE_KEY = "all_lesson_tags"
@@ -1356,10 +1351,10 @@ async def list_projects(include_details: Union[bool, str] = False, madness_root:
                 # Get all projects with path information
                 cursor = projects_collection.find({})
                 projects = []
-                
+
                 for doc in cursor:
                     relative_path = doc.get("relative_path", "")
-                    
+
                     # Calculate absolute path
                     if relative_path == "":
                         # Root project (madness_interactive)
@@ -1370,7 +1365,7 @@ async def list_projects(include_details: Union[bool, str] = False, madness_root:
                     else:
                         # Project within madness root
                         absolute_path = os.path.join(madness_root, relative_path)
-                    
+
                     project = {
                         "name": doc["id"],
                         "path": absolute_path,
@@ -1406,7 +1401,7 @@ async def list_projects(include_details: Union[bool, str] = False, madness_root:
                 # Query detailed project information
                 cursor = projects_collection.find({})
                 projects = []
-                
+
                 for doc in cursor:
                     project = {
                         "id": doc["id"],
@@ -1447,3 +1442,183 @@ async def list_projects(include_details: Union[bool, str] = False, madness_root:
         error_msg = f"Failed to list projects: {str(e)}"
         logging.error(error_msg)
         return create_response(False, message=error_msg)
+
+async def add_explanation(topic: str, content: str, kind: str = "concept", author: str = "system", ctx: Context = None) -> str:
+    """
+    Add a new explanation to the knowledge base.
+    
+    Stores a static explanation for a given topic, which can be a concept, methodology, or
+    even a manual override for a project's explanation.
+    
+    Parameters:
+        topic: The subject/title of the explanation (e.g., "todomill_methodology")
+        content: The detailed explanation, supporting Markdown.
+        kind: The type of explanation ('concept', 'methodology', 'project', 'manual')
+        author: The person or system that created the explanation.
+        ctx: Optional context for logging.
+        
+    Returns:
+        JSON with success status and the created explanation's ID.
+    """
+    # Check if an explanation for this topic already exists
+    if explanations_collection.find_one({"topic": topic}):
+        return create_response(False, message=f"Explanation for topic '{topic}' already exists. Use update_explanation to modify it.")
+        
+    explanation = {
+        "id": str(uuid.uuid4()),
+        "topic": topic,
+        "content": content,
+        "kind": kind,
+        "author": author,
+        "created_at": int(datetime.now(UTC).timestamp()),
+        "updated_at": int(datetime.now(UTC).timestamp()),
+    }
+
+    explanations_collection.insert_one(explanation)
+    logging.info(f"Explanation added for topic '{topic}'")
+
+    return create_response(True, {"explanation_id": explanation["id"], "topic": topic})
+
+async def get_explanation(topic: str) -> str:
+    """
+    Get a specific explanation by topic.
+    
+    Retrieves a static explanation from the knowledge base.
+    
+    Parameters:
+        topic: The subject/title of the explanation to retrieve.
+        
+    Returns:
+        JSON containing the explanation's details or a 'not found' message.
+    """
+    explanation = explanations_collection.find_one({"topic": topic})
+
+    if explanation is None:
+        return create_response(False, message="Explanation not found")
+
+    # Format for consistency
+    formatted_explanation = {
+        "id": explanation["id"],
+        "topic": explanation["topic"],
+        "content": explanation["content"],
+        "kind": explanation.get("kind", "concept"),
+        "author": explanation.get("author", "unknown"),
+        "updated": datetime.fromtimestamp(explanation["updated_at"], UTC).strftime("%Y-%m-%d %H:%M")
+    }
+    
+    return create_response(True, formatted_explanation)
+
+async def update_explanation(topic: str, updates: dict, ctx: Context = None) -> str:
+    """
+    Update an existing explanation by topic.
+    
+    Parameters:
+        topic: The topic of the explanation to update.
+        updates: Dictionary of fields to update (e.g., {"content": "new content"}).
+        ctx: Optional context for logging.
+        
+    Returns:
+        JSON with success status.
+    """
+    updates['updated_at'] = int(datetime.now(UTC).timestamp())
+    
+    result = explanations_collection.update_one(
+        {"topic": topic},
+        {"$set": updates}
+    )
+
+    if result.modified_count == 0:
+        return create_response(False, message=f"Explanation for topic '{topic}' not found or no changes made.")
+
+    logging.info(f"Explanation updated for topic '{topic}'")
+    return create_response(True, message=f"Explanation for '{topic}' updated successfully.")
+
+async def delete_explanation(topic: str, ctx: Context = None) -> str:
+    """
+    Delete an explanation by topic.
+    
+    Parameters:
+        topic: The topic of the explanation to delete.
+        ctx: Optional context for logging.
+        
+    Returns:
+        JSON with success status.
+    """
+    result = explanations_collection.delete_one({"topic": topic})
+
+    if result.deleted_count == 0:
+        return create_response(False, message=f"Explanation for topic '{topic}' not found.")
+
+    logging.info(f"Explanation deleted for topic '{topic}'")
+    return create_response(True, message=f"Explanation for '{topic}' deleted successfully.")
+
+async def explain_tool(topic: str, ctx: Context = None) -> str:
+    """
+    Provides a detailed explanation for a given project or concept.
+
+    This tool serves as a centralized knowledge source. It can return static, pre-written
+    explanations for concepts, methodologies, or architectural patterns. If the topic
+    is a known project, it will dynamically generate a summary including the project's
+    description, metadata, and recent to-do activity.
+
+    Parameters:
+        topic (str): The project name or concept to be explained.
+
+    Returns:
+        A JSON response containing the explanation. For projects, this is a dynamically
+        generated Markdown summary. For concepts, it's the stored content.
+    """
+    # 1. Check for a static explanation first
+    static_explanation_response = await get_explanation(topic)
+    try:
+        explanation_data = json.loads(static_explanation_response)
+        if explanation_data.get("success"):
+            return create_response(True, explanation_data["data"])
+    except json.JSONDecodeError:
+        pass # Ignore and proceed to dynamic generation
+
+    # 2. If no static explanation, check if it's a project and generate dynamically
+    project_name = validate_project_name(topic)
+    all_projects = get_all_projects()
+
+    # Ensure the validated name is actually a real project and not a fallback default
+    if project_name in all_projects and project_name != "madness_interactive" or topic.lower() == "madness_interactive":
+        try:
+            # Get project details
+            project_details_response = await list_projects(include_details=True)
+            project_details_data = json.loads(project_details_response)
+            project_info = next((p for p in project_details_data.get("data", {}).get("projects", []) if p["id"] == project_name), None)
+
+            # Get recent todos
+            recent_todos_response = await list_project_todos(project_name, limit=5)
+            recent_todos_data = json.loads(recent_todos_response)
+            recent_todos = recent_todos_data.get("data", {}).get("items", [])
+
+            # Build the Markdown explanation
+            if not project_info:
+                return create_response(False, message=f"Could not retrieve details for project '{project_name}'.")
+
+            explanation_md = f"# Explanation for Project: {project_info.get('display_name', project_name)}\n\n"
+            explanation_md += f"**ID:** `{project_info.get('id')}`\n"
+            explanation_md += f"**Description:** {project_info.get('description', 'No description available.')}\n"
+            explanation_md += f"**Git URL:** {project_info.get('git_url', 'Not specified.')}\n"
+            explanation_md += f"**Relative Path:** `{project_info.get('relative_path', 'Not specified.')}`\n\n"
+
+            explanation_md += "## Recent Activity (Active Todos)\n\n"
+            if recent_todos:
+                for todo in recent_todos:
+                    explanation_md += f"- **{todo.get('description')}**\n"
+                    explanation_md += f"  - *ID:* `{todo.get('id')}`\n"
+                    explanation_md += f"  - *Status:* {todo.get('status', 'N/A')}\n"
+                    explanation_md += f"  - *Created:* {todo.get('created_at', 'N/A')}\n"
+            else:
+                explanation_md += "No recent active todos found for this project.\n"
+
+            return create_response(True, {"topic": project_name, "content": explanation_md, "kind": "project_dynamic"})
+
+        except Exception as e:
+            logging.error(f"Failed to dynamically generate explanation for project '{topic}': {str(e)}")
+            return create_response(False, message=f"An error occurred while generating the explanation for project '{topic}'.")
+
+    # 3. If it's not a static topic or a known project
+    return create_response(False, message=f"I do not have an explanation for the topic: '{topic}'. It is not a known concept or a valid project.")

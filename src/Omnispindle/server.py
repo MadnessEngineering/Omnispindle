@@ -362,41 +362,33 @@ class Omnispindle(FastMCP):
 
         return tool_func
 
-    def register_tools(self, tools_list):
-        """Register multiple tools with the server"""
-        logger.info(f"Registering {len(tools_list)} tools")
-        for tool in tools_list:
-            self.register_tool(tool)
-        logger.debug("All tools registered successfully")
+    def register_tools(self, tool_registry: dict):
+        """
+        Register multiple tools from a dictionary.
 
-# Create a singleton instance
-_instance = None
-_instance_lock = threading.Lock()
+        Args:
+            tool_registry (dict): A dictionary mapping tool names to tool functions.
+        """
+        logger.info(f"Registering {len(tool_registry)} tools from registry.")
+        for name, func in tool_registry.items():
+            # Create a new function with the desired name to register
+            # This is necessary because the decorator uses the function's __name__
+            # and we want to control the exposed name.
+            tool_func = func
+            tool_func.__name__ = name
+            self.register_tool(tool_func)
+        logger.debug("All tools from registry have been processed.")
 
-def get_server_instance(name: str = "todo-server", server_type: str = "sse") -> Omnispindle:
-    """
-    Get the singleton instance of the Omnispindle server.
-    This ensures we only ever have one server instance.
-    """
-    global _instance, _instance_lock
+    def _register_default_tools(self):
+        """Register the built-in tools for the server"""
+        # Implementation of _register_default_tools method
+        pass
 
-    # Thread-safe initialization with double-checking lock pattern
-    if _instance is None:
-        with _instance_lock:
-            if _instance is None:
-                current_thread = threading.current_thread().name
-                logger.warning(f"🔒 Creating new Omnispindle singleton instance in thread {current_thread}")
-                # logger.warning(f"🔒 Call stack:\n{''.join(traceback.format_stack()[-10:])}")
-
-                logger.info(f"Creating new Omnispindle singleton instance with name='{name}', server_type='{server_type}'")
-                _instance = Omnispindle(name=name, server_type=server_type)
-                logger.info("Omnispindle singleton instance created")
-            else:
-                logger.warning("Another thread created the instance while we were waiting for the lock")
-
-    return _instance
-
-# Export the server instance
-logger.warning("🚀 About to create the server instance in module initialization")
-server = get_server_instance()
-logger.warning(f"🚀 Server instance created, init count = {_init_counter}")
+# Create a singleton instance at the module level.
+# This is simpler and sufficient now that the app structure is being centralized.
+try:
+    logger.info("Creating module-level singleton for Omnispindle server.")
+    server = Omnispindle()
+except Exception as e:
+    logger.critical(f"Failed to create Omnispindle server instance: {e}", exc_info=True)
+    server = None

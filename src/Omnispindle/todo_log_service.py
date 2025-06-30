@@ -22,6 +22,8 @@ import pymongo
 from pymongo import MongoClient
 from dotenv import load_dotenv
 
+from .database import db_connection
+
 # Import MQTT functionality
 from .mqtt import mqtt_publish
 
@@ -43,65 +45,37 @@ class TodoLogService:
     A service for logging and retrieving todo changes.
     """
 
-    def __init__(self, mongo_uri: str = MONGODB_URI,
-                 db_name: str = MONGODB_DB,
-                 todos_collection: str = MONGODB_COLLECTION,
-                 logs_collection: str = MONGODB_LOGS_COLLECTION):
+    def __init__(self):
         """
         Initialize the TodoLogService.
-        
-        Args:
-            mongo_uri: MongoDB connection URI
-            db_name: Database name
-            todos_collection: Collection name for todos
-            logs_collection: Collection name for todo logs
         """
-        self.mongo_uri = mongo_uri
-        self.db_name = db_name
-        self.todos_collection_name = todos_collection
-        self.logs_collection_name = logs_collection
-
-        # Will be initialized in start()
-        self.mongo_client = None
-        self.db = None
-        self.todos_collection = None
-        self.logs_collection = None
+        # Use the centralized database connection
+        self.db = db_connection.db
+        self.todos_collection = db_connection.todos
+        self.logs_collection = db_connection.logs
         self.running = False  # Track service state
 
-        logger.info(f"TodoLogService initialized with db={db_name}, todos={todos_collection}, logs={logs_collection}")
+        logger.info(f"TodoLogService initialized with db={self.db.name if self.db else 'N/A'}, "
+                    f"todos={self.todos_collection.name if self.todos_collection else 'N/A'}, "
+                    f"logs={self.logs_collection.name if self.logs_collection else 'N/A'}")
 
     async def initialize_db(self) -> bool:
         """
-        Initialize database connections and ensure collections exist.
-        
-        Returns:
-            True if successful, False otherwise
+        Ensure collections exist and indexes are created.
+        This method no longer creates connections, just verifies setup.
         """
         try:
-            logger.info(f"Initializing database connection to {self.mongo_uri}")
-            
-            # Create MongoDB connection
-            self.mongo_client = MongoClient(self.mongo_uri)
-            
-            # Test the connection
-            try:
-                # Ping the database to ensure connection is working
-                self.mongo_client.admin.command('ping')
-                logger.debug("MongoDB connection successful")
-            except Exception as e:
-                logger.error(f"Failed to connect to MongoDB: {str(e)}")
+            if self.db is None or self.logs_collection is None:
+                logger.error("Database connection not available. Cannot initialize TodoLogService.")
                 return False
-            
-            self.db = self.mongo_client[self.db_name]
-            self.todos_collection = self.db[self.todos_collection_name]
-            
-            logger.debug(f"Connected to database '{self.db_name}'")
+
+            logger.info("Verifying database and collections for TodoLogService")
 
             # Create logs collection if it doesn't exist
-            if self.logs_collection_name not in self.db.list_collection_names():
-                logger.info(f"Creating {self.logs_collection_name} collection")
+            if self.logs_collection.name not in self.db.list_collection_names():
+                logger.info(f"Creating {self.logs_collection.name} collection")
                 try:
-                    self.db.create_collection(self.logs_collection_name,
+                    self.db.create_collection(self.logs_collection.name,
                         validator={
                             "$jsonSchema": {
                                 "bsonType": "object",
@@ -121,43 +95,24 @@ class TodoLogService:
                     )
 
                     # Create indexes for efficient querying
-                    self.db[self.logs_collection_name].create_index([("timestamp", pymongo.DESCENDING)])
-                    self.db[self.logs_collection_name].create_index([("operation", pymongo.ASCENDING)])
-                    self.db[self.logs_collection_name].create_index([("todoId", pymongo.ASCENDING)])
-                    self.db[self.logs_collection_name].create_index([("project", pymongo.ASCENDING)])
-                    logger.info(f"Created indexes for {self.logs_collection_name} collection")
+                    self.logs_collection.create_index([("timestamp", pymongo.DESCENDING)])
+                    self.logs_collection.create_index([("operation", pymongo.ASCENDING)])
+                    self.logs_collection.create_index([("todoId", pymongo.ASCENDING)])
+                    self.logs_collection.create_index([("project", pymongo.ASCENDING)])
+                    logger.info(f"Created indexes for {self.logs_collection.name} collection")
                     
                 except Exception as e:
                     logger.warning(f"Failed to create collection with validator, creating simple collection: {str(e)}")
                     # Fallback: create collection without validator
-                    self.db.create_collection(self.logs_collection_name)
-            else:
-                logger.debug(f"Collection {self.logs_collection_name} already exists")
-
-            self.logs_collection = self.db[self.logs_collection_name]
+                    self.db.create_collection(self.logs_collection.name)
             
             # Verify the collection is accessible
-            try:
-                count = self.logs_collection.count_documents({})
-                logger.info(f"Database connections initialized successfully. Found {count} existing log entries.")
-            except Exception as e:
-                logger.error(f"Failed to access logs collection: {str(e)}")
-                return False
-                
+            count = self.logs_collection.count_documents({})
+            logger.info(f"Database setup verified. Found {count} existing log entries.")
             return True
 
         except Exception as e:
-            logger.error(f"Error initializing database: {str(e)}")
-            # Clean up partial initialization
-            if hasattr(self, 'mongo_client') and self.mongo_client:
-                try:
-                    self.mongo_client.close()
-                except:
-                    pass
-                self.mongo_client = None
-            self.db = None
-            self.todos_collection = None
-            self.logs_collection = None
+            logger.error(f"Error verifying database setup: {str(e)}")
             return False
 
     def generate_title(self, description: str) -> str:
@@ -284,8 +239,8 @@ class TodoLogService:
         Stop the Todo Log Service.
         """
         # Close the MongoDB connection
-        if self.mongo_client:
-            self.mongo_client.close()
+        if self.db:
+            self.db.close()
 
         logger.info("TodoLogService stopped")
         self.running = False
