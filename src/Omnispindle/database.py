@@ -24,7 +24,7 @@ class Database:
             except Exception as e:
                 print(f"Error connecting to MongoDB: {e}")
                 cls._instance.client = None
-            
+
             # Initialize db and collections
             if cls._instance.client is not None:
                 cls._instance.db = cls._instance.client[MONGODB_DB_NAME]
@@ -46,4 +46,4 @@ class Database:
         return cls._instance
 
 # Export a single instance for the application to use
-db_connection = Database() 
+db_connection = Database()
