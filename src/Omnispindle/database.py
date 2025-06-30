@@ -26,7 +26,7 @@ class Database:
                 cls._instance.client = None
             
             # Initialize db and collections
-            if cls._instance.client:
+            if cls._instance.client is not None:
                 cls._instance.db = cls._instance.client[MONGODB_DB_NAME]
                 cls._instance.todos = cls._instance.db["todos"]
                 cls._instance.lessons = cls._instance.db["lessons_learned"]
