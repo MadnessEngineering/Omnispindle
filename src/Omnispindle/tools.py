@@ -1622,3 +1622,80 @@ async def explain_tool(topic: str, ctx: Context = None) -> str:
 
     # 3. If it's not a static topic or a known project
     return create_response(False, message=f"I do not have an explanation for the topic: '{topic}'. It is not a known concept or a valid project.")
+
+async def list_lessons(limit: int = 100, ctx: Context = None) -> str:
+    """
+    List all lessons, sorted by creation date.
+    
+    Parameters:
+        limit: Maximum number of lessons to return
+        
+    Returns:
+        JSON with success status, count, and a list of lesson summaries.
+    """
+    try:
+        cursor = lessons_collection.find({}, limit=limit).sort("created_at", -1)
+        results = list(cursor)
+
+        summary = {
+            "count": len(results),
+            "items": []
+        }
+        for lesson in results:
+            summary["items"].append({
+                "id": lesson["id"],
+                "language": lesson["language"],
+                "topic": lesson["topic"],
+                "preview": lesson["lesson_learned"][:80] + ("..." if len(lesson["lesson_learned"]) > 80 else ""),
+                "tags": lesson.get("tags", [])
+            })
+
+        return create_response(True, summary)
+    except Exception as e:
+        logging.error(f"Failed to list lessons: {str(e)}")
+        return create_response(False, message=f"Failed to list lessons: {str(e)}")
+
+async def search_lessons(query: str, fields: list = None, limit: int = 100, ctx: Context = None) -> str:
+    """
+    Search lessons with text search capabilities.
+    
+    Performs a case-insensitive text search across specified fields in lessons.
+    
+    Parameters:
+        query: Text string to search for.
+        fields: List of fields to search in (default: ["topic", "lesson_learned"]).
+        limit: Maximum number of lessons to return.
+        
+    Returns:
+        JSON with a summary of the search results.
+    """
+    try:
+        if not fields:
+            fields = ["topic", "lesson_learned"]
+
+        regex_pattern = {"$regex": query, "$options": "i"}
+        search_conditions = [{field: regex_pattern} for field in fields]
+        search_query = {"$or": search_conditions}
+
+        cursor = lessons_collection.find(search_query, limit=limit)
+        results = list(cursor)
+
+        summary = {
+            "count": len(results),
+            "query": query,
+            "matches": []
+        }
+
+        for lesson in results:
+            summary["matches"].append({
+                "id": lesson["id"],
+                "language": lesson["language"],
+                "topic": lesson["topic"],
+                "preview": lesson["lesson_learned"][:80] + ("..." if len(lesson["lesson_learned"]) > 80 else ""),
+                "tags": lesson.get("tags", [])
+            })
+
+        return create_response(True, summary)
+    except Exception as e:
+        logging.error(f"Failed to search lessons: {str(e)}")
+        return create_response(False, message=f"Failed to search lessons: {str(e)}")
