@@ -58,8 +58,10 @@ load_dotenv()
 
 async def add_todo(description: str, project: str, priority: str = "Medium", target_agent: str = "user", metadata: dict = None, ctx: Context = None) -> str:
     """
-    Creates a task in the specified project with the given priority and target agent.
+    Creates a task in the specified project with the given priority and target agent. 
     Returns a compact representation of the created todo with an ID for reference.
+    This is the main driver for the todo system. These tools are collectively known as the Omnispindle.
+    It spins the weave between our Madness Interactive projects and acts as Power Armor for our Agent Swarmonomicon. 
     """
     return await _add_todo(description, project, priority, target_agent, metadata, ctx)
 
@@ -161,6 +163,12 @@ async def list_lessons(limit: int = 100, ctx: Context = None) -> str:
 async def search_lessons(query: str, fields: list = None, limit: int = 100, ctx: Context = None) -> str:
     """Search lessons with text search capabilities."""
     return await _search_lessons(query, fields, limit, ctx)
+
+# TODO: a3a81511-5766-41c6-be04-c3ddca06b424
+# async def mad_tinker_mode(ctx: Context = None) -> str:
+#     """Receive a prompt to instill the mad mind of an unheinged Tinker in our workflow.
+#     This will enable additional tooling and options for invention! Embrace the madness!"""
+#     return await _mad_tinker_mode(ctx)
 
 # --- Server Entry Point ---
 # This list explicitly defines which functions are registered as tools.
