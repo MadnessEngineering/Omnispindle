@@ -55,9 +55,9 @@ class TodoLogService:
         self.logs_collection = db_connection.logs
         self.running = False  # Track service state
 
-        logger.info(f"TodoLogService initialized with db={self.db.name if self.db else 'N/A'}, "
-                    f"todos={self.todos_collection.name if self.todos_collection else 'N/A'}, "
-                    f"logs={self.logs_collection.name if self.logs_collection else 'N/A'}")
+        logger.info(f"TodoLogService initialized with db={self.db.name if self.db is not None else 'N/A'}, "
+                    f"todos={self.todos_collection.name if self.todos_collection is not None else 'N/A'}, "
+                    f"logs={self.logs_collection.name if self.logs_collection is not None else 'N/A'}")
 
     async def initialize_db(self) -> bool:
         """
