@@ -239,8 +239,8 @@ class TodoLogService:
         Stop the Todo Log Service.
         """
         # Close the MongoDB connection
-        if self.db:
-            self.db.close()
+        if self.db is not None:
+            self.db.client.close()
 
         logger.info("TodoLogService stopped")
         self.running = False
