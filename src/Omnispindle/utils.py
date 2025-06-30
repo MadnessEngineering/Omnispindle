@@ -10,9 +10,20 @@ from typing import Any
 from typing import Dict
 from typing import List
 from fastmcp import Context
+from bson import ObjectId
 
 MQTT_HOST = os.getenv("AWSIP", "localhost")
 MQTT_PORT = int(os.getenv("AWSPORT", 3003))
+
+
+class MongoJSONEncoder(json.JSONEncoder):
+    """Custom JSON encoder to handle MongoDB ObjectId and other BSON types"""
+    def default(self, obj):
+        if isinstance(obj, ObjectId):
+            return str(obj)
+        if isinstance(obj, datetime):
+            return obj.isoformat()
+        return super().default(obj)
 
 
 def create_response(success: bool, data: Any = None, message: str = None, return_context: bool = True) -> str:
@@ -58,7 +69,7 @@ def create_response(success: bool, data: Any = None, message: str = None, return
     if message is not None:
         response["message"] = message
 
-    return json.dumps(response)
+    return json.dumps(response, cls=MongoJSONEncoder)
 
 
 def _get_caller_function_name() -> str:

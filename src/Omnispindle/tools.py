@@ -331,7 +331,19 @@ def validate_project_name(project: str) -> str:
 
     # Get all valid projects
     all_projects = get_all_projects()
-    project_names = [p['name'] for p in all_projects]
+    
+    # Handle both dictionary and string formats
+    project_names = []
+    try:
+        for p in all_projects:
+            if isinstance(p, dict):
+                project_names.append(p.get('name', ''))
+            elif isinstance(p, str):
+                project_names.append(p)
+    except Exception as e:
+        logging.error(f"Error processing projects list: {str(e)}")
+        # Fallback to VALID_PROJECTS if there's an issue
+        project_names = VALID_PROJECTS
 
     if normalized_project in project_names:
         return normalized_project
