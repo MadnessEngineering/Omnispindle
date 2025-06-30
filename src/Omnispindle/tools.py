@@ -1552,7 +1552,7 @@ async def delete_explanation(topic: str, ctx: Context = None) -> str:
     logging.info(f"Explanation deleted for topic '{topic}'")
     return create_response(True, message=f"Explanation for '{topic}' deleted successfully.")
 
-async def explain_tool(topic: str, ctx: Context = None) -> str:
+async def explain_tool(topic: str, brief: bool = False, ctx: Context = None) -> str:
     """
     Provides a detailed explanation for a given project or concept.
 
@@ -1563,6 +1563,7 @@ async def explain_tool(topic: str, ctx: Context = None) -> str:
 
     Parameters:
         topic (str): The project name or concept to be explained.
+        brief (bool): If True, returns a condensed summary suitable for AI context.
 
     Returns:
         A JSON response containing the explanation. For projects, this is a dynamically
@@ -1598,6 +1599,16 @@ async def explain_tool(topic: str, ctx: Context = None) -> str:
             if not project_info:
                 return create_response(False, message=f"Could not retrieve details for project '{project_name}'.")
 
+            if brief:
+                # Condensed format for AI
+                explanation_summary = {
+                    "topic": project_name,
+                    "kind": "project_summary",
+                    "description": project_info.get('description', 'No description available.'),
+                    "recent_activity": [todo.get('description') for todo in recent_todos]
+                }
+                return create_response(True, explanation_summary)
+
             explanation_md = f"# Explanation for Project: {project_info.get('display_name', project_name)}\n\n"
             explanation_md += f"**ID:** `{project_info.get('id')}`\n"
             explanation_md += f"**Description:** {project_info.get('description', 'No description available.')}\n"
@@ -1623,12 +1634,13 @@ async def explain_tool(topic: str, ctx: Context = None) -> str:
     # 3. If it's not a static topic or a known project
     return create_response(False, message=f"I do not have an explanation for the topic: '{topic}'. It is not a known concept or a valid project.")
 
-async def list_lessons(limit: int = 100, ctx: Context = None) -> str:
+async def list_lessons(limit: int = 100, brief: bool = False, ctx: Context = None) -> str:
     """
     List all lessons, sorted by creation date.
     
     Parameters:
         limit: Maximum number of lessons to return
+        brief (bool): If True, returns a condensed summary suitable for AI context.
         
     Returns:
         JSON with success status, count, and a list of lesson summaries.
@@ -1642,20 +1654,26 @@ async def list_lessons(limit: int = 100, ctx: Context = None) -> str:
             "items": []
         }
         for lesson in results:
-            summary["items"].append({
-                "id": lesson["id"],
-                "language": lesson["language"],
-                "topic": lesson["topic"],
-                "preview": lesson["lesson_learned"][:80] + ("..." if len(lesson["lesson_learned"]) > 80 else ""),
-                "tags": lesson.get("tags", [])
-            })
+            if brief:
+                summary["items"].append({
+                    "topic": lesson["topic"],
+                    "preview": lesson["lesson_learned"][:40] + ("..." if len(lesson["lesson_learned"]) > 40 else "")
+                })
+            else:
+                summary["items"].append({
+                    "id": lesson["id"],
+                    "language": lesson["language"],
+                    "topic": lesson["topic"],
+                    "preview": lesson["lesson_learned"][:80] + ("..." if len(lesson["lesson_learned"]) > 80 else ""),
+                    "tags": lesson.get("tags", [])
+                })
 
         return create_response(True, summary)
     except Exception as e:
         logging.error(f"Failed to list lessons: {str(e)}")
         return create_response(False, message=f"Failed to list lessons: {str(e)}")
 
-async def search_lessons(query: str, fields: list = None, limit: int = 100, ctx: Context = None) -> str:
+async def search_lessons(query: str, fields: list = None, limit: int = 100, brief: bool = False, ctx: Context = None) -> str:
     """
     Search lessons with text search capabilities.
     
@@ -1665,6 +1683,7 @@ async def search_lessons(query: str, fields: list = None, limit: int = 100, ctx:
         query: Text string to search for.
         fields: List of fields to search in (default: ["topic", "lesson_learned"]).
         limit: Maximum number of lessons to return.
+        brief (bool): If True, returns a condensed summary suitable for AI context.
         
     Returns:
         JSON with a summary of the search results.
@@ -1687,13 +1706,19 @@ async def search_lessons(query: str, fields: list = None, limit: int = 100, ctx:
         }
 
         for lesson in results:
-            summary["matches"].append({
-                "id": lesson["id"],
-                "language": lesson["language"],
-                "topic": lesson["topic"],
-                "preview": lesson["lesson_learned"][:80] + ("..." if len(lesson["lesson_learned"]) > 80 else ""),
-                "tags": lesson.get("tags", [])
-            })
+            if brief:
+                summary["matches"].append({
+                    "topic": lesson["topic"],
+                    "preview": lesson["lesson_learned"][:40] + ("..." if len(lesson["lesson_learned"]) > 40 else "")
+                })
+            else:
+                summary["matches"].append({
+                    "id": lesson["id"],
+                    "language": lesson["language"],
+                    "topic": lesson["topic"],
+                    "preview": lesson["lesson_learned"][:80] + ("..." if len(lesson["lesson_learned"]) > 80 else ""),
+                    "tags": lesson.get("tags", [])
+                })
 
         return create_response(True, summary)
     except Exception as e:
