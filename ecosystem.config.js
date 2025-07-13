@@ -30,7 +30,7 @@ module.exports = {
             user: process.env.USER,
             host: 'localhost',
             repo: 'git@github.com:danedens/omnispindle.git',
-            path: '/Users/d.edens/lab/madness_interactive/projects/python/Omnispindle',
+            path: '/Users/d.edens/lab/madness_interactive/projects/common/Omnispindle',
             'post-deploy': 'pip install -r requirements.txt && pm2 reload ecosystem.config.js --env development',
             'pre-setup': ''
         }
