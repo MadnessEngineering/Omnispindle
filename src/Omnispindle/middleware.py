@@ -6,8 +6,49 @@ import asyncio
 import anyio
 import inspect
 import functools
+import time
 
 logger = logging.getLogger(__name__)
+
+
+class EnhancedLoggingMiddleware(BaseHTTPMiddleware):
+    """
+    Middleware to log requests and responses, providing more context than default logging.
+    """
+    def __init__(self, app: ASGIApp, logger: logging.Logger):
+        super().__init__(app)
+        self.logger = logger
+
+    async def dispatch(self, request, call_next):
+        start_time = time.time()
+        
+        # Log request details
+        self.logger.info(f"Request: {request.method} {request.url.path}")
+        
+        response = await call_next(request)
+        
+        process_time = (time.time() - start_time) * 1000
+        
+        # Log response details
+        self.logger.info(
+            f"Response: {response.status_code} "
+            f"({request.method} {request.url.path}) "
+            f"took {process_time:.2f}ms"
+        )
+        
+        return response
+
+
+# Placeholder for rate limit middleware
+async def rate_limit_middleware(request, call_next):
+    """
+    This is a placeholder for a rate limiting middleware.
+    It currently does nothing but can be expanded later.
+    """
+    # TODO: Implement actual rate limiting logic
+    response = await call_next(request)
+    return response
+
 
 class ConnectionErrorsMiddleware(BaseHTTPMiddleware):
     """
