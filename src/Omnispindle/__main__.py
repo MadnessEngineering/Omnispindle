@@ -2,7 +2,7 @@ import asyncio
 import logging
 import os
 import uvicorn
-from . import run_server
+from .server import Omnispindle
 
 import sys
 import shutil
@@ -39,7 +39,8 @@ def main():
         asyncio.set_event_loop(loop)
 
         # Get the ASGI app by running the server in the event loop
-        app = loop.run_until_complete(run_server())
+        server = Omnispindle()
+        app = loop.run_until_complete(server.run_server())
 
         # Run Uvicorn with the ASGI app
         uvicorn.run(

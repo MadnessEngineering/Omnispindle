@@ -1,6 +1,8 @@
 import os
 from pymongo import MongoClient
 from dotenv import load_dotenv
+from pymongo.collection import Collection
+from pymongo.database import Database as MongoDatabase
 
 # Load environment variables from .env file
 load_dotenv()
@@ -12,6 +14,14 @@ MONGODB_DB_NAME = os.getenv("MONGODB_DB", "swarmonomicon")
 class Database:
     """A singleton class to manage the MongoDB connection."""
     _instance = None
+    client: MongoClient | None = None
+    db: MongoDatabase | None = None
+    todos: Collection | None = None
+    lessons: Collection | None = None
+    tags_cache: Collection | None = None
+    projects: Collection | None = None
+    explanations: Collection | None = None
+    logs: Collection | None = None
 
     def __new__(cls):
         if cls._instance is None:

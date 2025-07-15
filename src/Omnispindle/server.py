@@ -9,6 +9,7 @@ import anyio
 import traceback
 import threading
 import warnings
+import functools
 
 # Configure logger
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -38,14 +39,19 @@ else:
 from typing import Callable, Dict, Any, Optional
 from fastmcp.server import FastMCP
 import uvicorn
+from uvicorn.config import LOGGING_CONFIG
 import json
 from starlette.responses import JSONResponse
+from starlette.types import ASGIApp, Scope, Receive, Send
 from .middleware import (
     ConnectionErrorsMiddleware,
     SuppressNoResponseReturnedMiddleware,
     NoneTypeResponseMiddleware,
     create_asgi_error_handler
 )
+from .sse_handler import sse_handler
+from .auth import get_current_user
+from fastapi import Depends, Request
 
 # Configure logger
 MQTT_HOST = os.getenv("MQTT_HOST", "localhost")
@@ -148,7 +154,7 @@ class Omnispindle(FastMCP):
 
             # Configure uvicorn to suppress specific access logs for /messages endpoint
             logger.debug("Configuring uvicorn logging")
-            log_config = uvicorn.config.LOGGING_CONFIG
+            log_config = LOGGING_CONFIG
             if "formatters" in log_config:
                 log_config["formatters"]["access"]["fmt"] = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
                 logger.debug("Modified uvicorn access log format")
@@ -174,7 +180,7 @@ class Omnispindle(FastMCP):
             if app is None:
                 logger.warning("run_sse_async returned None, using dummy fallback app")
 
-                async def dummy_app(scope: Dict[str, Any], receive: Callable, send: Callable) -> None:
+                async def dummy_app(scope: Scope, receive: Receive, send: Send) -> None:
                     """
                     A robust fallback ASGI application that handles basic requests when the main app is unavailable.
                     
@@ -245,7 +251,7 @@ class Omnispindle(FastMCP):
                 # Add a delay wrapper to ensure initialization is complete before handling requests
                 original_app = app
 
-                async def initialization_delay_wrapper(scope: Dict[str, Any], receive: Callable, send: Callable) -> None:
+                async def initialization_delay_wrapper(scope: Scope, receive: Receive, send: Send) -> None:
                     """
                     Wrapper that adds a small delay to ensure server initialization is complete
                     before processing any requests.
