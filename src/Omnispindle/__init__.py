@@ -2,6 +2,7 @@ import asyncio
 import inspect
 import logging
 from typing import Callable, Dict, Any, Optional
+import json
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, Depends, Request, HTTPException, Response, status
@@ -83,27 +84,6 @@ class Omnispindle:
         app.add_middleware(NoneTypeResponseMiddleware)
         app.add_middleware(EnhancedLoggingMiddleware, logger=logger)
 
-        @app.get("/tools", tags=["tools"])
-        async def list_tools():
-            """
-            Returns a list of available tools, their documentation, and authentication info.
-            """
-            auth_config = Settings()
-            tools_info = {}
-            for name, func in self.tools.items():
-                tools_info[name] = {
-                    "doc": inspect.getdoc(func),
-                    "signature": str(inspect.signature(func)),
-                }
-            
-            auth_info = {
-                "enabled": auth_config.enabled,
-                "testing": auth_config.testing,
-                "instructions": "Clients can authenticate via a 'ss_tok' cookie or an 'Authorization: Bearer <token>' header. For testing environments, a token of 'let-me-in' is accepted."
-            }
-
-            return {"tools": tools_info, "auth_info": auth_info}
-
         @app.get("/auth/testing-login", tags=["auth"], include_in_schema=False)
         async def testing_login(response: Response):
             auth_config = Settings()
@@ -131,6 +111,19 @@ class Omnispindle:
         @app.get("/sse")
         async def sse_endpoint(request: Request):
             async def event_generator(req: Request):
+                # First, send the tool information as a handshake
+                tools_info = {}
+                for name, func in self.tools.items():
+                    tools_info[name] = {
+                        "doc": inspect.getdoc(func),
+                        "signature": str(inspect.signature(func)),
+                    }
+                yield {
+                    "event": "tools_info",
+                    "data": json.dumps(tools_info)
+                }
+
+                # Then, enter the ping loop
                 while not await req.is_disconnected():
                     yield {"event": "ping", "data": "ping"}
                     await asyncio.sleep(15)
