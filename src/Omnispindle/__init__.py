@@ -7,7 +7,7 @@ import json
 from dotenv import load_dotenv
 from fastapi import FastAPI, Depends, Request, HTTPException, Response, status
 
-from .auth import get_current_user, Settings, CurrentUser
+from .auth import get_current_user
 from .context import Context
 from .middleware import ConnectionErrorsMiddleware, NoneTypeResponseMiddleware, EnhancedLoggingMiddleware
 from .patches import apply_patches
@@ -63,21 +63,13 @@ class Omnispindle:
         app.add_middleware(NoneTypeResponseMiddleware)
         app.add_middleware(EnhancedLoggingMiddleware, logger=logger)
 
-        @app.get("/auth/testing-login", tags=["auth"], include_in_schema=False)
-        async def testing_login(response: Response):
-            auth_config = Settings()
-            if not auth_config.testing:
-                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Endpoint not available.")
-            response.set_cookie(key="ss-tok", value="let-me-in", httponly=True, samesite="strict", secure=True)
-            return {"message": "Test cookie set."}
-
         @app.get("/auth/logout", tags=["auth"])
         async def logout(response: Response):
             response.delete_cookie(key="ss-tok", httponly=True, samesite="strict", secure=True)
             return {"message": "Successfully logged out."}
 
         @app.post("/tools/{tool_name}", tags=["tools"])
-        async def run_tool(tool_name: str, request: Request, user: CurrentUser = Depends(get_current_user)):
+        async def run_tool(tool_name: str, request: Request, user: dict = Depends(get_current_user)):
             try:
                 params = await request.json()
             except Exception:
@@ -109,8 +101,8 @@ class Omnispindle:
             return sse_handler.sse_response(request, event_generator)
 
         @app.get("/sse_authenticated")
-        async def sse_authenticated_endpoint(request: Request, user: CurrentUser = Depends(get_current_user)):
-            user_name = user.name
+        async def sse_authenticated_endpoint(request: Request, user: dict = Depends(get_current_user)):
+            user_name = user.get("sub", "unknown_user") # Use .get("sub") to get user ID
             logger.info(f"User {user_name} connected to authenticated SSE stream.")
             async def user_specific_generator(req: Request):
                 while not await req.is_disconnected():
