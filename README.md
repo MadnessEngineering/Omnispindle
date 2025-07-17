@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/tree_mallow_tvtj2a.jpg)](https://mseep.ai/app/danedens-omnispindle)
+
 # FastMCP Todo Server
 
 A FastMCP-based Todo Server for the [Swarmonomicon](https://github.com/DanEdens/madness_interactive/tree/main/projects/common/Swarmonomicon) project. This server receives todo requests via FastMCP and stores them in MongoDB for processing by the Swarmonomicon todo worker.
