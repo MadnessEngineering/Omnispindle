@@ -1,0 +1,8 @@
+# Base requirements
+fastapi
+uvicorn
+requests
+google-auth-oauthlib
+python-dotenv
+pyjwt
+cryptography
