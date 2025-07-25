@@ -36,7 +36,7 @@ VALID_PROJECTS = [
     "todomill_projectorium", "swarmonomicon", "hammerspoon",
 
     "lab_management", "cogwyrm", "docker_implementation",
-    "documentation", "eventghost", "hammerghost",
+    "documentation", "eventghost-rust", "hammerghost",
     "quality_assurance", "spindlewrit", "inventorium"
 ]
 
@@ -268,11 +268,11 @@ def initialize_projects_collection():
             }
             for name in VALID_PROJECTS
         ]
-        
+
         if projects_to_insert:
             db_connection.projects.insert_many(projects_to_insert)
             logging.info(f"Successfully inserted {len(projects_to_insert)} projects into the collection")
-            
+
         # Invalidate project cache after initialization
         invalidate_projects_cache()
         return True
@@ -694,4 +694,4 @@ async def search_lessons(query: str, fields: Optional[list] = None, limit: int =
         return create_response(True, {"items": results})
     except Exception as e:
         logger.error(f"Failed to search lessons: {str(e)}")
-        return create_response(False, message=str(e)) 
+        return create_response(False, message=str(e))
