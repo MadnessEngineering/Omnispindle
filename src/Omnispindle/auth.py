@@ -3,7 +3,7 @@ import json
 from typing import Optional, Dict, Any
 
 from fastapi import Depends, HTTPException, status, Request
-from fastapi.security import OAuth2PasswordBearer, SecurityScopes
+from fastapi.security import OAuth2PasswordBearer
 from jose import jwt, JWTError
 from urllib.request import urlopen
 
@@ -23,23 +23,13 @@ class AuthError(HTTPException):
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-def get_token_from_cookie(request: Request) -> Optional[str]:
-    """Extracts the JWT from the 'ss-tok' cookie."""
-    return request.cookies.get("ss-tok")
-
-async def get_current_user(
-    request: Request,
-    token_from_cookie: Optional[str] = Depends(get_token_from_cookie),
-    # The default security scheme will try to get the token from the Authorization header
-    token_from_header: Optional[str] = Depends(OAuth2PasswordBearer(tokenUrl="token", auto_error=False)),
-    ) -> Dict[str, Any]:
+def verify_jwt_token(token: str) -> Dict[str, Any]:
     """
-    FastAPI dependency to get the current user from a JWT.
-    It checks for a token in the 'ss-tok' cookie (for browsers) and the
-    'Authorization' header (for other clients).
+    Decodes and validates a JWT token.
+    This function is a modified version of the original get_current_user,
+    but without the FastAPI dependencies, so it can be used in other contexts.
     """
-    token = token_from_cookie or token_from_header
-    if token is None:
+    if not token:
         raise AuthError(detail="Authentication token is missing.", status_code=status.HTTP_401_UNAUTHORIZED)
 
     global _jwks
@@ -76,9 +66,27 @@ async def get_current_user(
             issuer=f"https://{AUTH0_DOMAIN}/",
         )
         return payload
-    # except jwt.ExpiredSignatureError:
-    #     raise AuthError(detail="Token has expired")
-    # except jwt.JWTClaimsError as e:
-    #     raise AuthError(detail=f"Invalid claims: {e}")
     except Exception as e:
         raise AuthError(detail=f"Unable to parse authentication token: {e}")
+
+
+def get_token_from_cookie(request: Request) -> Optional[str]:
+    """Extracts the JWT from the 'ss-tok' cookie."""
+    return request.cookies.get("ss-tok")
+
+async def get_current_user(
+    request: Request,
+    token_from_cookie: Optional[str] = Depends(get_token_from_cookie),
+    # The default security scheme will try to get the token from the Authorization header
+    token_from_header: Optional[str] = Depends(OAuth2PasswordBearer(tokenUrl="token", auto_error=False)),
+    ) -> Dict[str, Any]:
+    """
+    FastAPI dependency to get the current user from a JWT.
+    It checks for a token in the 'ss-tok' cookie (for browsers) and the
+    'Authorization' header (for other clients).
+    """
+    token = token_from_cookie or token_from_header
+    if token is None:
+        raise AuthError(detail="Authentication token is missing.", status_code=status.HTTP_401_UNAUTHORIZED)
+
+    return verify_jwt_token(token)
