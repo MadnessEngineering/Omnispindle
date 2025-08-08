@@ -47,11 +47,19 @@ from .middleware import (
     ConnectionErrorsMiddleware,
     SuppressNoResponseReturnedMiddleware,
     NoneTypeResponseMiddleware,
-    create_asgi_error_handler
+    create_asgi_error_handler,
+    RateLimitingMiddleware,
+    UserRateLimiter,
+    aget_user_id
 )
-from .sse_handler import sse_handler
-from .auth import get_current_user
+from .sse_handler import sse_handler, new_event_handler
+from .auth import get_current_user, get_current_user_from_query
 from fastapi import Depends, Request
+from Omnispindle.database import db_client
+from Omnispindle.models.config import AuthConfig
+from Omnispindle.mcp_handler import mcp_handler
+from Omnispindle.scheduler import scheduler
+from Omnispindle.todo_log_service import start_todo_log_service
 
 # Configure logger
 MQTT_HOST = os.getenv("MQTT_HOST", "localhost")
@@ -330,6 +338,27 @@ class Omnispindle(FastMCP):
                 # Then apply the connection errors middleware last so it handles any remaining issues
                 app = ConnectionErrorsMiddleware(app)
                 logger.info("Added ConnectionErrorsMiddleware to handle disconnected requests")
+
+                # Add rate limiting middleware
+                limiter = UserRateLimiter(
+                    rate_limit_config={
+                        "default": "100/minute",
+                        "sse": "50/minute",
+                        "mcp": "200/minute"
+                    },
+                    get_user_id_func=aget_user_id
+                )
+                app.add_middleware(RateLimitingMiddleware, limiter=limiter)
+
+                # Add the new /mcp endpoint
+                @app.post("/mcp")
+                async def mcp_endpoint(request: Request, token: str = Depends(get_current_user_from_query)):
+                    return await mcp_handler(request, lambda: get_current_user_from_query(token))
+
+                # Add the existing /sse endpoint
+                @app.get("/sse")
+                async def sse_endpoint(req: Request, user: dict = Depends(get_current_user)):
+                    return await new_event_handler(req, user)
 
             logger.info("Server startup complete, returning ASGI application")
             return app
