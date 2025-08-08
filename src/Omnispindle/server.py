@@ -47,10 +47,7 @@ from .middleware import (
     ConnectionErrorsMiddleware,
     SuppressNoResponseReturnedMiddleware,
     NoneTypeResponseMiddleware,
-    create_asgi_error_handler,
-    RateLimitingMiddleware,
-    UserRateLimiter,
-    aget_user_id
+    create_asgi_error_handler
 )
 from .auth import get_current_user, get_current_user_from_query
 from fastapi import Depends, Request
@@ -335,16 +332,7 @@ class Omnispindle(FastMCP):
                 app = ConnectionErrorsMiddleware(app)
                 logger.info("Added ConnectionErrorsMiddleware to handle disconnected requests")
 
-                # Add rate limiting middleware
-                limiter = UserRateLimiter(
-                    rate_limit_config={
-                        "default": "100/minute",
-                        "mcp": "200/minute",
-                        "mcp": "200/minute"
-                    },
-                    get_user_id_func=aget_user_id
-                )
-                app.add_middleware(RateLimitingMiddleware, limiter=limiter)
+                # Rate limiting middleware removed - not implemented in middleware.py
 
                 # Add the new /mcp endpoint
                 @app.post("/mcp")
