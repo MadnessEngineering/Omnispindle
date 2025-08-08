@@ -52,7 +52,6 @@ from .middleware import (
     UserRateLimiter,
     aget_user_id
 )
-from .sse_handler import sse_handler, new_event_handler
 from .auth import get_current_user, get_current_user_from_query
 from fastapi import Depends, Request
 from Omnispindle.database import db_client
@@ -97,7 +96,7 @@ def publish_mqtt_status(topic, message, retain=False):
 
 
 class Omnispindle(FastMCP):
-    def __init__(self, name: str = "todo-server", server_type: str = "sse"):
+    def __init__(self, name: str = "todo-server", server_type: str = "mcp"):
         global _init_counter, _init_stack_traces
         _init_counter += 1
         current_thread = threading.current_thread().name
@@ -138,7 +137,7 @@ class Omnispindle(FastMCP):
             signal.signal(signal.SIGINT, signal_handler)
             signal.signal(signal.SIGTERM, signal_handler)
 
-            # Custom exception handler to silence specific SSE-related errors
+            # Custom exception handler to silence specific connection errors
             original_excepthook = sys.excepthook
 
             def custom_excepthook(exctype, value, traceback):
@@ -149,7 +148,7 @@ class Omnispindle(FastMCP):
                     return
                 # Handle AnyIO WouldBlock and asyncio CancelledError more gracefully
                 if exctype is anyio.WouldBlock or exctype is asyncio.exceptions.CancelledError:
-                    # These are common with SSE connections when clients disconnect
+                    # These are common when clients disconnect
                     logger.debug(f"Suppressed expected client disconnect error: {exctype.__name__}")
                     return
                 # For all other errors, use the original exception handler
@@ -175,18 +174,15 @@ class Omnispindle(FastMCP):
             logger.debug("Configured root logger")
 
             # Adjust specific loggers
-            # Set SSE-related loggers to less verbose levels
-            # logging.getLogger('sse_starlette').setLevel(logging.INFO)
+            # Set connection-related loggers to appropriate levels
             # logging.getLogger('uvicorn.protocols.http').setLevel(logging.WARNING)
-            # But keep our own SSE handler at DEBUG level
-            # logging.getLogger('Omnispindle.sse_handler').setLevel(logging.DEBUG)
 
             # Run the server
-            logger.info("Calling run_sse_async() to start the server")
-            app = await self.run_sse_async()
+            logger.info("Calling run_server() to start the server")
+            app = await self.run_server()
 
             if app is None:
-                logger.warning("run_sse_async returned None, using dummy fallback app")
+                logger.warning("run_server returned None, using dummy fallback app")
 
                 async def dummy_app(scope: Scope, receive: Receive, send: Send) -> None:
                     """
@@ -254,7 +250,7 @@ class Omnispindle(FastMCP):
                 app = dummy_app
                 logger.info("Fallback dummy app is now active")
             else:
-                logger.info("ASGI application successfully obtained from run_sse_async()")
+                logger.info("ASGI application successfully obtained from run_server()")
 
                 # Add a delay wrapper to ensure initialization is complete before handling requests
                 original_app = app
@@ -264,8 +260,8 @@ class Omnispindle(FastMCP):
                     Wrapper that adds a small delay to ensure server initialization is complete
                     before processing any requests.
                     """
-                    if scope["type"] == "http" and scope.get("path", "") == "/sse":
-                        logger.debug("Delaying SSE connection to ensure initialization is complete")
+                    if scope["type"] == "http" and scope.get("path", "") in ["/mcp", "/sse"]:
+                        logger.debug("Delaying connection to ensure initialization is complete")
                         # Add a small delay to ensure initialization is complete
                         await asyncio.sleep(0.5)
 
@@ -302,9 +298,9 @@ class Omnispindle(FastMCP):
                             # Re-raise any other runtime errors
                             raise
                     except (asyncio.exceptions.CancelledError, anyio.WouldBlock) as e:
-                        # For SSE endpoints, these errors are expected when clients disconnect
-                        if scope["type"] == "http" and scope.get("path", "") == "/sse":
-                            logger.debug(f"Client disconnected from SSE, handling gracefully: {type(e).__name__}")
+                        # For streaming endpoints, these errors are expected when clients disconnect
+                        if scope["type"] == "http" and scope.get("path", "") in ["/mcp", "/sse"]:
+                            logger.debug(f"Client disconnected from streaming endpoint, handling gracefully: {type(e).__name__}")
                             # Send a 204 response to properly close the connection
                             await send({
                                 "type": "http.response.start",
@@ -343,7 +339,7 @@ class Omnispindle(FastMCP):
                 limiter = UserRateLimiter(
                     rate_limit_config={
                         "default": "100/minute",
-                        "sse": "50/minute",
+                        "mcp": "200/minute",
                         "mcp": "200/minute"
                     },
                     get_user_id_func=aget_user_id
@@ -355,10 +351,14 @@ class Omnispindle(FastMCP):
                 async def mcp_endpoint(request: Request, token: str = Depends(get_current_user_from_query)):
                     return await mcp_handler(request, lambda: get_current_user_from_query(token))
 
-                # Add the existing /sse endpoint
+                # Legacy SSE endpoint (deprecated - use /mcp instead)
                 @app.get("/sse")
                 async def sse_endpoint(req: Request, user: dict = Depends(get_current_user)):
-                    return await new_event_handler(req, user)
+                    from starlette.responses import JSONResponse
+                    return JSONResponse(
+                        {"error": "SSE endpoint deprecated", "message": "Use /mcp endpoint instead"}, 
+                        status_code=410  # Gone
+                    )
 
             logger.info("Server startup complete, returning ASGI application")
             return app
