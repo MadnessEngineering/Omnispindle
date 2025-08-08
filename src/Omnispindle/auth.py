@@ -10,7 +10,7 @@ from fastapi.security import OAuth2PasswordBearer, SecurityScopes
 from jose import jwt
 from jose.exceptions import JWTError
 
-from Omnispindle.models.config import AuthConfig
+from .models.config import AuthConfig
 
 logger = logging.getLogger(__name__)
 
