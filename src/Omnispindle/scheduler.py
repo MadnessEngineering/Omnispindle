@@ -19,7 +19,7 @@ from collections import defaultdict
 
 from pymongo import MongoClient
 from .ai_assistant import assistant as todo_assistant
-from . import mqtt_publish
+from .utils import mqtt_publish
 
 # Configure logger
 logger = logging.getLogger(__name__)

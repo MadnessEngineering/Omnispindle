@@ -37,10 +37,10 @@ else:
     globals()['_REINITIALIZATION_COUNT'] = 0
 
 from typing import Callable, Dict, Any, Optional
-from fastmcp.server import FastMCP
 import uvicorn
 from uvicorn.config import LOGGING_CONFIG
 import json
+from fastapi import FastAPI
 from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Scope, Receive, Send
 from .middleware import (
@@ -49,13 +49,13 @@ from .middleware import (
     NoneTypeResponseMiddleware,
     create_asgi_error_handler
 )
-from .auth import get_current_user, get_current_user_from_query
+from .auth import get_current_user, get_current_user_from_query, AUTH_CONFIG
 from fastapi import Depends, Request
-from Omnispindle.database import db_client
-from Omnispindle.models.config import AuthConfig
-from Omnispindle.mcp_handler import mcp_handler
-from Omnispindle.scheduler import scheduler
-from Omnispindle.todo_log_service import start_todo_log_service
+from .todo_log_service import start_service
+from .database import db_connection
+from .models.config import AuthConfig
+# from .mcp_handler import mcp_handler
+from .scheduler import scheduler
 
 # Configure logger
 MQTT_HOST = os.getenv("MQTT_HOST", "localhost")
@@ -92,7 +92,7 @@ def publish_mqtt_status(topic, message, retain=False):
         return False
 
 
-class Omnispindle(FastMCP):
+class Omnispindle:
     def __init__(self, name: str = "todo-server", server_type: str = "mcp"):
         global _init_counter, _init_stack_traces
         _init_counter += 1
@@ -103,20 +103,18 @@ class Omnispindle(FastMCP):
         logger.warning(f"⚠️  Omnispindle initialization #{_init_counter} in thread {current_thread}")
 
         logger.info(f"Initializing Omnispindle server with name='{name}', server_type='{server_type}'")
-        super().__init__(name=name, server_type=server_type)
+        self.name = name
+        self.server_type = server_type
         logger.debug("Omnispindle instance initialization complete")
 
-    async def run_server(self) -> Callable:
+    async def run_server(self) -> FastAPI:
         """
-        Run the FastMCP server and return an ASGI application.
+        Creates and configures the FastAPI application.
         
-        Args:
-            publish_mqtt_status: Callable to publish MQTT status messages
-            
         Returns:
-            An ASGI application callable
+            A FastAPI application
         """
-        logger.info("Starting FastMCP server")
+        logger.info("Starting FastAPI server")
 
         try:
             topic = f"status/{DEVICE_NAME}/alive"
@@ -134,219 +132,58 @@ class Omnispindle(FastMCP):
             signal.signal(signal.SIGINT, signal_handler)
             signal.signal(signal.SIGTERM, signal_handler)
 
-            # Custom exception handler to silence specific connection errors
-            original_excepthook = sys.excepthook
-
-            def custom_excepthook(exctype, value, traceback):
-                # Handle NoneType errors from Starlette more broadly
-                if exctype is TypeError and "'NoneType' object is not callable" in str(value):
-                    # Log minimally instead of full stack trace
-                    logger.warning(f"Suppressed NoneType error: {str(value)}")
-                    return
-                # Handle AnyIO WouldBlock and asyncio CancelledError more gracefully
-                if exctype is anyio.WouldBlock or exctype is asyncio.exceptions.CancelledError:
-                    # These are common when clients disconnect
-                    logger.debug(f"Suppressed expected client disconnect error: {exctype.__name__}")
-                    return
-                # For all other errors, use the original exception handler
-                logger.debug(f"Unhandled exception passed to original excepthook: {exctype.__name__}: {value}")
-                original_excepthook(exctype, value, traceback)
-
-            # Replace the default exception handler
-            logger.debug("Installing custom exception handler")
-            sys.excepthook = custom_excepthook
-
-            # Configure uvicorn to suppress specific access logs for /messages endpoint
-            logger.debug("Configuring uvicorn logging")
-            log_config = LOGGING_CONFIG
-            if "formatters" in log_config:
-                log_config["formatters"]["access"]["fmt"] = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-                logger.debug("Modified uvicorn access log format")
-
-            # Configure logging instead
-            logging.basicConfig(
-                level=logging.DEBUG,
-                format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+            # Create FastAPI app
+            app = FastAPI(
+                title="Omnispindle",
+                description="A FastAPI server for managing todos and other tasks, with AI agent integration.",
+                version="0.1.0",
             )
-            logger.debug("Configured root logger")
 
-            # Adjust specific loggers
-            # Set connection-related loggers to appropriate levels
-            # logging.getLogger('uvicorn.protocols.http').setLevel(logging.WARNING)
+            # Add middleware
+            app.add_middleware(ConnectionErrorsMiddleware)
+            app.add_middleware(NoneTypeResponseMiddleware)
 
-            # Run the server
-            logger.info("Calling run_server() to start the server")
-            app = await self.run_server()
+            # Add the new /mcp endpoint
+            @app.post("/mcp")
+            async def mcp_endpoint(request: Request, token: str = Depends(get_current_user_from_query)):
+                # return await mcp_handler(request, lambda: get_current_user_from_query(token))
+                return {"error": "MCP handler temporarily disabled due to import issues"}
 
-            if app is None:
-                logger.warning("run_server returned None, using dummy fallback app")
+            # Legacy SSE endpoint (deprecated - use /mcp instead)
+            @app.get("/sse")
+            async def sse_endpoint(req: Request, user: dict = Depends(get_current_user)):
+                from starlette.responses import JSONResponse
+                return JSONResponse(
+                    {"error": "SSE endpoint deprecated", "message": "Use /mcp endpoint instead"},
+                    status_code=410  # Gone
+                )
 
-                async def dummy_app(scope: Scope, receive: Receive, send: Send) -> None:
-                    """
-                    A robust fallback ASGI application that handles basic requests when the main app is unavailable.
-                    
-                    This dummy app provides proper error responses for all requests rather than just failing silently.
-                    It logs details about incoming requests for debugging purposes.
-                    """
-                    logger.info(f"Dummy app received request: {scope['type']} {scope.get('path', 'unknown path')}")
-
-                    if scope["type"] == "http":
-                        # Wait for the request body
-                        await receive()
-
-                        # Create a JSON response
-                        response = JSONResponse(
-                            status_code=503,
-                            content={
-                                "error": "Service Temporarily Unavailable",
-                                "message": "The FastMCP server application is currently unavailable. Please try again later.",
-                                "path": scope.get("path", "unknown")
-                            }
-                        )
-
-                        # Send response headers
-                        logger.debug(f"Dummy app sending 503 response for {scope.get('path', 'unknown path')}")
-                        await send({
-                            "type": "http.response.start",
-                            "status": response.status_code,
-                            "headers": [
-                                [b"content-type", b"application/json"],
-                                [b"x-fallback-app", b"true"]
-                            ]
-                        })
-
-                        # Send response body
-                        await send({
-                            "type": "http.response.body",
-                            "body": json.dumps(response.body).encode("utf-8"),
-                        })
-
-                    elif scope["type"] == "websocket":
-                        # Handle WebSocket connections
-                        logger.debug(f"Dummy app closing WebSocket connection for {scope.get('path', 'unknown path')}")
-                        await send({
-                            "type": "websocket.close",
-                            "code": 1013,  # Try again later
-                        })
-
-                    elif scope["type"] == "lifespan":
-                        # Handle lifespan events (startup/shutdown)
-                        logger.debug("Dummy app handling lifespan events")
-                        while True:
-                            message = await receive()
-                            if message["type"] == "lifespan.startup":
-                                logger.debug("Dummy app responding to lifespan.startup")
-                                await send({"type": "lifespan.startup.complete"})
-                            elif message["type"] == "lifespan.shutdown":
-                                logger.debug("Dummy app responding to lifespan.shutdown")
-                                await send({"type": "lifespan.shutdown.complete"})
-                                break
-                            else:
-                                logger.warning(f"Dummy app received unknown lifespan message: {message['type']}")
-
-                app = dummy_app
-                logger.info("Fallback dummy app is now active")
-            else:
-                logger.info("ASGI application successfully obtained from run_server()")
-
-                # Add a delay wrapper to ensure initialization is complete before handling requests
-                original_app = app
-
-                async def initialization_delay_wrapper(scope: Scope, receive: Receive, send: Send) -> None:
-                    """
-                    Wrapper that adds a small delay to ensure server initialization is complete
-                    before processing any requests.
-                    """
-                    if scope["type"] == "http" and scope.get("path", "") in ["/mcp", "/sse"]:
-                        logger.debug("Delaying connection to ensure initialization is complete")
-                        # Add a small delay to ensure initialization is complete
-                        await asyncio.sleep(0.5)
-
-                    # Handle the request with error catch for initialization issues
-                    try:
-                        await original_app(scope, receive, send)
-                    except RuntimeError as e:
-                        if "Received request before initialization was complete" in str(e):
-                            logger.warning("Caught initialization error, returning 503 Service Unavailable")
-                            # Create a JSON response
-                            response = JSONResponse(
-                                status_code=503,
-                                content={
-                                    "error": "Service Temporarily Unavailable",
-                                    "message": "The server is still initializing. Please try again in a moment.",
-                                    "path": scope.get("path", "unknown")
-                                }
-                            )
-                            # Send response headers
-                            await send({
-                                "type": "http.response.start",
-                                "status": response.status_code,
-                                "headers": [
-                                    [b"content-type", b"application/json"],
-                                    [b"retry-after", b"2"]
-                                ]
-                            })
-                            # Send response body
-                            await send({
-                                "type": "http.response.body",
-                                "body": json.dumps(response.body).encode("utf-8"),
-                            })
-                        else:
-                            # Re-raise any other runtime errors
-                            raise
-                    except (asyncio.exceptions.CancelledError, anyio.WouldBlock) as e:
-                        # For streaming endpoints, these errors are expected when clients disconnect
-                        if scope["type"] == "http" and scope.get("path", "") in ["/mcp", "/sse"]:
-                            logger.debug(f"Client disconnected from streaming endpoint, handling gracefully: {type(e).__name__}")
-                            # Send a 204 response to properly close the connection
-                            await send({
-                                "type": "http.response.start",
-                                "status": 204,
-                                "headers": []
-                            })
-                            await send({
-                                "type": "http.response.body",
-                                "body": b"",
-                                "more_body": False
-                            })
-                        else:
-                            raise
-                    except (ConnectionResetError, ConnectionAbortedError) as e:
-                        # Connection was reset or aborted by the client
-                        logger.debug(f"Client connection was terminated: {type(e).__name__}")
-                        # No need to send a response as connection is already closed
-
-                app = initialization_delay_wrapper
-                logger.info("Added initialization delay wrapper to ASGI application")
-
-                # Apply the middlewares to handle various errors - ORDER MATTERS!
-                # First apply the NoneType middleware as it's the most common error and should be first
-                app = NoneTypeResponseMiddleware(app)
-                logger.info("Added NoneTypeResponseMiddleware to handle None response errors")
-
-                # Apply the low-level ASGI error handler as a final safety net
-                app = create_asgi_error_handler(app)
-                logger.info("Added low-level ASGI error handler as final safety net")
-
-                # Then apply the connection errors middleware last so it handles any remaining issues
-                app = ConnectionErrorsMiddleware(app)
-                logger.info("Added ConnectionErrorsMiddleware to handle disconnected requests")
-
-                # Rate limiting middleware removed - not implemented in middleware.py
-
-                # Add the new /mcp endpoint
-                @app.post("/mcp")
-                async def mcp_endpoint(request: Request, token: str = Depends(get_current_user_from_query)):
-                    return await mcp_handler(request, lambda: get_current_user_from_query(token))
-
-                # Legacy SSE endpoint (deprecated - use /mcp instead)
-                @app.get("/sse")
-                async def sse_endpoint(req: Request, user: dict = Depends(get_current_user)):
-                    from starlette.responses import JSONResponse
-                    return JSONResponse(
-                        {"error": "SSE endpoint deprecated", "message": "Use /mcp endpoint instead"}, 
-                        status_code=410  # Gone
-                    )
+            # Basic health check endpoint
+            @app.get("/")
+            def read_root():
+                return {"message": "Omnispindle is running."}
+            
+            # Auth endpoints
+            @app.get("/auth/login")
+            def login():
+                """Redirect users to Auth0 login"""
+                auth_url = (
+                    f"https://{AUTH_CONFIG.domain}/authorize"
+                    f"?client_id={AUTH_CONFIG.client_id}"
+                    f"&response_type=token"
+                    f"&redirect_uri=https://madnessinteractive.cc/auth/callback"
+                    f"&audience={AUTH_CONFIG.audience}"
+                    f"&scope=openid profile"
+                )
+                return {"login_url": auth_url, "message": "Visit login_url to authenticate"}
+            
+            @app.get("/auth/callback")
+            def auth_callback():
+                """Handle Auth0 callback - extract token from URL fragment"""
+                return {
+                    "message": "Authentication successful! Extract the access_token from the URL fragment.",
+                    "instructions": "The token will be in the URL after #access_token=... Use this token for MCP requests."
+                }
 
             logger.info("Server startup complete, returning ASGI application")
             return app

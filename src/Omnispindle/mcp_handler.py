@@ -7,7 +7,7 @@ from typing import AsyncGenerator, Coroutine, Any, Callable
 from starlette.requests import Request
 from starlette.responses import StreamingResponse
 
-from Omnispindle.tools import ToolCall, handle_tool_call
+from .tools import ToolCall, handle_tool_call
 
 logger = logging.getLogger(__name__)
 
