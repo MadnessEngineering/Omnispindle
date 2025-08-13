@@ -11,3 +11,5 @@
 /node_modules
 .cursor/
 .cursorrules
+/omnispindle-auth/node_modules
+/omnispindle-auth/src-tauri
