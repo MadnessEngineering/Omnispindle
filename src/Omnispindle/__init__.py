@@ -329,6 +329,32 @@ class Omnispindle:
             """
             return await tools.search_lessons(query, fields, limit, brief, ctx)
 
+        @self.tool()
+        async def point_out_obvious(observation: str, sarcasm_level: int = 5, ctx: Optional[Context] = None) -> str:
+            """
+            Points out something obvious to the human user with humor.
+
+            observation: The obvious thing to point out.
+            sarcasm_level: Scale from 1-10 (1=gentle, 10=maximum sass).
+            """
+            return await tools.point_out_obvious(observation, sarcasm_level, ctx)
+
+        @self.tool()
+        async def bring_your_own(tool_name: str, code: str, runtime: str = "python", 
+                                timeout: int = 30, args: Optional[Dict[str, Any]] = None,
+                                persist: bool = False, ctx: Optional[Context] = None) -> str:
+            """
+            Temporarily hijack the MCP server to run custom tool code.
+
+            tool_name: Name for the temporary tool.
+            code: The code to execute (must define a main function).
+            runtime: Runtime environment (python, javascript, bash).
+            timeout: Maximum execution time in seconds.
+            args: Arguments to pass to the custom tool.
+            persist: Whether to save this tool for future use.
+            """
+            return await tools.bring_your_own(tool_name, code, runtime, timeout, args, persist, ctx)
+
         tools_to_register = []
         for tool_func in tools_to_register:
             self.tool(name=tool_func.__name__)(tool_func)

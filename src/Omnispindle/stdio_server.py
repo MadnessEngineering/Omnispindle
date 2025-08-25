@@ -292,6 +292,46 @@ class OmniSpindleStdioServer:
             """
             ctx = Context(user=None)
             return await tools.query_todo_logs(filter_type, project, page, page_size, ctx)
+        
+        @self.server.tool()
+        async def point_out_obvious(observation: str, sarcasm_level: int = 5) -> str:
+            """
+            Points out something obvious to the human user with varying levels of humor.
+            Perfect for when the AI needs to highlight the blindingly obvious.
+            
+            Args:
+                observation: The obvious thing to point out
+                sarcasm_level: Scale from 1-10 (1=gentle reminder, 10=maximum sass)
+            
+            Returns:
+                A response highlighting the obvious with appropriate commentary
+            """
+            ctx = Context(user=None)
+            return await tools.point_out_obvious(observation, sarcasm_level, ctx)
+        
+        @self.server.tool()
+        async def bring_your_own(tool_name: str, code: str, runtime: str = "python",
+                                timeout: int = 30, args: Optional[Dict[str, Any]] = None,
+                                persist: bool = False) -> str:
+            """
+            Temporarily hijack the MCP server to run custom tool code.
+            This allows models to define and execute their own tools on the fly.
+            
+            Args:
+                tool_name: Name for the temporary tool
+                code: The code to execute (must define a 'main' function)
+                runtime: Runtime environment (python, javascript, bash)
+                timeout: Maximum execution time in seconds
+                args: Arguments to pass to the custom tool
+                persist: Whether to save this tool for future use
+            
+            Returns:
+                The result of executing the custom tool
+            
+            Security Note: This is intentionally powerful. Use with caution.
+            """
+            ctx = Context(user=None)
+            return await tools.bring_your_own(tool_name, code, runtime, timeout, args, persist, ctx)
     
     async def run(self):
         """Run the stdio server."""
