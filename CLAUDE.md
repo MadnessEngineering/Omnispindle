@@ -6,22 +6,22 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Running the Server
 
-**SSE Web Server (Default)**:
-```bash
-# Development - run the SSE-based MCP server
-python3.11 -m src.Omnispindle
-
-# Using Makefile
-make run  # Runs the server and publishes commit hash to MQTT
-```
-
-**Stdio MCP Server (for Claude Desktop)**:
+**Stdio MCP Server (Primary)**:
 ```bash
 # Run the stdio-based MCP server
 python stdio_main.py
 
 # Or as a module
 python -m src.Omnispindle.stdio_server
+```
+
+**Web Server (for authenticated endpoints)**:
+```bash
+# Development - run the FastAPI web server
+python3.11 -m src.Omnispindle
+
+# Using Makefile
+make run  # Runs the server and publishes commit hash to MQTT
 ```
 
 
@@ -33,9 +33,9 @@ It supports a dashboard
 ### Core Components
 
 **MCP Server (`src/Omnispindle/`)**:
-- `__init__.py` - Main server class with tool registration and FastAPI setup
+- `stdio_server.py` - Primary MCP server using FastMCP with stdio transport
+- `__init__.py` - FastAPI web server for authenticated endpoints
 - `tools.py` - Implementation of all MCP tools for todo/lesson management
-- `server.py` - FastMCP server core (if separate from __init__.py)
 - `database.py` - MongoDB connection and operations
 - `auth.py` - Authentication middleware for web endpoints
 - `middleware.py` - Custom middleware for error handling and logging
@@ -116,29 +116,22 @@ For Claude Desktop stdio transport, configure in `claude_desktop_config.json`:
       "cwd": "/path/to/Omnispindle",
       "env": {
         "MONGODB_URI": "mongodb://localhost:27017",
-        "MONGODB_DB": "swarmonomicon"
+        "MONGODB_DB": "swarmonomicon",
+        "OMNISPINDLE_TOOL_LOADOUT": "basic",
+        "MCP_USER_EMAIL": "user@example.com",
+        "MCP_USER_ID": "auth0|user123"
       }
     }
   }
 }
 ```
 
-For SSE web-based integration (legacy):
-```json
-{
-  "mcpServers": {
-    "omnispindle-sse": {
-      "command": "python",
-      "args": ["-m", "src.Omnispindle"],
-      "cwd": "/path/to/Omnispindle",
-      "env": {
-        "MONGODB_URI": "mongodb://localhost:27017",
-        "MONGODB_DB": "swarmonomicon"
-      }
-    }
-  }
-}
-```
+**Environment-based Authentication**:
+The stdio server supports optional environment-based user context:
+- `MCP_USER_EMAIL` - User's email address
+- `MCP_USER_ID` - User's unique identifier (e.g., from Auth0)
+
+If neither is provided, the server runs without user context (anonymous mode).
 
 ### Development Patterns
 
@@ -165,8 +158,13 @@ Omnispindle supports variable tool loadouts to reduce token usage for AI agents.
 
 **Usage**:
 ```bash
-# Set loadout for current session
+# Set loadout for stdio server
 export OMNISPINDLE_TOOL_LOADOUT=minimal
+export MCP_USER_EMAIL=user@example.com
+python -m src.Omnispindle.stdio_server
+
+# Set loadout for web server
+export OMNISPINDLE_TOOL_LOADOUT=basic
 python -m src.Omnispindle
 
 # Or in Claude Desktop config
@@ -174,7 +172,8 @@ python -m src.Omnispindle
   "mcpServers": {
     "omnispindle": {
       "env": {
-        "OMNISPINDLE_TOOL_LOADOUT": "basic"
+        "OMNISPINDLE_TOOL_LOADOUT": "basic",
+        "MCP_USER_EMAIL": "user@example.com"
       }
     }
   }

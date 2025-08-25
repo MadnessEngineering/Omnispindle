@@ -12,7 +12,6 @@ from .auth import get_current_user
 from .context import Context
 from .middleware import ConnectionErrorsMiddleware, NoneTypeResponseMiddleware, EnhancedLoggingMiddleware
 from .patches import apply_patches
-from .sse_handler import sse_handler
 from . import tools
 
 # --- Initializations ---
@@ -106,36 +105,6 @@ class Omnispindle:
             result = await self.dispatch_tool(tool_name, params, ctx)
             return {"result": str(result) if not isinstance(result, (dict, list, str, int, float, bool, type(None))) else result}
 
-        @app.get("/sse")
-        async def sse_endpoint(request: Request):
-            async def event_generator(req: Request):
-                # First, send the tool information as a handshake
-                tools_info = {}
-                for name, func in self.tools.items():
-                    tools_info[name] = {
-                        "doc": inspect.getdoc(func),
-                        "signature": str(inspect.signature(func)),
-                    }
-                yield {
-                    "event": "tools_info",
-                    "data": json.dumps(tools_info)
-                }
-
-                # Then, enter the ping loop
-                while not await req.is_disconnected():
-                    yield {"event": "ping", "data": "ping"}
-                    await asyncio.sleep(15)
-            return sse_handler.sse_response(request, event_generator)
-
-        @app.get("/sse_authenticated")
-        async def sse_authenticated_endpoint(request: Request, user: dict = Depends(get_current_user)):
-            user_name = user.get("sub", "unknown_user") # Use .get("sub") to get user ID
-            logger.info(f"User {user_name} connected to authenticated SSE stream.")
-            async def user_specific_generator(req: Request):
-                while not await req.is_disconnected():
-                    yield {"event": "user_ping", "data": f"ping for {user_name}"}
-                    await asyncio.sleep(15)
-            return sse_handler.sse_response(request, user_specific_generator)
 
         @app.get("/")
         def read_root():
