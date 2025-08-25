@@ -1,7 +1,8 @@
 import asyncio
 import inspect
 import logging
-from typing import Callable, Dict, Any, Optional, Union
+import os
+from typing import Callable, Dict, Any, Optional, Union, List
 import json
 
 from dotenv import load_dotenv
@@ -19,6 +20,32 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(level
 logger = logging.getLogger(__name__)
 apply_patches()
 load_dotenv()
+
+# Tool loadout configurations
+TOOL_LOADOUTS = {
+    "full": [
+        "add_todo", "query_todos", "update_todo", "delete_todo", "get_todo",
+        "mark_todo_complete", "list_todos_by_status", "search_todos", "list_project_todos",
+        "add_lesson", "get_lesson", "update_lesson", "delete_lesson", "search_lessons",
+        "grep_lessons", "list_lessons", "query_todo_logs", "list_projects",
+        "explain", "add_explanation", "point_out_obvious", "bring_your_own"
+    ],
+    "basic": [
+        "add_todo", "query_todos", "update_todo", "get_todo", "mark_todo_complete",
+        "list_todos_by_status", "list_project_todos"
+    ],
+    "minimal": [
+        "add_todo", "query_todos", "get_todo", "mark_todo_complete"
+    ],
+    "lessons": [
+        "add_lesson", "get_lesson", "update_lesson", "delete_lesson", "search_lessons",
+        "grep_lessons", "list_lessons"
+    ],
+    "admin": [
+        "query_todos", "update_todo", "delete_todo", "query_todo_logs", 
+        "list_projects", "explain", "add_explanation"
+    ]
+}
 
 
 class Omnispindle:
@@ -118,246 +145,55 @@ class Omnispindle:
         return app
 
     def _register_default_tools(self):
-        """Registers all the functions from tools.py."""
+        """Registers tools based on OMNISPINDLE_TOOL_LOADOUT env var."""
+        
+        loadout = os.getenv("OMNISPINDLE_TOOL_LOADOUT", "full").lower()
+        if loadout not in TOOL_LOADOUTS:
+            logger.warning(f"Unknown loadout '{loadout}', using 'full'")
+            loadout = "full"
+        
+        enabled = TOOL_LOADOUTS[loadout]
+        logger.info(f"Loading '{loadout}' loadout: {enabled}")
 
-        @self.tool()
-        async def add_todo(description: str, project: str, priority: str = "Medium", target_agent: str = "user", metadata: Optional[Dict[str, Any]] = None, ctx: Optional[Context] = None) -> str:
-            """
-            Adds a new todo item.
+        # Tool registry - keeps AI docstrings minimal
+        tool_registry = {
+            "add_todo": (tools.add_todo, "Creates a task in the specified project with the given priority and target agent. Returns a compact representation of the created todo with an ID for reference."),
+            "query_todos": (tools.query_todos, "Query todos with flexible filtering options. Searches the todo database using MongoDB-style query filters and projections."),
+            "update_todo": (tools.update_todo, "Update a todo with the provided changes. Common fields to update: description, priority, status, metadata."),
+            "delete_todo": (tools.delete_todo, "Delete a todo by its ID."),
+            "get_todo": (tools.get_todo, "Get a specific todo by ID."),
+            "mark_todo_complete": (tools.mark_todo_complete, "Mark a todo as completed. Calculates the duration from creation to completion."),
+            "list_todos_by_status": (tools.list_todos_by_status, "List todos filtered by status ('initial', 'pending', 'completed'). Results are formatted for efficiency with truncated descriptions."),
+            "search_todos": (tools.search_todos, "Search todos with text search capabilities across specified fields. Special format: \"project:ProjectName\" to search by project."),
+            "list_project_todos": (tools.list_project_todos, "List recent active todos for a specific project."),
+            "add_lesson": (tools.add_lesson, "Add a new lesson learned to the knowledge base."),
+            "get_lesson": (tools.get_lesson, "Get a specific lesson by ID."),
+            "update_lesson": (tools.update_lesson, "Update an existing lesson by ID."),
+            "delete_lesson": (tools.delete_lesson, "Delete a lesson by ID."),
+            "search_lessons": (tools.search_lessons, "Search lessons with text search capabilities."),
+            "grep_lessons": (tools.grep_lessons, "Search lessons with grep-style pattern matching across topic and content."),
+            "list_lessons": (tools.list_lessons, "List all lessons, sorted by creation date."),
+            "query_todo_logs": (tools.query_todo_logs, "Query todo logs with filtering options."),
+            "list_projects": (tools.list_projects, "List all valid projects from the centralized project management system. `include_details`: False (names only), True (full metadata), \"filemanager\" (for UI)."),
+            "explain": (tools.explain_tool, "Provides a detailed explanation for a project or concept. For projects, it dynamically generates a summary with recent activity."),
+            "add_explanation": (tools.add_explanation, "Add a new static explanation to the knowledge base."),
+            "point_out_obvious": (tools.point_out_obvious, "Points out something obvious to the human user with humor."),
+            "bring_your_own": (tools.bring_your_own, "Temporarily hijack the MCP server to run custom tool code.")
+        }
 
-            description: The task description.
-            project: The project the task belongs to.
-            priority: The priority of the task (Low, Medium, High).
-            target_agent: The agent the task is for.
-            metadata: Optional metadata for the task.
-            """
-            return await tools.add_todo(description, project, priority, target_agent, metadata, ctx)
-
-        @self.tool()
-        async def query_todos(filter: Optional[Dict[str, Any]] = None, projection: Optional[Dict[str, Any]] = None, limit: int = 100, ctx: Optional[Context] = None) -> str:
-            """
-            Queries for todo items.
-
-            filter: a dict of mongo query filters
-            projection: a dict of mongo query projections
-            limit: max number of results
-            """
-            return await tools.query_todos(filter, projection, limit, ctx)
-
-        @self.tool()
-        async def update_todo(todo_id: str, updates: dict, ctx: Optional[Context] = None) -> str:
-            """
-            Updates a todo item.
-
-            todo_id: The ID of the todo to update.
-            updates: A dictionary of fields to update.
-            """
-            return await tools.update_todo(todo_id, updates, ctx)
-
-        @self.tool()
-        async def delete_todo(todo_id: str, ctx: Optional[Context] = None) -> str:
-            """
-            Deletes a todo item.
-
-            todo_id: The ID of the todo to delete.
-            """
-            return await tools.delete_todo(todo_id, ctx)
-
-        @self.tool()
-        async def get_todo(todo_id: str, ctx: Optional[Context] = None) -> str:
-            """
-            Gets a single todo item.
-
-            todo_id: The ID of the todo to get.
-            """
-            return await tools.get_todo(todo_id, ctx)
-
-        @self.tool()
-        async def mark_todo_complete(todo_id: str, comment: Optional[str] = None, ctx: Optional[Context] = None) -> str:
-            """
-            Marks a todo as complete.
-
-            todo_id: The ID of the todo to mark as complete.
-            comment: An optional comment.
-            """
-            return await tools.mark_todo_complete(todo_id, comment, ctx)
-
-        @self.tool()
-        async def list_todos_by_status(status: str, limit: int = 100, ctx: Optional[Context] = None) -> str:
-            """
-            Lists todos by status.
-
-            status: The status to filter by (e.g., "pending", "completed").
-            limit: The maximum number of todos to return.
-            """
-            return await tools.list_todos_by_status(status, limit, ctx)
-
-        @self.tool()
-        async def add_lesson(language: str, topic: str, lesson_learned: str, tags: Optional[list] = None, ctx: Optional[Context] = None) -> str:
-            """
-            Adds a new lesson to the knowledge base.
-
-            language: The programming language or technology.
-            topic: A brief summary of the lesson.
-            lesson_learned: The full content of the lesson.
-            tags: Optional list of tags.
-            """
-            return await tools.add_lesson(language, topic, lesson_learned, tags, ctx)
-
-        @self.tool()
-        async def get_lesson(lesson_id: str, ctx: Optional[Context] = None) -> str:
-            """
-            Gets a single lesson.
-
-            lesson_id: The ID of the lesson to get.
-            """
-            return await tools.get_lesson(lesson_id, ctx)
-
-        @self.tool()
-        async def update_lesson(lesson_id: str, updates: dict, ctx: Optional[Context] = None) -> str:
-            """
-            Updates a lesson.
-
-            lesson_id: The ID of the lesson to update.
-            updates: A dictionary of fields to update.
-            """
-            return await tools.update_lesson(lesson_id, updates, ctx)
-
-        @self.tool()
-        async def delete_lesson(lesson_id: str, ctx: Optional[Context] = None) -> str:
-            """
-            Deletes a lesson.
-
-            lesson_id: The ID of the lesson to delete.
-            """
-            return await tools.delete_lesson(lesson_id, ctx)
-
-        @self.tool()
-        async def search_todos(query: str, fields: Optional[list] = None, limit: int = 100, ctx: Optional[Context] = None) -> str:
-            """
-            Searches for todos.
-
-            query: The search query.
-            fields: Optional list of fields to search.
-            limit: The maximum number of results to return.
-            """
-            return await tools.search_todos(query, fields, limit, ctx)
-
-        @self.tool()
-        async def grep_lessons(pattern: str, limit: int = 20, ctx: Optional[Context] = None) -> str:
-            """
-            Searches lessons with a regex pattern.
-
-            pattern: The regex pattern to search for.
-            limit: The maximum number of results to return.
-            """
-            return await tools.grep_lessons(pattern, limit, ctx)
-
-        @self.tool()
-        async def list_project_todos(project: str, limit: int = 5, ctx: Optional[Context] = None) -> str:
-            """
-            Lists recent todos for a project.
-
-            project: The project to list todos for.
-            limit: The maximum number of todos to return.
-            """
-            return await tools.list_project_todos(project, limit, ctx)
-
-        @self.tool()
-        async def query_todo_logs(filter_type: str = 'all', project: str = 'all', page: int = 1, page_size: int = 20, ctx: Optional[Context] = None) -> str:
-            """
-            Queries todo logs.
-
-            filter_type: The type of filter to apply.
-            project: The project to filter by.
-            page: The page number to return.
-            page_size: The number of results per page.
-            """
-            return await tools.query_todo_logs(filter_type, project, page, page_size, ctx)
-
-        @self.tool()
-        async def list_projects(include_details: Union[bool, str] = False, madness_root: str = "/Users/d.edens/lab/madness_interactive", ctx: Optional[Context] = None) -> str:
-            """
-            Lists all projects.
-
-            include_details: Whether to include detailed project information.
-            madness_root: The root directory of the madness interactive project.
-            """
-            return await tools.list_projects(include_details, madness_root, ctx)
-
-        @self.tool()
-        async def explain(topic: str, brief: bool = False, ctx: Optional[Context] = None) -> str:
-            """
-            Explains a topic.
-
-            topic: The topic to explain.
-            brief: Whether to return a brief explanation.
-            """
-            return await tools.explain_tool(topic, brief, ctx)
-
-        @self.tool()
-        async def add_explanation(topic: str, content: str, kind: str = "concept", author: str = "system", ctx: Optional[Context] = None) -> str:
-            """
-            Adds an explanation to the knowledge base.
-
-            topic: The topic of the explanation.
-            content: The content of the explanation.
-            kind: The kind of explanation.
-            author: The author of the explanation.
-            """
-            return await tools.add_explanation(topic, content, kind, author, ctx)
-
-        @self.tool()
-        async def list_lessons(limit: int = 100, brief: bool = False, ctx: Optional[Context] = None) -> str:
-            """
-            Lists all lessons.
-
-            limit: The maximum number of lessons to return.
-            brief: Whether to return a brief listing.
-            """
-            return await tools.list_lessons(limit, brief, ctx)
-
-        @self.tool()
-        async def search_lessons(query: str, fields: Optional[list] = None, limit: int = 100, brief: bool = False, ctx: Optional[Context] = None) -> str:
-            """
-            Searches for lessons.
-
-            query: The search query.
-            fields: Optional list of fields to search.
-            limit: The maximum number of results to return.
-            brief: Whether to return a brief listing.
-            """
-            return await tools.search_lessons(query, fields, limit, brief, ctx)
-
-        @self.tool()
-        async def point_out_obvious(observation: str, sarcasm_level: int = 5, ctx: Optional[Context] = None) -> str:
-            """
-            Points out something obvious to the human user with humor.
-
-            observation: The obvious thing to point out.
-            sarcasm_level: Scale from 1-10 (1=gentle, 10=maximum sass).
-            """
-            return await tools.point_out_obvious(observation, sarcasm_level, ctx)
-
-        @self.tool()
-        async def bring_your_own(tool_name: str, code: str, runtime: str = "python", 
-                                timeout: int = 30, args: Optional[Dict[str, Any]] = None,
-                                persist: bool = False, ctx: Optional[Context] = None) -> str:
-            """
-            Temporarily hijack the MCP server to run custom tool code.
-
-            tool_name: Name for the temporary tool.
-            code: The code to execute (must define a main function).
-            runtime: Runtime environment (python, javascript, bash).
-            timeout: Maximum execution time in seconds.
-            args: Arguments to pass to the custom tool.
-            persist: Whether to save this tool for future use.
-            """
-            return await tools.bring_your_own(tool_name, code, runtime, timeout, args, persist, ctx)
-
-        tools_to_register = []
-        for tool_func in tools_to_register:
-            self.tool(name=tool_func.__name__)(tool_func)
+        # Register enabled tools
+        for tool_name in enabled:
+            if tool_name in tool_registry:
+                func, doc = tool_registry[tool_name]
+                
+                # Create closure to capture func properly
+                def make_wrapper(f, docstring):
+                    async def wrapper(*args, ctx: Optional[Context] = None, **kwargs):
+                        return await f(*args, ctx=ctx, **kwargs)
+                    wrapper.__doc__ = docstring
+                    return wrapper
+                
+                self.tool(tool_name)(make_wrapper(func, doc))
 
 # --- Server Instantiation ---
 server = Omnispindle()

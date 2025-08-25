@@ -102,6 +102,7 @@ The server exposes standardized MCP tools that AI agents can call:
 - `MONGODB_DB` - Database name (default: swarmonomicon)
 - `MQTT_HOST` / `MQTT_PORT` - MQTT broker settings
 - `AI_API_ENDPOINT` / `AI_MODEL` - AI integration (optional)
+- `OMNISPINDLE_TOOL_LOADOUT` - Tool loadout configuration (see Tool Loadouts below)
 
 **MCP Integration**: 
 
@@ -150,3 +151,32 @@ For SSE web-based integration (legacy):
 **Git Workflow**: Deployment handled through git hooks - commit when ready to deploy.
 
 **Node-RED Integration**: Dashboard components are extracted to separate files for version control, then imported into Node-RED editor.
+
+### Tool Loadouts
+
+Omnispindle supports variable tool loadouts to reduce token usage for AI agents. Configure via the `OMNISPINDLE_TOOL_LOADOUT` environment variable:
+
+**Available Loadouts**:
+- `full` (default) - All 22 tools available
+- `basic` - Essential todo management (7 tools): add_todo, query_todos, update_todo, get_todo, mark_todo_complete, list_todos_by_status, list_project_todos
+- `minimal` - Core functionality only (4 tools): add_todo, query_todos, get_todo, mark_todo_complete
+- `lessons` - Knowledge management focus (7 tools): add_lesson, get_lesson, update_lesson, delete_lesson, search_lessons, grep_lessons, list_lessons
+- `admin` - Administrative tools (6 tools): query_todos, update_todo, delete_todo, query_todo_logs, list_projects, explain, add_explanation
+
+**Usage**:
+```bash
+# Set loadout for current session
+export OMNISPINDLE_TOOL_LOADOUT=minimal
+python -m src.Omnispindle
+
+# Or in Claude Desktop config
+{
+  "mcpServers": {
+    "omnispindle": {
+      "env": {
+        "OMNISPINDLE_TOOL_LOADOUT": "basic"
+      }
+    }
+  }
+}
+```
