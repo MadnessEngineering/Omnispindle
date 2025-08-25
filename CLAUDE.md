@@ -127,11 +127,17 @@ For Claude Desktop stdio transport, configure in `claude_desktop_config.json`:
 ```
 
 **Environment-based Authentication**:
-The stdio server supports optional environment-based user context:
-- `MCP_USER_EMAIL` - User's email address
-- `MCP_USER_ID` - User's unique identifier (e.g., from Auth0)
+The stdio server REQUIRES environment-based user context for security:
+- `MCP_USER_EMAIL` - User's email address (required)
+- `MCP_USER_ID` - User's unique identifier (optional, defaults to email)
 
-If neither is provided, the server runs without user context (anonymous mode).
+**Authentication Setup**:
+Run the Auth0 CLI setup to get your credentials:
+```bash
+python -m src.Omnispindle auth --setup
+```
+
+This will open your browser, authenticate with Auth0, and generate the MCP configuration file with your credentials.
 
 ### Development Patterns
 

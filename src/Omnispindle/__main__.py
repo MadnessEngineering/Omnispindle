@@ -7,6 +7,7 @@ from .server import Omnispindle
 import sys
 import shutil
 import subprocess
+import argparse
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -15,6 +16,64 @@ logger = logging.getLogger(__name__)
 MOSQUITTO_PUB_AVAILABLE = shutil.which("mosquitto_pub") is not None
 
 def main():
+    """Main CLI entry point with subcommands."""
+    parser = argparse.ArgumentParser(
+        description="Omnispindle MCP Server Management",
+        prog="python -m src.Omnispindle"
+    )
+    
+    subparsers = parser.add_subparsers(dest="command", help="Available commands")
+    
+    # Auth command
+    auth_parser = subparsers.add_parser("auth", help="Authentication setup")
+    auth_parser.add_argument("--setup", action="store_true", help="Run Auth0 setup flow")
+    auth_parser.add_argument("--no-save", action="store_true", help="Don't save config file")
+    auth_parser.add_argument("--output", "-o", help="Output path for config file")
+    
+    # Server command (default behavior)
+    server_parser = subparsers.add_parser("server", help="Run the web server (default)")
+    
+    # Parse arguments
+    args = parser.parse_args()
+    
+    if args.command == "auth":
+        if args.setup:
+            asyncio.run(run_auth_setup(args))
+        else:
+            auth_parser.print_help()
+        return
+    
+    # Default behavior or explicit server command - run the web server
+    run_web_server()
+
+
+def run_auth_setup(args):
+    """Run the Auth0 setup flow."""
+    async def setup():
+        try:
+            from .auth_setup import Auth0CLISetup
+            
+            setup_handler = Auth0CLISetup()
+            result = await setup_handler.run_setup(save_config=not args.no_save)
+            
+            if args.output and not args.no_save:
+                setup_handler.save_config(result["mcp_config"], args.output)
+                print(f"💾 Config also saved to: {args.output}")
+                
+        except ImportError as e:
+            print(f"❌ Auth setup requires additional dependencies: {e}")
+            print("💡 Try: pip install requests")
+        except KeyboardInterrupt:
+            print("\n❌ Setup cancelled by user")
+        except Exception as e:
+            print(f"❌ Setup failed: {e}")
+            sys.exit(1)
+    
+    return setup()
+
+
+def run_web_server():
+    """Run the web server (original main functionality)."""
     logger.info("Omnispindle beginning spin")
 
     # Print a warning if mosquitto_pub is not available

@@ -56,17 +56,24 @@ TOOL_LOADOUTS = {
 
 
 def _create_context() -> Context:
-    """Create a context object with optional environment-based user information."""
+    """Create a context object with REQUIRED environment-based user information."""
     user_email = os.getenv("MCP_USER_EMAIL")
     user_id = os.getenv("MCP_USER_ID") 
     
-    user = None
-    if user_email or user_id:
-        user = {
-            "email": user_email,
-            "sub": user_id or user_email,  # Use email as fallback ID
-        }
-        logger.info(f"Using environment auth: {user_email or user_id}")
+    if not user_email and not user_id:
+        logger.error("❌ Authentication required for STDIO MCP server")
+        logger.error("💡 Setup authentication with: python -m src.Omnispindle auth --setup")
+        logger.error("🔑 Or manually set: MCP_USER_EMAIL and/or MCP_USER_ID environment variables")
+        raise ValueError(
+            "Authentication required: MCP_USER_EMAIL or MCP_USER_ID must be set. "
+            "Run 'python -m src.Omnispindle auth --setup' to configure authentication."
+        )
+    
+    user = {
+        "email": user_email,
+        "sub": user_id or user_email,  # Use email as fallback ID
+    }
+    logger.info(f"🔐 Authenticated user: {user_email or user_id}")
     
     return Context(user=user)
 
