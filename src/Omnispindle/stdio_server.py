@@ -57,21 +57,35 @@ TOOL_LOADOUTS = {
 
 def _create_context() -> Context:
     """Create a context object with REQUIRED environment-based user information."""
+    # Check for API key first, then fall back to email/user_id
+    api_key = os.getenv("MCP_API_KEY")
     user_email = os.getenv("MCP_USER_EMAIL")
     user_id = os.getenv("MCP_USER_ID") 
+    
+    if api_key:
+        # Use API key authentication - we'll trust the API key format validation
+        # This allows using API keys from the Inventorium dashboard
+        logger.info(f"🔐 Using API key authentication: {api_key[:12]}...")
+        user = {
+            "email": "api-key-user",  # Placeholder - real validation would happen server-side
+            "sub": api_key[:16],  # Use key prefix as identifier
+            "auth_method": "api_key"
+        }
+        return Context(user=user)
     
     if not user_email and not user_id:
         logger.error("❌ Authentication required for STDIO MCP server")
         logger.error("💡 Setup authentication with: python -m src.Omnispindle auth --setup")
-        logger.error("🔑 Or manually set: MCP_USER_EMAIL and/or MCP_USER_ID environment variables")
+        logger.error("🔑 Or manually set: MCP_USER_EMAIL, MCP_USER_ID, or MCP_API_KEY environment variables")
         raise ValueError(
-            "Authentication required: MCP_USER_EMAIL or MCP_USER_ID must be set. "
+            "Authentication required: MCP_USER_EMAIL, MCP_USER_ID, or MCP_API_KEY must be set. "
             "Run 'python -m src.Omnispindle auth --setup' to configure authentication."
         )
     
     user = {
         "email": user_email,
         "sub": user_id or user_email,  # Use email as fallback ID
+        "auth_method": "environment"
     }
     logger.info(f"🔐 Authenticated user: {user_email or user_id}")
     
