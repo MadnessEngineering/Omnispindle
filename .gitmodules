@@ -1,3 +1,6 @@
 [submodule "omnispindle-auth"]
 	path = omnispindle-auth
 	url = https://github.com/MadnessEngineering/omnispindle-auth
+[submodule "OmniTerraformer"]
+	path = OmniTerraformer
+	url = https://github.com/MadnessEngineering/OmniTerraformer
