@@ -325,10 +325,11 @@ async def add_todo(description: str, project: str, priority: str = "Medium", tar
     Returns a compact representation of the created todo with an ID for reference.
     """
     todo_id = str(uuid.uuid4())
+    validated_project = validate_project_name(project)
     todo = {
         "id": todo_id,
         "description": description,
-        "project": validate_project_name(project),
+        "project": validated_project,
         "priority": priority,
         "status": "pending",
         "target_agent": target_agent,
@@ -340,14 +341,30 @@ async def add_todo(description: str, project: str, priority: str = "Medium", tar
         user_email = ctx.user.get("email", "anonymous") if ctx and ctx.user else "anonymous"
         logger.info(f"Todo created by {user_email}: {todo_id}")
         await log_todo_create(todo_id, description, project, user_email)
+
+        # Get project todo counts
+        pipeline = [
+            {"$match": {"project": validated_project}},
+            {"$group": {"_id": "$status", "count": {"$sum": 1}}}
+        ]
+        counts = list(db_connection.todos.aggregate(pipeline))
+        project_counts = {
+            "pending": 0,
+            "completed": 0,
+        }
+        for status_count in counts:
+            if status_count["_id"] in project_counts:
+                project_counts[status_count["_id"]] = status_count["count"]
+
         return create_response(True,
             {
                 "operation": "create",
                 "status": "success",
                 "todo_id": todo_id,
                 "description": description[:40] + ("..." if len(description) > 40 else ""),
+                "project_counts": project_counts
             },
-            message=f"Todo '{description}' created successfully with ID {todo_id}."
+            message=f"Todo '{description[:30]}...' created in '{validated_project}'. Pending: {project_counts['pending']}, Completed: {project_counts['completed']}."
         )
     except Exception as e:
         logger.error(f"Failed to create todo: {str(e)}")
