@@ -13,3 +13,4 @@
 .cursorrules
 /omnispindle-auth/node_modules
 /omnispindle-auth/src-tauri
+.DS_Store
