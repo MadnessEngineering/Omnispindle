@@ -146,8 +146,8 @@ class Omnispindle:
             # Add the new /mcp endpoint
             @app.post("/mcp")
             async def mcp_endpoint(request: Request, token: str = Depends(get_current_user_from_query)):
-                # return await mcp_handler(request, lambda: get_current_user_from_query(token))
-                return {"error": "MCP handler temporarily disabled due to import issues"}
+                from .mcp_handler import mcp_handler
+                return await mcp_handler(request, lambda: get_current_user_from_query(token))
 
             # Legacy SSE endpoint (deprecated - use /mcp instead)
             @app.get("/sse")
@@ -183,6 +183,33 @@ class Omnispindle:
                 return {
                     "message": "Authentication successful! Extract the access_token from the URL fragment.",
                     "instructions": "The token will be in the URL after #access_token=... Use this token for MCP requests."
+                }
+
+            # OAuth discovery endpoints
+            @app.get("/.well-known/oauth-protected-resource")
+            def oauth_protected_resource():
+                """OAuth 2.0 Protected Resource metadata"""
+                return {
+                    "resource": f"https://madnessinteractive.cc/mcp",
+                    "authorization_servers": [f"https://{AUTH_CONFIG.domain}"]
+                }
+
+            @app.get("/.well-known/oauth-authorization-server")
+            def oauth_authorization_server():
+                """OAuth 2.0 Authorization Server metadata"""
+                return {
+                    "issuer": f"https://{AUTH_CONFIG.domain}",
+                    "authorization_endpoint": f"https://{AUTH_CONFIG.domain}/authorize",
+                    "token_endpoint": f"https://{AUTH_CONFIG.domain}/oauth/token",
+                    "jwks_uri": f"https://{AUTH_CONFIG.domain}/.well-known/jwks.json"
+                }
+
+            @app.post("/register")
+            def client_registration():
+                """Dynamic client registration endpoint"""
+                return {
+                    "client_id": AUTH_CONFIG.client_id,
+                    "message": "Use the provided client_id for authentication"
                 }
 
             logger.info("Server startup complete, returning ASGI application")

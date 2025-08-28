@@ -83,12 +83,75 @@ Part of the Madness Interactive ecosystem:
 # Run tests
 pytest tests/
 
-# Start web server (for auth endpoints)
+# Start STDIO MCP server (for Claude Desktop)
+python stdio_main.py
+
+# Start HTTP MCP server (for remote access)
 python -m src.Omnispindle
 
 # Check tool registration
 python -c "from src.Omnispindle.stdio_server import OmniSpindleStdioServer; print(len(OmniSpindleStdioServer().server._tools))"
 ```
+
+## Production Deployment
+
+### Option 1: Local STDIO (Claude Desktop)
+```bash
+python stdio_main.py
+```
+Configure in Claude Desktop:
+```json
+{
+  "mcpServers": {
+    "omnispindle": {
+      "command": "python",
+      "args": ["stdio_main.py"],
+      "cwd": "/path/to/Omnispindle",
+      "env": {
+        "MCP_USER_EMAIL": "your@email.com",
+        "OMNISPINDLE_TOOL_LOADOUT": "basic"
+      }
+    }
+  }
+}
+```
+
+### Option 2: Remote HTTP (Cloudflare Protected)
+```bash
+# Start HTTP server
+python -m src.Omnispindle
+
+# Deploy infrastructure
+cd OmniTerraformer/
+./deploy.sh
+```
+Configure MCP client:
+```json
+{
+  "mcpServers": {
+    "omnispindle": {
+      "command": "mcp-remote", 
+      "args": ["https://madnessinteractive.cc/mcp/"]
+    }
+  }
+}
+```
+
+## Privacy & Security
+
+**This repository contains sensitive configurations:**
+- Auth0 client credentials and domain settings
+- Database connection strings and API endpoints  
+- MCP tool implementations with business logic
+- Infrastructure as Code with account identifiers
+
+**For production use:**
+- Fork this repository for your own organization
+- Update all authentication providers and credentials
+- Configure your own domain and SSL certificates
+- Review and modify tool permissions as needed
+
+**Not recommended for public deployment without modification.**
 
 ## Philosophy
 
