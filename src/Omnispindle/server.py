@@ -143,8 +143,8 @@ class Omnispindle:
             app.add_middleware(ConnectionErrorsMiddleware)
             app.add_middleware(NoneTypeResponseMiddleware)
 
-            # Add the new /mcp endpoint
-            @app.post("/mcp")
+            # Add the new /api/mcp endpoint
+            @app.post("/api/mcp")
             async def mcp_endpoint(request: Request, token: str = Depends(get_current_user_from_query)):
                 from .mcp_handler import mcp_handler
                 return await mcp_handler(request, lambda: get_current_user_from_query(token))
@@ -158,26 +158,27 @@ class Omnispindle:
                     status_code=410  # Gone
                 )
 
-            # Basic health check endpoint
+            # Root endpoint - redirect to login
             @app.get("/")
             def read_root():
-                return {"message": "Omnispindle is running."}
+                from starlette.responses import RedirectResponse
+                return RedirectResponse(url="/login", status_code=302)
             
             # Auth endpoints
-            @app.get("/auth/login")
+            @app.get("/api/auth/login")
             def login():
                 """Redirect users to Auth0 login"""
                 auth_url = (
                     f"https://{AUTH_CONFIG.domain}/authorize"
                     f"?client_id={AUTH_CONFIG.client_id}"
                     f"&response_type=token"
-                    f"&redirect_uri=https://madnessinteractive.cc/auth/callback"
+                    f"&redirect_uri=https://madnessinteractive.cc/api/auth/callback"
                     f"&audience={AUTH_CONFIG.audience}"
                     f"&scope=openid profile"
                 )
                 return {"login_url": auth_url, "message": "Visit login_url to authenticate"}
             
-            @app.get("/auth/callback")
+            @app.get("/api/auth/callback")
             def auth_callback():
                 """Handle Auth0 callback - extract token from URL fragment"""
                 return {
@@ -186,15 +187,15 @@ class Omnispindle:
                 }
 
             # OAuth discovery endpoints
-            @app.get("/.well-known/oauth-protected-resource")
+            @app.get("/api/.well-known/oauth-protected-resource")
             def oauth_protected_resource():
                 """OAuth 2.0 Protected Resource metadata"""
                 return {
-                    "resource": f"https://madnessinteractive.cc/mcp",
+                    "resource": f"https://madnessinteractive.cc/api/mcp",
                     "authorization_servers": [f"https://{AUTH_CONFIG.domain}"]
                 }
 
-            @app.get("/.well-known/oauth-authorization-server")
+            @app.get("/api/.well-known/oauth-authorization-server")
             def oauth_authorization_server():
                 """OAuth 2.0 Authorization Server metadata"""
                 return {
@@ -204,7 +205,7 @@ class Omnispindle:
                     "jwks_uri": f"https://{AUTH_CONFIG.domain}/.well-known/jwks.json"
                 }
 
-            @app.post("/register")
+            @app.post("/api/register")
             def client_registration():
                 """Dynamic client registration endpoint"""
                 return {

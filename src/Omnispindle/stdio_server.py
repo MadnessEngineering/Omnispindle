@@ -16,6 +16,11 @@ import os
 import sys
 from typing import Dict, Any, Optional
 
+from jose import jwt
+from jose.exceptions import JWTError
+
+from .auth import get_jwks, AUTH_CONFIG
+from .auth_flow import ensure_authenticated, run_async_in_thread
 from fastmcp import FastMCP
 from .context import Context
 from . import tools
@@ -55,8 +60,81 @@ TOOL_LOADOUTS = {
 }
 
 
+async def verify_auth0_token(token: str) -> Optional[Dict[str, Any]]:
+    """Verifies an Auth0 token and returns the payload."""
+    try:
+        unverified_header = jwt.get_unverified_header(token)
+        jwks = get_jwks()
+        rsa_key = {}
+        for key in jwks["keys"]:
+            if key["kid"] == unverified_header["kid"]:
+                rsa_key = {
+                    "kty": key["kty"],
+                    "kid": key["kid"],
+                    "use": key["use"],
+                    "n": key["n"],
+                    "e": key["e"],
+                }
+                break
+
+        if not rsa_key:
+            logger.error("Unable to find appropriate key in JWKS")
+            return None
+
+        payload = jwt.decode(
+            token,
+            rsa_key,
+            algorithms=["RS256"],
+            audience=AUTH_CONFIG.audience,
+            issuer=f"https://{AUTH_CONFIG.domain}/",
+        )
+        return payload
+
+    except JWTError as e:
+        logger.error(f"JWT Error: {e}")
+        return None
+    except Exception as e:
+        logger.error(f"An unexpected error occurred during token verification: {e}")
+        return None
+
+
 def _create_context() -> Context:
     """Create a context object with REQUIRED environment-based user information."""
+    # Priority 1: Auth0 Token
+    auth0_token = os.getenv("AUTH0_TOKEN")
+    
+    # If no token, trigger browser-based authentication
+    if not auth0_token:
+        logger.info("No AUTH0_TOKEN found, initiating browser-based authentication...")
+        try:
+            auth0_token = ensure_authenticated()
+        except RuntimeError as e:
+            logger.error(f"Authentication failed: {e}")
+            # Fall back to other methods
+            pass
+    
+    if auth0_token:
+        logger.info("🔐 Found AUTH0_TOKEN, attempting verification...")
+        # Note: This is a blocking call in an async context.
+        # For stdio server, this is acceptable as it runs once at the start
+        # of each tool call.
+        user_payload = {}
+        
+        async def verify_token_async():
+            nonlocal user_payload
+            payload = await verify_auth0_token(auth0_token)
+            if payload:
+                user_payload.update(payload)
+        
+        run_async_in_thread(verify_token_async())
+        
+        if user_payload:
+            user_payload["auth_method"] = "auth0"
+            logger.info(f"Authenticated via Auth0: {user_payload.get('sub')}")
+            return Context(user=user_payload)
+        else:
+            logger.error("Auth0 token verification failed. Falling back.")
+
     # Check for API key first, then fall back to email/user_id
     api_key = os.getenv("MCP_API_KEY")
     user_email = os.getenv("MCP_USER_EMAIL")
@@ -77,6 +155,7 @@ def _create_context() -> Context:
         logger.error("❌ Authentication required for STDIO MCP server")
         logger.error("💡 Setup authentication with: python -m src.Omnispindle auth --setup")
         logger.error("🔑 Or manually set: MCP_USER_EMAIL, MCP_USER_ID, or MCP_API_KEY environment variables")
+        logger.error("🔑 Alternatively, provide an AUTH0_TOKEN for secure authentication.")
         raise ValueError(
             "Authentication required: MCP_USER_EMAIL, MCP_USER_ID, or MCP_API_KEY must be set. "
             "Run 'python -m src.Omnispindle auth --setup' to configure authentication."

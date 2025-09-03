@@ -25,33 +25,40 @@ Omnispindle is the coordination layer of the Madness Interactive ecosystem. It p
 
 ## Quick Start
 
-```bash
-# Install dependencies
-pip install -r requirements.txt
+### Automatic Authentication (Zero Config!)
 
-# Set up authentication
-python -m src.Omnispindle auth --setup
+Just add Omnispindle to your MCP client:
 
-# Run the MCP server
-python stdio_main.py
-```
-
-Add to your Claude Desktop config:
 ```json
 {
   "mcpServers": {
     "omnispindle": {
       "command": "python",
-      "args": ["stdio_main.py"],
-      "cwd": "/path/to/Omnispindle",
-      "env": {
-        "OMNISPINDLE_TOOL_LOADOUT": "basic",
-        "MCP_USER_EMAIL": "your@email.com"
-      }
+      "args": ["-m", "src.Omnispindle.stdio_server"],
+      "cwd": "/path/to/Omnispindle"
     }
   }
 }
 ```
+
+**That's it!** The first time you use an Omnispindle tool, your browser will open for authentication. After logging in with Auth0 (or Google), you're all set. No tokens to copy, no environment variables to set.
+
+### Manual Setup (Optional)
+
+If you prefer manual configuration:
+
+```bash
+# Install dependencies
+pip install -r requirements.txt
+
+# Set your token (optional - automatic auth will handle this)
+export AUTH0_TOKEN="your_token_here"
+
+# Run the MCP server
+python -m src.Omnispindle.stdio_server
+```
+
+For more details, see the [MCP Client Auth Guide](./docs/MCP_CLIENT_AUTH.md).
 
 ## Architecture
 
@@ -96,25 +103,30 @@ python -c "from src.Omnispindle.stdio_server import OmniSpindleStdioServer; prin
 ## Production Deployment
 
 ### Option 1: Local STDIO (Claude Desktop)
-```bash
-python stdio_main.py
-```
-Configure in Claude Desktop:
+
+For local development and use with clients like Claude Desktop, the `stdio` server is recommended. It now supports secure authentication via Auth0 tokens.
+
+1.  **Get Your Auth0 Token**: Follow the instructions in the [MCP Client Auth Guide](./docs/MCP_CLIENT_AUTH.md).
+
+2.  **Configure Claude Desktop**: Update your `claude_desktop_config.json`:
+
 ```json
 {
   "mcpServers": {
     "omnispindle": {
       "command": "python",
-      "args": ["stdio_main.py"],
+      "args": ["-m", "src.Omnispindle.stdio_server"],
       "cwd": "/path/to/Omnispindle",
       "env": {
-        "MCP_USER_EMAIL": "your@email.com",
+        "AUTH0_TOKEN": "your_auth0_token_here",
         "OMNISPINDLE_TOOL_LOADOUT": "basic"
       }
     }
   }
 }
 ```
+
+This is now the preferred and most secure way to use Omnispindle with local MCP clients.
 
 ### Option 2: Remote HTTP (Cloudflare Protected)
 ```bash
