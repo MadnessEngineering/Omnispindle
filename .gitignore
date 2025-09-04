@@ -1,16 +1,74 @@
+# Environment and credentials
+.env
+.env.local
+.env.production
+.env.development
+AUTH0_TOKEN*
+
+# Python
+__pycache__/
 *.pyc
-.DS_Store
-/.specstory
-/.idea
+*.pyo
+*.pyd
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+/venv/
+
+# IDE and editor files
+.vscode/
+.idea/
 /src/fastmcp_todo_server/.idea
 /src/Omnispindle/.idea
-/venv
-.env
-# SpecStory explanation file
-.specstory/.what-is-this.md
-/node_modules
 .cursor/
 .cursorrules
+*.swp
+*.swo
+*~
+
+# Testing and cache
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.cache
+
+# Logs
+*.log
+logs/
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Node.js (from previous experiments)
+/node_modules
 /omnispindle-auth/node_modules
 /omnispindle-auth/src-tauri
-.DS_Store
+
+# SpecStory
+/.specstory
+.specstory/.what-is-this.md
+
+# Temporary files
+*.tmp
+*.temp

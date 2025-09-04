@@ -106,38 +106,34 @@ The server exposes standardized MCP tools that AI agents can call:
 
 **MCP Integration**: 
 
-For Claude Desktop stdio transport, configure in `claude_desktop_config.json`:
+For Claude Desktop stdio transport, add to your `claude_desktop_config.json`:
 ```json
 {
   "mcpServers": {
     "omnispindle": {
       "command": "python",
-      "args": ["stdio_main.py"],
+      "args": ["-m", "src.Omnispindle.stdio_server"],
       "cwd": "/path/to/Omnispindle",
       "env": {
-        "MONGODB_URI": "mongodb://localhost:27017",
-        "MONGODB_DB": "swarmonomicon",
-        "OMNISPINDLE_TOOL_LOADOUT": "basic",
-        "MCP_USER_EMAIL": "user@example.com",
-        "MCP_USER_ID": "auth0|user123"
+        "OMNISPINDLE_TOOL_LOADOUT": "basic"
       }
     }
   }
 }
 ```
 
-**Environment-based Authentication**:
-The stdio server REQUIRES environment-based user context for security:
-- `MCP_USER_EMAIL` - User's email address (required)
-- `MCP_USER_ID` - User's unique identifier (optional, defaults to email)
+**🚀 Zero-Config Authentication**:
+No setup required! The system automatically:
+1. Detects when authentication is needed
+2. Opens your browser for Auth0 login
+3. Saves tokens locally for future use
+4. Works seamlessly across all MCP clients
 
-**Authentication Setup**:
-Run the Auth0 CLI setup to get your credentials:
+**Manual Authentication (Optional)**:
+If you need manual token setup:
 ```bash
-python -m src.Omnispindle auth --setup
+python -m src.Omnispindle.token_exchange
 ```
-
-This will open your browser, authenticate with Auth0, and generate the MCP configuration file with your credentials.
 
 ### Development Patterns
 

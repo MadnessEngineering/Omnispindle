@@ -25,9 +25,9 @@ Omnispindle is the coordination layer of the Madness Interactive ecosystem. It p
 
 ## Quick Start
 
-### Automatic Authentication (Zero Config!)
+### 🚀 Automatic Authentication (Zero Config!)
 
-Just add Omnispindle to your MCP client:
+Just add Omnispindle to your MCP client configuration:
 
 ```json
 {
@@ -35,13 +35,23 @@ Just add Omnispindle to your MCP client:
     "omnispindle": {
       "command": "python",
       "args": ["-m", "src.Omnispindle.stdio_server"],
-      "cwd": "/path/to/Omnispindle"
+      "cwd": "/path/to/Omnispindle",
+      "env": {
+        "OMNISPINDLE_TOOL_LOADOUT": "basic"
+      }
     }
   }
 }
 ```
 
-**That's it!** The first time you use an Omnispindle tool, your browser will open for authentication. After logging in with Auth0 (or Google), you're all set. No tokens to copy, no environment variables to set.
+**That's it!** The first time you use an Omnispindle tool:
+
+1. 🌐 Your browser opens automatically for Auth0 login
+2. 🔐 Log in with Google (or Auth0 credentials) 
+3. ✅ Token is saved locally for future use
+4. 🎯 All MCP tools work seamlessly with your authenticated context
+
+No tokens to copy, no manual config files, no environment variables to set!
 
 ### Manual Setup (Optional)
 
