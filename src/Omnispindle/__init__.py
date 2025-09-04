@@ -94,16 +94,16 @@ class Omnispindle:
             response.delete_cookie(key="ss-tok", httponly=True, samesite="strict", secure=True)
             return {"message": "Successfully logged out."}
 
-        @app.post("/tools/{tool_name}", tags=["tools"])
-        async def run_tool(tool_name: str, request: Request, user: dict = Depends(get_current_user)):
-            try:
-                params = await request.json()
-            except Exception:
-                params = {}
-
-            ctx = Context(user=user)
-            result = await self.dispatch_tool(tool_name, params, ctx)
-            return {"result": str(result) if not isinstance(result, (dict, list, str, int, float, bool, type(None))) else result}
+        # @app.post("/tools/{tool_name}", tags=["tools"])  # Commented out - uses removed get_current_user
+        # async def run_tool(tool_name: str, request: Request, user: dict = Depends(get_current_user)):
+        #     try:
+        #         params = await request.json()
+        #     except Exception:
+        #         params = {}
+        #
+        #     ctx = Context(user=user)
+        #     result = await self.dispatch_tool(tool_name, params, ctx)
+        #     return {"result": str(result) if not isinstance(result, (dict, list, str, int, float, bool, type(None))) else result}
 
 
         @app.get("/")
