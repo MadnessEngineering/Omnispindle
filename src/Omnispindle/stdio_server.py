@@ -107,8 +107,19 @@ def _create_context() -> Context:
     if not auth0_token:
         logger.info("No AUTH0_TOKEN found, initiating browser-based authentication...")
         try:
-            auth0_token = ensure_authenticated()
-        except RuntimeError as e:
+            # Use run_async_in_thread to handle the async ensure_authenticated call
+            def sync_ensure_auth():
+                import asyncio
+                try:
+                    loop = asyncio.get_running_loop()
+                except RuntimeError:
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                return loop.run_until_complete(ensure_authenticated())
+            
+            auth0_token = sync_ensure_auth()
+            logger.info("✅ Browser authentication successful!")
+        except Exception as e:
             logger.error(f"Authentication failed: {e}")
             # Fall back to other methods
             pass
