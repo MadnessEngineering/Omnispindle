@@ -21,6 +21,7 @@ from jose.exceptions import JWTError
 
 from .auth import get_jwks, AUTH_CONFIG
 from .auth_flow import ensure_authenticated, run_async_in_thread
+from .auth_utils import verify_auth0_token
 from fastmcp import FastMCP
 from .context import Context
 from . import tools

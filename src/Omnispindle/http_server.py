@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-FastMCP HTTP Server for Omnispindle with Auth0 authentication and user-scoped databases.
+FastMCP HTTP Server for Omnispindle with user-scoped databases.
 
 This server uses the recommended FastMCP HTTP transport for remote deployments.
 """
@@ -9,19 +9,14 @@ import asyncio
 import logging
 import os
 from typing import Dict, Any, Optional, Union, List
-import uuid
-from datetime import datetime, UTC
 
 from fastmcp import FastMCP
 from dotenv import load_dotenv
 
 from .context import Context
-from .database import db_connection
 from .patches import apply_patches
-from .verify_token import verify_auth0_token
+from .auth_utils import verify_auth0_token
 from .auth_flow import ensure_authenticated, run_async_in_thread
-from .utils import create_response
-from .todo_log_service import log_todo_create, log_todo_update, log_todo_delete, log_todo_complete
 from . import tools
 
 # Initialize
