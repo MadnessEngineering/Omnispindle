@@ -14,24 +14,39 @@ MONGODB_URI = os.getenv("MONGODB_URI", "mongodb://localhost:27017")
 MONGODB_DB_NAME = os.getenv("MONGODB_DB", "swarmonomicon")  # Fallback/shared database
 
 
-def sanitize_database_name(user_id: str) -> str:
+def sanitize_database_name(user_context: Dict[str, Any]) -> str:
     """
-    Convert Auth0 user ID to a valid MongoDB database name.
+    Convert user context to a valid MongoDB database name.
+    Uses email-based naming for consistency with Inventorium.
     MongoDB database names cannot contain certain characters.
     """
-    # Replace invalid characters with underscores
-    sanitized = re.sub(r'[^a-zA-Z0-9_]', '_', user_id)
-    # Ensure it doesn't start with a number
-    if sanitized and sanitized[0].isdigit():
-        sanitized = f"user_{sanitized}"
+    # Prefer email-based naming (consistent with Inventorium)
+    if 'email' in user_context:
+        email = user_context['email']
+        if '@' in email:
+            username, domain = email.split('@', 1)
+            # Create safe database name from email components
+            safe_username = re.sub(r'[^a-zA-Z0-9]', '_', username)
+            safe_domain = re.sub(r'[^a-zA-Z0-9]', '_', domain)
+            database_name = f"user_{safe_username}_{safe_domain}"
+        else:
+            # Fallback if email format is unexpected
+            safe_email = re.sub(r'[^a-zA-Z0-9]', '_', email)
+            database_name = f"user_{safe_email}"
+    elif 'sub' in user_context:
+        # Fallback to sub-based naming if no email
+        user_id = user_context['sub']
+        sanitized = re.sub(r'[^a-zA-Z0-9_]', '_', user_id)
+        database_name = f"user_{sanitized}"
     else:
-        sanitized = f"user_{sanitized}"
+        # Last resort fallback
+        database_name = "user_unknown"
     
     # MongoDB database names are limited to 64 characters
-    if len(sanitized) > 60:  # Leave room for "user_" prefix
-        sanitized = sanitized[:60]
+    if len(database_name) > 64:
+        database_name = database_name[:64]
     
-    return sanitized
+    return database_name
 
 
 class Database:
@@ -74,8 +89,7 @@ class Database:
         if not user_context or not user_context.get('sub'):
             return self.shared_db
 
-        user_id = user_context['sub']
-        db_name = sanitize_database_name(user_id)
+        db_name = sanitize_database_name(user_context)
         
         # Return cached database if we have it
         if db_name in self._user_databases:
@@ -85,6 +99,7 @@ class Database:
         user_db = self.client[db_name]
         self._user_databases[db_name] = user_db
         
+        user_id = user_context.get('sub', user_context.get('email', 'unknown'))
         print(f"Initialized user database: {db_name} for user {user_id}")
         return user_db
 
