@@ -19,9 +19,8 @@ from typing import Dict, Any, Optional
 from jose import jwt
 from jose.exceptions import JWTError
 
-from .auth import get_jwks, AUTH_CONFIG
 from .auth_flow import ensure_authenticated, run_async_in_thread
-from .auth_utils import verify_auth0_token
+from .auth_utils import verify_auth0_token, get_jwks, AUTH_CONFIG
 from fastmcp import FastMCP
 from .context import Context
 from . import tools
@@ -60,43 +59,6 @@ TOOL_LOADOUTS = {
     ]
 }
 
-
-async def verify_auth0_token(token: str) -> Optional[Dict[str, Any]]:
-    """Verifies an Auth0 token and returns the payload."""
-    try:
-        unverified_header = jwt.get_unverified_header(token)
-        jwks = get_jwks()
-        rsa_key = {}
-        for key in jwks["keys"]:
-            if key["kid"] == unverified_header["kid"]:
-                rsa_key = {
-                    "kty": key["kty"],
-                    "kid": key["kid"],
-                    "use": key["use"],
-                    "n": key["n"],
-                    "e": key["e"],
-                }
-                break
-
-        if not rsa_key:
-            logger.error("Unable to find appropriate key in JWKS")
-            return None
-
-        payload = jwt.decode(
-            token,
-            rsa_key,
-            algorithms=["RS256"],
-            audience=AUTH_CONFIG.audience,
-            issuer=f"https://{AUTH_CONFIG.domain}/",
-        )
-        return payload
-
-    except JWTError as e:
-        logger.error(f"JWT Error: {e}")
-        return None
-    except Exception as e:
-        logger.error(f"An unexpected error occurred during token verification: {e}")
-        return None
 
 
 def _create_context() -> Context:

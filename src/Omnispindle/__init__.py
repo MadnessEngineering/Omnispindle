@@ -8,7 +8,7 @@ import json
 from dotenv import load_dotenv
 from fastapi import FastAPI, Depends, Request, HTTPException, Response, status
 
-from .auth import get_current_user
+# from .auth import get_current_user  # Removed - not used in current MCP servers
 from .context import Context
 from .middleware import ConnectionErrorsMiddleware, NoneTypeResponseMiddleware, EnhancedLoggingMiddleware
 from .patches import apply_patches
