@@ -11,12 +11,21 @@ install:
 	uv pip install -r requirements-dev.txt
 	# uv pip install -r requirements-prod.txt
 
-# Run the FastMCP server
+# Run the FastMCP server (HTTP - recommended for remote)
 run:
-	python3.11 -m src.Omnispindle
-	#python3.11 -m stdio_main
+	python3.11 -m src.Omnispindle.http_server
 	COMMIT_HASH=$(git rev-parse --short HEAD)
 	mosquitto_pub -h localhost -p 4140 -t "status/$(DeNa)/commit" -m "{\"commit_hash\": \"$(COMMIT_HASH)\"}"
+
+# Run the old SSE server (legacy)
+run-sse:
+	python3.11 -m src.Omnispindle
+	COMMIT_HASH=$(git rev-parse --short HEAD)
+	mosquitto_pub -h localhost -p 4140 -t "status/$(DeNa)/commit" -m "{\"commit_hash\": \"$(COMMIT_HASH)\"}"
+
+# Run stdio server locally  
+run-stdio:
+	python3.11 -m src.Omnispindle.stdio_server
 
 # deploy
 deploy:
