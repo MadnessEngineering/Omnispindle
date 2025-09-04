@@ -41,17 +41,19 @@ VALID_PROJECTS = [
 ]
 
 # Cache utility functions
-def cache_lesson_tags(tags_list):
+def cache_lesson_tags(tags_list, ctx=None):
     """
     Cache the list of all lesson tags in MongoDB.
     
     Args:
         tags_list: List of tags to cache
+        ctx: Optional context for user-scoped collections
     """
-    if db_connection.tags_cache is None:
-        logging.error("Failed to cache lesson tags: Database connection is not available.")
-        return False
     try:
+        # Get user-scoped collections
+        collections = db_connection.get_collections(ctx.user if ctx else None)
+        tags_cache_collection = collections['tags_cache']
+        
         # Add timestamp for cache expiry management
         cache_entry = {
             "key": TAGS_CACHE_KEY,
@@ -60,7 +62,7 @@ def cache_lesson_tags(tags_list):
         }
 
         # Use upsert to update if exists or insert if not
-        db_connection.tags_cache.update_one(
+        tags_cache_collection.update_one(
             {"key": TAGS_CACHE_KEY},
             {"$set": cache_entry},
             upsert=True
@@ -70,19 +72,23 @@ def cache_lesson_tags(tags_list):
         logging.error(f"Failed to cache lesson tags: {str(e)}")
         return False
 
-def get_cached_lesson_tags():
+def get_cached_lesson_tags(ctx=None):
     """
     Retrieve the cached list of lesson tags from MongoDB.
+    
+    Args:
+        ctx: Optional context for user-scoped collections
     
     Returns:
         List of tags if cache exists and is valid, None otherwise
     """
-    if db_connection.tags_cache is None:
-        logging.error("Failed to retrieve cached lesson tags: Database connection is not available.")
-        return None
     try:
+        # Get user-scoped collections
+        collections = db_connection.get_collections(ctx.user if ctx else None)
+        tags_cache_collection = collections['tags_cache']
+        
         # Find the cache entry
-        cache_entry = db_connection.tags_cache.find_one({"key": TAGS_CACHE_KEY})
+        cache_entry = tags_cache_collection.find_one({"key": TAGS_CACHE_KEY})
 
         if not cache_entry:
             return None
@@ -91,7 +97,7 @@ def get_cached_lesson_tags():
         current_time = int(datetime.now(UTC).timestamp())
         if current_time - cache_entry["updated_at"] > TAGS_CACHE_EXPIRY:
             # Cache expired, invalidate it
-            invalidate_lesson_tags_cache()
+            invalidate_lesson_tags_cache(ctx)
             return None
 
         return cache_entry["tags"]
@@ -99,49 +105,57 @@ def get_cached_lesson_tags():
         logging.error(f"Failed to retrieve cached lesson tags: {str(e)}")
         return None
 
-def invalidate_lesson_tags_cache():
+def invalidate_lesson_tags_cache(ctx=None):
     """
     Invalidate the lesson tags cache in MongoDB.
+    
+    Args:
+        ctx: Optional context for user-scoped collections
     
     Returns:
         True if successful, False otherwise
     """
-    if db_connection.tags_cache is None:
-        logging.error("Failed to invalidate lesson tags cache: Database connection is not available.")
-        return False
     try:
-        db_connection.tags_cache.delete_one({"key": TAGS_CACHE_KEY})
+        # Get user-scoped collections
+        collections = db_connection.get_collections(ctx.user if ctx else None)
+        tags_cache_collection = collections['tags_cache']
+        
+        tags_cache_collection.delete_one({"key": TAGS_CACHE_KEY})
         return True
     except Exception as e:
         logging.error(f"Failed to invalidate lesson tags cache: {str(e)}")
         return False
 
-def get_all_lesson_tags():
+def get_all_lesson_tags(ctx=None):
     """
     Get all unique tags from lessons, with caching.
     
     First tries to fetch from cache, falls back to database if needed.
     Also updates the cache if fetching from database.
     
+    Args:
+        ctx: Optional context for user-scoped collections
+    
     Returns:
         List of all unique tags
     """
-    cached_tags = get_cached_lesson_tags()
+    cached_tags = get_cached_lesson_tags(ctx)
     if cached_tags is not None:
         return cached_tags
 
     # If not in cache, query from database
-    if db_connection.lessons is None:
-        logging.error("Failed to aggregate lesson tags: Database connection is not available.")
-        return []
     try:
+        # Get user-scoped collections
+        collections = db_connection.get_collections(ctx.user if ctx else None)
+        lessons_collection = collections['lessons']
+        
         # Use MongoDB aggregation to get all unique tags
         pipeline = [
             {"$project": {"tags": 1}},
             {"$unwind": "$tags"},
             {"$group": {"_id": None, "unique_tags": {"$addToSet": "$tags"}}},
         ]
-        result = list(db_connection.lessons.aggregate(pipeline))
+        result = list(lessons_collection.aggregate(pipeline))
 
         # Extract tags from result
         all_tags = []
@@ -149,30 +163,32 @@ def get_all_lesson_tags():
             all_tags = result[0]['unique_tags']
 
         # Cache the results for future use
-        cache_lesson_tags(all_tags)
+        cache_lesson_tags(all_tags, ctx)
         return all_tags
     except Exception as e:
         logging.error(f"Failed to aggregate lesson tags: {str(e)}")
         return []
 
 # Project management functions
-def cache_projects(projects_list):
+def cache_projects(projects_list, ctx=None):
     """
     Cache the list of valid projects in MongoDB.
     
     Args:
         projects_list: List of project names to cache
+        ctx: Optional context for user-scoped collections
     """
-    if db_connection.tags_cache is None:
-        logging.error("Failed to cache projects: Database connection is not available.")
-        return False
     try:
+        # Get user-scoped collections
+        collections = db_connection.get_collections(ctx.user if ctx else None)
+        tags_cache_collection = collections['tags_cache']
+        
         cache_entry = {
             "key": PROJECTS_CACHE_KEY,
             "projects": list(projects_list),
             "updated_at": int(datetime.now(UTC).timestamp())
         }
-        db_connection.tags_cache.update_one(
+        tags_cache_collection.update_one(
             {"key": PROJECTS_CACHE_KEY},
             {"$set": cache_entry},
             upsert=True
@@ -182,18 +198,22 @@ def cache_projects(projects_list):
         logging.error(f"Failed to cache projects: {str(e)}")
         return False
 
-def get_cached_projects():
+def get_cached_projects(ctx=None):
     """
     Retrieve the cached list of valid projects from MongoDB.
+    
+    Args:
+        ctx: Optional context for user-scoped collections
     
     Returns:
         List of project names if cache exists and is valid, None otherwise
     """
-    if db_connection.tags_cache is None:
-        logging.error("Failed to retrieve cached projects: Database connection is not available.")
-        return None
     try:
-        cache_entry = db_connection.tags_cache.find_one({"key": PROJECTS_CACHE_KEY})
+        # Get user-scoped collections
+        collections = db_connection.get_collections(ctx.user if ctx else None)
+        tags_cache_collection = collections['tags_cache']
+        
+        cache_entry = tags_cache_collection.find_one({"key": PROJECTS_CACHE_KEY})
 
         if not cache_entry:
             return None
@@ -201,7 +221,7 @@ def get_cached_projects():
         # Check if cache is expired
         current_time = int(datetime.now(UTC).timestamp())
         if current_time - cache_entry["updated_at"] > PROJECTS_CACHE_EXPIRY:
-            invalidate_projects_cache()
+            invalidate_projects_cache(ctx)
             return None
 
         return cache_entry["projects"]
@@ -209,37 +229,45 @@ def get_cached_projects():
         logging.error(f"Failed to retrieve cached projects: {str(e)}")
         return None
 
-def invalidate_projects_cache():
+def invalidate_projects_cache(ctx=None):
     """
     Invalidate the projects cache in MongoDB.
+    
+    Args:
+        ctx: Optional context for user-scoped collections
     
     Returns:
         True if successful, False otherwise
     """
-    if db_connection.tags_cache is None:
-        logging.error("Failed to invalidate projects cache: Database connection is not available.")
-        return False
     try:
-        db_connection.tags_cache.delete_one({"key": PROJECTS_CACHE_KEY})
+        # Get user-scoped collections
+        collections = db_connection.get_collections(ctx.user if ctx else None)
+        tags_cache_collection = collections['tags_cache']
+        
+        tags_cache_collection.delete_one({"key": PROJECTS_CACHE_KEY})
         return True
     except Exception as e:
         logging.error(f"Failed to invalidate projects cache: {str(e)}")
         return False
 
-def initialize_projects_collection():
+def initialize_projects_collection(ctx=None):
     """
     Initialize the projects collection with the current VALID_PROJECTS list.
     This is a one-time migration function that includes git URLs and paths.
     
+    Args:
+        ctx: Optional context for user-scoped collections
+    
     Returns:
         True if successful, False otherwise
     """
-    if db_connection.projects is None:
-        logging.error("Failed to initialize projects collection: Database connection is not available.")
-        return False
     try:
+        # Get user-scoped collections
+        collections = db_connection.get_collections(ctx.user if ctx else None)
+        projects_collection = collections['projects']
+        
         # Check if projects collection is already populated
-        existing_count = db_connection.projects.count_documents({})
+        existing_count = projects_collection.count_documents({})
         if existing_count > 0:
             logging.info(f"Projects collection already has {existing_count} projects")
             return True
@@ -270,39 +298,43 @@ def initialize_projects_collection():
         ]
 
         if projects_to_insert:
-            db_connection.projects.insert_many(projects_to_insert)
+            projects_collection.insert_many(projects_to_insert)
             logging.info(f"Successfully inserted {len(projects_to_insert)} projects into the collection")
 
         # Invalidate project cache after initialization
-        invalidate_projects_cache()
+        invalidate_projects_cache(ctx)
         return True
 
     except Exception as e:
         logging.error(f"Failed to initialize projects collection: {str(e)}")
         return False
 
-def get_all_projects():
+def get_all_projects(ctx=None):
     """
     Get all projects from the database, with caching.
+    
+    Args:
+        ctx: Optional context for user-scoped collections
     """
-    cached_projects = get_cached_projects()
+    cached_projects = get_cached_projects(ctx)
     if cached_projects:
         return cached_projects
 
-    if db_connection.projects is None:
-        logging.error("Failed to get all projects: Database connection is not available.")
-        return []
     try:
+        # Get user-scoped collections
+        collections = db_connection.get_collections(ctx.user if ctx else None)
+        projects_collection = collections['projects']
+        
         # Get all projects from the database
-        projects_from_db = list(db_connection.projects.find({}, {"_id": 0}))
+        projects_from_db = list(projects_collection.find({}, {"_id": 0}))
 
         # If the database is empty, initialize it as a fallback
         if not projects_from_db:
-            initialize_projects_collection()
-            projects_from_db = list(db_connection.projects.find({}, {"_id": 0}))
+            initialize_projects_collection(ctx)
+            projects_from_db = list(projects_collection.find({}, {"_id": 0}))
 
         # Cache the results for future use
-        cache_projects(projects_from_db)
+        cache_projects(projects_from_db, ctx)
         return projects_from_db
     except Exception as e:
         logging.error(f"Failed to get projects from database: {str(e)}")
@@ -337,17 +369,21 @@ async def add_todo(description: str, project: str, priority: str = "Medium", tar
         "metadata": metadata or {}
     }
     try:
-        db_connection.todos.insert_one(todo)
+        # Get user-scoped collections
+        collections = db_connection.get_collections(ctx.user if ctx else None)
+        todos_collection = collections['todos']
+        
+        todos_collection.insert_one(todo)
         user_email = ctx.user.get("email", "anonymous") if ctx and ctx.user else "anonymous"
-        logger.info(f"Todo created by {user_email}: {todo_id}")
+        logger.info(f"Todo created by {user_email} in user database: {todo_id}")
         await log_todo_create(todo_id, description, project, user_email)
 
-        # Get project todo counts
+        # Get project todo counts from user's database
         pipeline = [
             {"$match": {"project": validated_project}},
             {"$group": {"_id": "$status", "count": {"$sum": 1}}}
         ]
-        counts = list(db_connection.todos.aggregate(pipeline))
+        counts = list(todos_collection.aggregate(pipeline))
         project_counts = {
             "pending": 0,
             "completed": 0,
@@ -372,10 +408,14 @@ async def add_todo(description: str, project: str, priority: str = "Medium", tar
 
 async def query_todos(filter: Optional[Dict[str, Any]] = None, projection: Optional[Dict[str, Any]] = None, limit: int = 100, ctx: Optional[Context] = None) -> str:
     """
-    Query todos with flexible filtering options.
+    Query todos with flexible filtering options from user's database.
     """
     try:
-        cursor = db_connection.todos.find(filter or {}, projection).limit(limit)
+        # Get user-scoped collections
+        collections = db_connection.get_collections(ctx.user if ctx else None)
+        todos_collection = collections['todos']
+        
+        cursor = todos_collection.find(filter or {}, projection).limit(limit)
         results = list(cursor)
         return create_response(True, {"items": results})
     except Exception as e:
@@ -389,11 +429,15 @@ async def update_todo(todo_id: str, updates: dict, ctx: Optional[Context] = None
     if "updated_at" not in updates:
         updates["updated_at"] = int(datetime.now(UTC).timestamp())
     try:
-        existing_todo = db_connection.todos.find_one({"id": todo_id})
+        # Get user-scoped collections
+        collections = db_connection.get_collections(ctx.user if ctx else None)
+        todos_collection = collections['todos']
+        
+        existing_todo = todos_collection.find_one({"id": todo_id})
         if not existing_todo:
             return create_response(False, message=f"Todo {todo_id} not found.")
 
-        result = db_connection.todos.update_one({"id": todo_id}, {"$set": updates})
+        result = todos_collection.update_one({"id": todo_id}, {"$set": updates})
         if result.modified_count == 1:
             user_email = ctx.user.get("email", "anonymous") if ctx and ctx.user else "anonymous"
             logger.info(f"Todo updated by {user_email}: {todo_id}")
@@ -417,13 +461,17 @@ async def delete_todo(todo_id: str, ctx: Optional[Context] = None) -> str:
     Delete a todo item by its ID.
     """
     try:
-        existing_todo = db_connection.todos.find_one({"id": todo_id})
+        # Get user-scoped collections
+        collections = db_connection.get_collections(ctx.user if ctx else None)
+        todos_collection = collections['todos']
+        
+        existing_todo = todos_collection.find_one({"id": todo_id})
         if existing_todo:
             user_email = ctx.user.get("email", "anonymous") if ctx and ctx.user else "anonymous"
             logger.info(f"Todo deleted by {user_email}: {todo_id}")
             await log_todo_delete(todo_id, existing_todo.get('description', 'Unknown'),
                                   existing_todo.get('project', 'Unknown'), user_email)
-        result = db_connection.todos.delete_one({"id": todo_id})
+        result = todos_collection.delete_one({"id": todo_id})
         if result.deleted_count == 1:
             return create_response(True, message=f"Todo {todo_id} deleted successfully.")
         else:
@@ -437,7 +485,11 @@ async def get_todo(todo_id: str, ctx: Optional[Context] = None) -> str:
     Get a specific todo item by its ID.
     """
     try:
-        todo = db_connection.todos.find_one({"id": todo_id})
+        # Get user-scoped collections
+        collections = db_connection.get_collections(ctx.user if ctx else None)
+        todos_collection = collections['todos']
+        
+        todo = todos_collection.find_one({"id": todo_id})
         if todo:
             return create_response(True, todo)
         else:
@@ -451,7 +503,11 @@ async def mark_todo_complete(todo_id: str, comment: Optional[str] = None, ctx: O
     Mark a todo as completed.
     """
     try:
-        existing_todo = db_connection.todos.find_one({"id": todo_id})
+        # Get user-scoped collections
+        collections = db_connection.get_collections(ctx.user if ctx else None)
+        todos_collection = collections['todos']
+        
+        existing_todo = todos_collection.find_one({"id": todo_id})
         if not existing_todo:
             return create_response(False, message=f"Todo {todo_id} not found.")
 
@@ -469,7 +525,7 @@ async def mark_todo_complete(todo_id: str, comment: Optional[str] = None, ctx: O
             user_email = ctx.user.get("email", "anonymous") if ctx and ctx.user else "anonymous"
             updates["metadata.completed_by"] = user_email
 
-        result = db_connection.todos.update_one({"id": todo_id}, {"$set": updates})
+        result = todos_collection.update_one({"id": todo_id}, {"$set": updates})
         if result.modified_count == 1:
             user_email = ctx.user.get("email", "anonymous") if ctx and ctx.user else "anonymous"
             logger.info(f"Todo completed by {user_email}: {todo_id}")
@@ -489,7 +545,7 @@ async def list_todos_by_status(status: str, limit: int = 100, ctx: Optional[Cont
     """
     if status.lower() not in ['pending', 'completed', 'initial']:
         return create_response(False, message="Invalid status. Must be one of 'pending', 'completed', 'initial'.")
-    return await query_todos(filter={"status": status.lower()}, limit=limit)
+    return await query_todos(filter={"status": status.lower()}, limit=limit, ctx=ctx)
 
 async def add_lesson(language: str, topic: str, lesson_learned: str, tags: Optional[list] = None, ctx: Optional[Context] = None) -> str:
     """
@@ -504,10 +560,14 @@ async def add_lesson(language: str, topic: str, lesson_learned: str, tags: Optio
         "created_at": int(datetime.now(UTC).timestamp())
     }
     try:
-        db_connection.lessons.insert_one(lesson)
+        # Get user-scoped collections
+        collections = db_connection.get_collections(ctx.user if ctx else None)
+        lessons_collection = collections['lessons']
+        
+        lessons_collection.insert_one(lesson)
         if tags:
-            _cache.pop(TAGS_CACHE_KEY, None)
-            _cache_expiry.pop(TAGS_CACHE_KEY, None)
+            # Invalidate the tags cache when new tags are added
+            invalidate_lesson_tags_cache(ctx)
         return create_response(True, lesson)
     except Exception as e:
         logger.error(f"Failed to add lesson: {str(e)}")
@@ -518,7 +578,11 @@ async def get_lesson(lesson_id: str, ctx: Optional[Context] = None) -> str:
     Get a specific lesson by its ID.
     """
     try:
-        lesson = db_connection.lessons.find_one({"id": lesson_id})
+        # Get user-scoped collections
+        collections = db_connection.get_collections(ctx.user if ctx else None)
+        lessons_collection = collections['lessons']
+        
+        lesson = lessons_collection.find_one({"id": lesson_id})
         if lesson:
             return create_response(True, lesson)
         else:
@@ -532,11 +596,15 @@ async def update_lesson(lesson_id: str, updates: dict, ctx: Optional[Context] = 
     Update an existing lesson.
     """
     try:
-        result = db_connection.lessons.update_one({"id": lesson_id}, {"$set": updates})
+        # Get user-scoped collections
+        collections = db_connection.get_collections(ctx.user if ctx else None)
+        lessons_collection = collections['lessons']
+        
+        result = lessons_collection.update_one({"id": lesson_id}, {"$set": updates})
         if result.modified_count == 1:
             if 'tags' in updates:
-                _cache.pop(TAGS_CACHE_KEY, None)
-                _cache_expiry.pop(TAGS_CACHE_KEY, None)
+                # Invalidate the tags cache when tags are modified
+                invalidate_lesson_tags_cache(ctx)
             return create_response(True, message=f"Lesson {lesson_id} updated.")
         else:
             return create_response(False, message=f"Lesson {lesson_id} not found.")
@@ -549,10 +617,14 @@ async def delete_lesson(lesson_id: str, ctx: Optional[Context] = None) -> str:
     Delete a lesson by its ID.
     """
     try:
-        result = db_connection.lessons.delete_one({"id": lesson_id})
+        # Get user-scoped collections
+        collections = db_connection.get_collections(ctx.user if ctx else None)
+        lessons_collection = collections['lessons']
+        
+        result = lessons_collection.delete_one({"id": lesson_id})
         if result.deleted_count == 1:
-            _cache.pop(TAGS_CACHE_KEY, None)
-            _cache_expiry.pop(TAGS_CACHE_KEY, None)
+            # Invalidate the tags cache when lessons are deleted
+            invalidate_lesson_tags_cache(ctx)
             return create_response(True, message=f"Lesson {lesson_id} deleted.")
         else:
             return create_response(False, message=f"Lesson {lesson_id} not found.")
@@ -569,20 +641,24 @@ async def search_todos(query: str, fields: Optional[list] = None, limit: int = 1
     search_query = {
         "$or": [{field: {"$regex": query, "$options": "i"}} for field in fields]
     }
-    return await query_todos(filter=search_query, limit=limit)
+    return await query_todos(filter=search_query, limit=limit, ctx=ctx)
 
 async def grep_lessons(pattern: str, limit: int = 20, ctx: Optional[Context] = None) -> str:
     """
     Search lessons with grep-style pattern matching across topic and content.
     """
     try:
+        # Get user-scoped collections
+        collections = db_connection.get_collections(ctx.user if ctx else None)
+        lessons_collection = collections['lessons']
+        
         search_query = {
             "$or": [
                 {"topic": {"$regex": pattern, "$options": "i"}},
                 {"lesson_learned": {"$regex": pattern, "$options": "i"}}
             ]
         }
-        cursor = db_connection.lessons.find(search_query).limit(limit)
+        cursor = lessons_collection.find(search_query).limit(limit)
         results = list(cursor)
         return create_response(True, {"items": results})
     except Exception as e:
@@ -595,7 +671,8 @@ async def list_project_todos(project: str, limit: int = 5, ctx: Optional[Context
     """
     return await query_todos(
         filter={"project": project.lower(), "status": "pending"},
-        limit=limit
+        limit=limit,
+        ctx=ctx
     )
 
 async def query_todo_logs(filter_type: str = 'all', project: str = 'all',
@@ -627,7 +704,11 @@ async def add_explanation(topic: str, content: str, kind: str = "concept", autho
         "created_at": datetime.now(UTC)
     }
     try:
-        db_connection.explanations.update_one(
+        # Get user-scoped collections
+        collections = db_connection.get_collections(ctx.user if ctx else None)
+        explanations_collection = collections['explanations']
+        
+        explanations_collection.update_one(
             {"topic": topic},
             {"$set": explanation},
             upsert=True
@@ -640,7 +721,11 @@ async def add_explanation(topic: str, content: str, kind: str = "concept", autho
 async def get_explanation(topic: str, ctx: Optional[Context] = None) -> str:
     """Get an explanation for a given topic."""
     try:
-        explanation = db_connection.explanations.find_one({"topic": topic})
+        # Get user-scoped collections
+        collections = db_connection.get_collections(ctx.user if ctx else None)
+        explanations_collection = collections['explanations']
+        
+        explanation = explanations_collection.find_one({"topic": topic})
         if explanation:
             return create_response(True, explanation)
         return create_response(False, message=f"Explanation for '{topic}' not found.")
@@ -651,7 +736,11 @@ async def get_explanation(topic: str, ctx: Optional[Context] = None) -> str:
 async def update_explanation(topic: str, updates: dict, ctx: Optional[Context] = None) -> str:
     """Update an existing explanation."""
     try:
-        result = db_connection.explanations.update_one({"topic": topic}, {"$set": updates})
+        # Get user-scoped collections
+        collections = db_connection.get_collections(ctx.user if ctx else None)
+        explanations_collection = collections['explanations']
+        
+        result = explanations_collection.update_one({"topic": topic}, {"$set": updates})
         if result.modified_count:
             return create_response(True, message="Explanation updated.")
         return create_response(False, message="Explanation not found or no changes made.")
@@ -662,7 +751,11 @@ async def update_explanation(topic: str, updates: dict, ctx: Optional[Context] =
 async def delete_explanation(topic: str, ctx: Optional[Context] = None) -> str:
     """Delete an explanation for a given topic."""
     try:
-        result = db_connection.explanations.delete_one({"topic": topic})
+        # Get user-scoped collections
+        collections = db_connection.get_collections(ctx.user if ctx else None)
+        explanations_collection = collections['explanations']
+        
+        result = explanations_collection.delete_one({"topic": topic})
         if result.deleted_count:
             return create_response(True, message="Explanation deleted.")
         return create_response(False, message="Explanation not found.")
@@ -685,7 +778,11 @@ async def list_lessons(limit: int = 100, brief: bool = False, ctx: Optional[Cont
     List all lessons, sorted by creation date.
     """
     try:
-        cursor = db_connection.lessons.find().sort("created_at", -1).limit(limit)
+        # Get user-scoped collections
+        collections = db_connection.get_collections(ctx.user if ctx else None)
+        lessons_collection = collections['lessons']
+        
+        cursor = lessons_collection.find().sort("created_at", -1).limit(limit)
         results = list(cursor)
         if brief:
             results = [{"id": r["id"], "topic": r["topic"], "language": r["language"]} for r in results]
@@ -704,7 +801,11 @@ async def search_lessons(query: str, fields: Optional[list] = None, limit: int =
         "$or": [{field: {"$regex": query, "$options": "i"}} for field in fields]
     }
     try:
-        cursor = db_connection.lessons.find(search_query).limit(limit)
+        # Get user-scoped collections
+        collections = db_connection.get_collections(ctx.user if ctx else None)
+        lessons_collection = collections['lessons']
+        
+        cursor = lessons_collection.find(search_query).limit(limit)
         results = list(cursor)
         if brief:
             results = [{"id": r["id"], "topic": r["topic"], "language": r["language"]} for r in results]
@@ -761,18 +862,20 @@ async def point_out_obvious(observation: str, sarcasm_level: int = 5, ctx: Optio
     logger.info(f"Obvious observation made (sarcasm={level}): {observation}")
     
     # Store in a special "obvious_things" collection if we have DB
-    if db_connection.db is not None:
-        try:
-            obvious_collection = db_connection.db["obvious_observations"]
-            obvious_collection.insert_one({
-                "observation": observation,
-                "sarcasm_level": level,
-                "timestamp": datetime.now(UTC),
-                "user": ctx.user.get("sub") if ctx and ctx.user else "anonymous",
-                "response": response
-            })
-        except Exception as e:
-            logger.debug(f"Failed to store obvious observation: {e}")
+    try:
+        # Get user-scoped collections - use a generic collection access
+        collections = db_connection.get_collections(ctx.user if ctx else None)
+        # Access the database directly for custom collections like obvious_observations
+        obvious_collection = collections.database["obvious_observations"]
+        obvious_collection.insert_one({
+            "observation": observation,
+            "sarcasm_level": level,
+            "timestamp": datetime.now(UTC),
+            "user": ctx.user.get("sub") if ctx and ctx.user else "anonymous",
+            "response": response
+        })
+    except Exception as e:
+        logger.debug(f"Failed to store obvious observation: {e}")
     
     # Publish to MQTT for other systems to enjoy the obviousness
     try:
@@ -978,43 +1081,44 @@ async def _execute_byo_tool(args):
                     message=f"Tool execution timed out after {timeout} seconds")
         
         # Store execution history
-        if db_connection.db is not None:
-            try:
-                byo_collection = db_connection.db["byo_tools"]
-                execution_record = {
-                    "tool_id": tool_id,
-                    "tool_name": tool_name,
-                    "full_name": full_tool_name,
-                    "code": code[:1000],  # Store first 1000 chars
-                    "runtime": runtime,
-                    "args": args,
-                    "result": str(result)[:500] if result else None,  # Store first 500 chars
-                    "user": user_id,
-                    "timestamp": datetime.now(UTC),
-                    "persist": persist,
-                    "success": True
-                }
-                byo_collection.insert_one(execution_record)
+        try:
+            # Get user-scoped collections - use database access for custom collections
+            collections = db_connection.get_collections(ctx.user if ctx else None)
+            byo_collection = collections.database["byo_tools"]
+            execution_record = {
+                "tool_id": tool_id,
+                "tool_name": tool_name,
+                "full_name": full_tool_name,
+                "code": code[:1000],  # Store first 1000 chars
+                "runtime": runtime,
+                "args": args,
+                "result": str(result)[:500] if result else None,  # Store first 500 chars
+                "user": user_id,
+                "timestamp": datetime.now(UTC),
+                "persist": persist,
+                "success": True
+            }
+            byo_collection.insert_one(execution_record)
+            
+            # If persist is True, save to a persistent tools collection
+            if persist:
+                persistent_tools = collections.database["persistent_byo_tools"]
+                persistent_tools.update_one(
+                    {"tool_name": tool_name},
+                    {"$set": {
+                        "tool_name": tool_name,
+                        "code": code,
+                        "runtime": runtime,
+                        "created_by": user_id,
+                        "created_at": datetime.now(UTC),
+                        "last_used": datetime.now(UTC),
+                        "execution_count": 1
+                    }, "$inc": {"execution_count": 1}},
+                    upsert=True
+                )
                 
-                # If persist is True, save to a persistent tools collection
-                if persist:
-                    persistent_tools = db_connection.db["persistent_byo_tools"]
-                    persistent_tools.update_one(
-                        {"tool_name": tool_name},
-                        {"$set": {
-                            "tool_name": tool_name,
-                            "code": code,
-                            "runtime": runtime,
-                            "created_by": user_id,
-                            "created_at": datetime.now(UTC),
-                            "last_used": datetime.now(UTC),
-                            "execution_count": 1
-                        }, "$inc": {"execution_count": 1}},
-                        upsert=True
-                    )
-                    
-            except Exception as e:
-                logger.debug(f"Failed to store BYO tool execution: {e}")
+        except Exception as e:
+            logger.debug(f"Failed to store BYO tool execution: {e}")
         
         # Publish to MQTT for monitoring
         mqtt_publish("tools/byo/execution", {
@@ -1043,19 +1147,20 @@ async def _execute_byo_tool(args):
         logger.error(f"BYO tool creation/execution failed: {str(e)}")
         
         # Log failure
-        if db_connection.db is not None:
-            try:
-                byo_collection = db_connection.db["byo_tools"]
-                byo_collection.insert_one({
-                    "tool_id": tool_id,
-                    "tool_name": tool_name,
-                    "error": str(e),
-                    "user": user_id,
-                    "timestamp": datetime.now(UTC),
-                    "success": False
-                })
-            except:
-                pass
+        try:
+            # Get user-scoped collections - use database access for custom collections
+            collections = db_connection.get_collections(ctx.user if ctx else None)
+            byo_collection = collections.database["byo_tools"]
+            byo_collection.insert_one({
+                "tool_id": tool_id,
+                "tool_name": tool_name,
+                "error": str(e),
+                "user": user_id,
+                "timestamp": datetime.now(UTC),
+                "success": False
+            })
+        except:
+            pass
         
         return create_response(False, 
             message=f"Failed to create/execute custom tool: {str(e)}")
