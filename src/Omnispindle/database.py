@@ -93,7 +93,7 @@ class Database:
         Get all collections for the appropriate database (user-scoped or shared).
         """
         db = self.get_user_database(user_context)
-        return {
+        collections_dict = {
             'todos': db["todos"],
             'lessons': db["lessons_learned"],
             'tags_cache': db["tags_cache"],
@@ -101,6 +101,9 @@ class Database:
             'explanations': db["explanations"],
             'logs': db["todo_logs"]
         }
+        # Add database reference for custom collection access
+        collections_dict['database'] = db
+        return collections_dict
 
     # Legacy properties for backward compatibility (use shared database)
     @property
