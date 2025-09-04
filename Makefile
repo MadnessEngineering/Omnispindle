@@ -13,7 +13,7 @@ install:
 
 # Run the FastMCP server (HTTP - recommended for remote)
 run:
-	python3.11 -m src.Omnispindle.http_server
+	fastmcp run src/Omnispindle/http_server.py
 	COMMIT_HASH=$(git rev-parse --short HEAD)
 	mosquitto_pub -h localhost -p 4140 -t "status/$(DeNa)/commit" -m "{\"commit_hash\": \"$(COMMIT_HASH)\"}"
 
