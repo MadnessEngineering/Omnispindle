@@ -4,7 +4,7 @@ import re
 import ssl
 import subprocess
 import uuid
-from datetime import datetime, UTC
+from datetime import datetime, timezone
 from typing import Union, List, Dict, Optional, Any
 
 import logging
@@ -58,7 +58,7 @@ def cache_lesson_tags(tags_list, ctx=None):
         cache_entry = {
             "key": TAGS_CACHE_KEY,
             "tags": list(tags_list),
-            "updated_at": int(datetime.now(UTC).timestamp())
+            "updated_at": int(datetime.now(timezone.utc).timestamp())
         }
 
         # Use upsert to update if exists or insert if not
@@ -94,7 +94,7 @@ def get_cached_lesson_tags(ctx=None):
             return None
 
         # Check if cache is expired
-        current_time = int(datetime.now(UTC).timestamp())
+        current_time = int(datetime.now(timezone.utc).timestamp())
         if current_time - cache_entry["updated_at"] > TAGS_CACHE_EXPIRY:
             # Cache expired, invalidate it
             invalidate_lesson_tags_cache(ctx)
@@ -186,7 +186,7 @@ def cache_projects(projects_list, ctx=None):
         cache_entry = {
             "key": PROJECTS_CACHE_KEY,
             "projects": list(projects_list),
-            "updated_at": int(datetime.now(UTC).timestamp())
+            "updated_at": int(datetime.now(timezone.utc).timestamp())
         }
         tags_cache_collection.update_one(
             {"key": PROJECTS_CACHE_KEY},
@@ -219,7 +219,7 @@ def get_cached_projects(ctx=None):
             return None
 
         # Check if cache is expired
-        current_time = int(datetime.now(UTC).timestamp())
+        current_time = int(datetime.now(timezone.utc).timestamp())
         if current_time - cache_entry["updated_at"] > PROJECTS_CACHE_EXPIRY:
             invalidate_projects_cache(ctx)
             return None
@@ -273,7 +273,7 @@ def initialize_projects_collection(ctx=None):
             return True
 
         # Insert all valid projects with enhanced metadata
-        current_time = int(datetime.now(UTC).timestamp())
+        current_time = int(datetime.now(timezone.utc).timestamp())
         project_definitions = {
             "madness_interactive": {
                 "git_url": "https://github.com/d-edens/madness_interactive.git",
@@ -365,7 +365,7 @@ async def add_todo(description: str, project: str, priority: str = "Medium", tar
         "priority": priority,
         "status": "pending",
         "target_agent": target_agent,
-        "created_at": int(datetime.now(UTC).timestamp()),
+        "created_at": int(datetime.now(timezone.utc).timestamp()),
         "metadata": metadata or {}
     }
     try:
@@ -427,7 +427,7 @@ async def update_todo(todo_id: str, updates: dict, ctx: Optional[Context] = None
     Update a todo with the provided changes.
     """
     if "updated_at" not in updates:
-        updates["updated_at"] = int(datetime.now(UTC).timestamp())
+        updates["updated_at"] = int(datetime.now(timezone.utc).timestamp())
     try:
         # Get user-scoped collections
         collections = db_connection.get_collections(ctx.user if ctx else None)
@@ -511,7 +511,7 @@ async def mark_todo_complete(todo_id: str, comment: Optional[str] = None, ctx: O
         if not existing_todo:
             return create_response(False, message=f"Todo {todo_id} not found.")
 
-        completed_at = int(datetime.now(UTC).timestamp())
+        completed_at = int(datetime.now(timezone.utc).timestamp())
         duration_sec = completed_at - existing_todo.get('created_at', completed_at)
         updates = {
             "status": "completed",
@@ -557,7 +557,7 @@ async def add_lesson(language: str, topic: str, lesson_learned: str, tags: Optio
         "topic": topic,
         "lesson_learned": lesson_learned,
         "tags": tags or [],
-        "created_at": int(datetime.now(UTC).timestamp())
+        "created_at": int(datetime.now(timezone.utc).timestamp())
     }
     try:
         # Get user-scoped collections
@@ -701,7 +701,7 @@ async def add_explanation(topic: str, content: str, kind: str = "concept", autho
         "content": content,
         "kind": kind,
         "author": author,
-        "created_at": datetime.now(UTC)
+        "created_at": datetime.now(timezone.utc)
     }
     try:
         # Get user-scoped collections
@@ -870,7 +870,7 @@ async def point_out_obvious(observation: str, sarcasm_level: int = 5, ctx: Optio
         obvious_collection.insert_one({
             "observation": observation,
             "sarcasm_level": level,
-            "timestamp": datetime.now(UTC),
+            "timestamp": datetime.now(timezone.utc),
             "user": ctx.user.get("sub") if ctx and ctx.user else "anonymous",
             "response": response
         })
@@ -938,7 +938,7 @@ async def bring_your_own(tool_name: str, code: str, runtime: str = "python",
                 bring_your_own._rate_limits = {}
             
             last_call = bring_your_own._rate_limits.get(rate_limit_key, 0)
-            now = datetime.now(UTC).timestamp()
+            now = datetime.now(timezone.utc).timestamp()
             if now - last_call < 10:  # 10 second cooldown
                 return create_response(False, 
                     message=f"Rate limited. Please wait {10 - (now - last_call):.1f} seconds")
@@ -953,7 +953,7 @@ async def bring_your_own(tool_name: str, code: str, runtime: str = "python",
             message=f"Invalid runtime. Allowed: {allowed_runtimes}")
     
     # Create a unique ID for this tool
-    tool_id = hashlib.md5(f"{tool_name}_{code}_{datetime.now(UTC)}".encode()).hexdigest()[:8]
+    tool_id = hashlib.md5(f"{tool_name}_{code}_{datetime.now(timezone.utc)}".encode()).hexdigest()[:8]
     full_tool_name = f"byo_{tool_name}_{tool_id}"
     
     logger.warning(f"BYO Tool execution requested: {full_tool_name} by {user_id}")
@@ -1094,7 +1094,7 @@ async def _execute_byo_tool(args):
                 "args": args,
                 "result": str(result)[:500] if result else None,  # Store first 500 chars
                 "user": user_id,
-                "timestamp": datetime.now(UTC),
+                "timestamp": datetime.now(timezone.utc),
                 "persist": persist,
                 "success": True
             }
@@ -1110,8 +1110,8 @@ async def _execute_byo_tool(args):
                         "code": code,
                         "runtime": runtime,
                         "created_by": user_id,
-                        "created_at": datetime.now(UTC),
-                        "last_used": datetime.now(UTC),
+                        "created_at": datetime.now(timezone.utc),
+                        "last_used": datetime.now(timezone.utc),
                         "execution_count": 1
                     }, "$inc": {"execution_count": 1}},
                     upsert=True
@@ -1156,7 +1156,7 @@ async def _execute_byo_tool(args):
                 "tool_name": tool_name,
                 "error": str(e),
                 "user": user_id,
-                "timestamp": datetime.now(UTC),
+                "timestamp": datetime.now(timezone.utc),
                 "success": False
             })
         except:

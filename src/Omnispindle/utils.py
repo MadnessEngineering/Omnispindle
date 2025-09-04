@@ -4,7 +4,7 @@ import logging
 import ssl
 import subprocess
 from datetime import datetime
-from datetime import UTC
+from datetime import timezone
 from typing import Any
 from typing import Any
 from typing import Dict

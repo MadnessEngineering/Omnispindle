@@ -15,7 +15,7 @@ This approach:
 import json
 import logging
 import os
-from datetime import datetime, UTC
+from datetime import datetime, timezone
 from typing import Dict, List, Any, Optional, Union
 
 import pymongo
@@ -170,7 +170,7 @@ class TodoLogService:
 
             # Create log entry
             log_entry = {
-                'timestamp': datetime.now(UTC),
+                'timestamp': datetime.now(timezone.utc),
                 'operation': operation,
                 'todoId': todo_id,
                 'description': description,
