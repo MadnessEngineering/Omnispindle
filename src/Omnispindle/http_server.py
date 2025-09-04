@@ -127,8 +127,8 @@ class OmnispindleHTTPServer:
     def run(self, host: str = "0.0.0.0", port: int = 8000, path: str = "/mcp"):
         """Run the HTTP server."""
         logger.info(f"Starting Omnispindle HTTP server on {host}:{port}{path}")
-        # Use the correct FastMCP HTTP parameters
-        self.mcp.run(transport="http", host=host, port=port)
+        # Use minimal FastMCP HTTP parameters to debug
+        self.mcp.run(transport="http")
 
 
 def main():
