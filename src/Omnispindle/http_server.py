@@ -14,11 +14,11 @@ from typing import Dict, Any, Optional, Union, List
 from fastmcp import FastMCP
 from dotenv import load_dotenv
 
-from .context import Context
-from .patches import apply_patches
-from .auth_utils import verify_auth0_token
-from .auth_flow import ensure_authenticated, run_async_in_thread
-from . import tools
+from src.Omnispindle.context import Context
+from src.Omnispindle.patches import apply_patches
+from src.Omnispindle.auth_utils import verify_auth0_token
+from src.Omnispindle.auth_flow import ensure_authenticated, run_async_in_thread
+from src.Omnispindle import tools
 
 # Initialize
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -65,25 +65,35 @@ if loadout_name not in TOOL_LOADOUTS:
 selected_tools = TOOL_LOADOUTS[loadout_name]
 logger.info(f"Loading '{loadout_name}' loadout: {selected_tools}")
 
-# Register tools based on loadout
-for tool_name in selected_tools:
-    if hasattr(tools, tool_name):
-        func = getattr(tools, tool_name)
-        docstring = func.__doc__ or f"Tool: {tool_name}"
-        
-        # Create wrapper that adds HTTP context with Auth0 authentication
-        def create_wrapper(original_func, name):
-            @mcp.tool(name=name)
-            async def wrapper(*args, **kwargs):
-                # TODO: Extract auth from request headers in production
-                # For now, use anonymous context
-                ctx = Context(user=None)
-                return await original_func(*args, **kwargs, ctx=ctx)
-            
-            wrapper.__doc__ = docstring
-            return wrapper
-        
-        create_wrapper(func, tool_name)
-        logger.info(f"Tool '{tool_name}' registered for HTTP transport.")
+# Register specific tools manually for HTTP transport compatibility
+if "add_todo" in selected_tools:
+    @mcp.tool()
+    async def add_todo(description: str, project: str, priority: str = "Medium", target_agent: str = "user", metadata: Optional[Dict[str, Any]] = None):
+        """Creates a task in the specified project with the given priority and target agent."""
+        ctx = Context(user=None)
+        return await tools.add_todo(description, project, priority, target_agent, metadata, ctx)
+
+if "query_todos" in selected_tools:
+    @mcp.tool()
+    async def query_todos(filter: Optional[Dict[str, Any]] = None, projection: Optional[Dict[str, Any]] = None, limit: int = 100):
+        """Query todos with flexible filtering options from user's database."""
+        ctx = Context(user=None)
+        return await tools.query_todos(filter, projection, limit, ctx)
+
+if "get_todo" in selected_tools:
+    @mcp.tool()
+    async def get_todo(todo_id: str):
+        """Get a specific todo item by its ID."""
+        ctx = Context(user=None)
+        return await tools.get_todo(todo_id, ctx)
+
+if "mark_todo_complete" in selected_tools:
+    @mcp.tool()
+    async def mark_todo_complete(todo_id: str, comment: Optional[str] = None):
+        """Mark a todo as completed."""
+        ctx = Context(user=None)
+        return await tools.mark_todo_complete(todo_id, comment, ctx)
+
+logger.info(f"Registered {len([t for t in selected_tools if t in ['add_todo', 'query_todos', 'get_todo', 'mark_todo_complete']])} tools for HTTP transport")
 
 # The mcp instance is now ready for fastmcp run command
