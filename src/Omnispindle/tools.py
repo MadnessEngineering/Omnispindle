@@ -899,268 +899,31 @@ async def point_out_obvious(observation: str, sarcasm_level: int = 5, ctx: Optio
     })
 
 
+# DISABLED FOR SECURITY - DO NOT UNCOMMENT WITHOUT PROPER SANDBOXING
 async def bring_your_own(tool_name: str, code: str, runtime: str = "python", 
                          timeout: int = 30, args: Optional[Dict[str, Any]] = None,
                          persist: bool = False, ctx: Optional[Context] = None) -> str:
     """
-    Temporarily hijack the MCP server to run custom tool code.
-    This allows models to define and execute their own tools on the fly.
+    DISABLED: Custom tool execution has been disabled for security reasons.
+    
+    This tool previously allowed arbitrary code execution which poses significant 
+    security risks. It has been disabled until proper sandboxing can be implemented.
     
     Args:
-        tool_name: Name for the temporary tool
-        code: The code to execute (must define an async function)
-        runtime: Runtime environment (python, javascript, bash)
-        timeout: Maximum execution time in seconds
-        args: Arguments to pass to the custom tool
-        persist: Whether to save this tool for future use
+        tool_name: Name for the temporary tool (ignored)
+        code: The code to execute (ignored)  
+        runtime: Runtime environment (ignored)
+        timeout: Maximum execution time (ignored)
+        args: Arguments to pass to the custom tool (ignored)
+        persist: Whether to save this tool (ignored)
         ctx: Optional context
     
     Returns:
-        The result of executing the custom tool
-    
-    Security Note: This is intentionally powerful and dangerous.
-    Use with caution and proper sandboxing in production.
+        Security error message
     """
-    import tempfile
-    import asyncio
-    import hashlib
-    import pickle
+    logger.warning(f"Attempt to use disabled bring_your_own tool by user: {ctx.user.get('sub', 'anonymous') if ctx and ctx.user else 'anonymous'}")
     
-    # Security check (basic - you'd want more in production)
-    if ctx and ctx.user:
-        user_id = ctx.user.get("sub", "anonymous")
-        # Check if user is allowed to bring their own tools
-        if user_id != "system" and not user_id.startswith("admin"):
-            # Rate limit non-admin users
-            rate_limit_key = f"byo_tool_{user_id}"
-            # Simple in-memory rate limiting (use Redis in production)
-            if not hasattr(bring_your_own, "_rate_limits"):
-                bring_your_own._rate_limits = {}
-            
-            last_call = bring_your_own._rate_limits.get(rate_limit_key, 0)
-            now = datetime.now(timezone.utc).timestamp()
-            if now - last_call < 10:  # 10 second cooldown
-                return create_response(False, 
-                    message=f"Rate limited. Please wait {10 - (now - last_call):.1f} seconds")
-            bring_your_own._rate_limits[rate_limit_key] = now
-    else:
-        user_id = "anonymous"
-    
-    # Validate runtime
-    allowed_runtimes = ["python", "javascript", "bash"]
-    if runtime not in allowed_runtimes:
-        return create_response(False, 
-            message=f"Invalid runtime. Allowed: {allowed_runtimes}")
-    
-    # Create a unique ID for this tool
-    tool_id = hashlib.md5(f"{tool_name}_{code}_{datetime.now(timezone.utc)}".encode()).hexdigest()[:8]
-    full_tool_name = f"byo_{tool_name}_{tool_id}"
-    
-    logger.warning(f"BYO Tool execution requested: {full_tool_name} by {user_id}")
-    
-    try:
-        if runtime == "python":
-            # Create a temporary module for the code
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
-                # Wrap the code in a module structure
-                module_code = f"""
-import asyncio
-import json
-from datetime import datetime
-
-# User-provided code
-{code}
-
-# Execution wrapper
-async def _execute_byo_tool(args):
-    if 'main' in globals():
-        if asyncio.iscoroutinefunction(main):
-            return await main(**args)
-        else:
-            return main(**args)
-    else:
-        raise ValueError("No 'main' function defined in custom tool code")
-"""
-                f.write(module_code)
-                temp_file = f.name
-            
-            # Execute the code with timeout
-            try:
-                # Import and run the temporary module
-                import importlib.util
-                spec = importlib.util.spec_from_file_location(full_tool_name, temp_file)
-                module = importlib.util.module_from_spec(spec)
-                spec.loader.exec_module(module)
-                
-                # Execute with timeout
-                result = await asyncio.wait_for(
-                    module._execute_byo_tool(args or {}),
-                    timeout=timeout
-                )
-                
-                # Clean up
-                os.unlink(temp_file)
-                
-            except asyncio.TimeoutError:
-                os.unlink(temp_file)
-                return create_response(False, 
-                    message=f"Tool execution timed out after {timeout} seconds")
-            except Exception as e:
-                if os.path.exists(temp_file):
-                    os.unlink(temp_file)
-                logger.error(f"BYO tool execution failed: {str(e)}")
-                return create_response(False, 
-                    message=f"Tool execution failed: {str(e)}")
-        
-        elif runtime == "javascript":
-            # Use subprocess to run Node.js
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.js', delete=False) as f:
-                js_code = f"""
-{code}
-
-// Execution wrapper
-(async () => {{
-    const args = {json.dumps(args or {})};
-    if (typeof main === 'function') {{
-        const result = await main(args);
-        console.log(JSON.stringify(result));
-    }} else {{
-        throw new Error("No 'main' function defined");
-    }}
-}})();
-"""
-                f.write(js_code)
-                temp_file = f.name
-            
-            try:
-                proc = await asyncio.create_subprocess_exec(
-                    'node', temp_file,
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE
-                )
-                stdout, stderr = await asyncio.wait_for(
-                    proc.communicate(),
-                    timeout=timeout
-                )
-                os.unlink(temp_file)
-                
-                if proc.returncode != 0:
-                    return create_response(False, 
-                        message=f"JavaScript execution failed: {stderr.decode()}")
-                
-                result = json.loads(stdout.decode())
-                
-            except asyncio.TimeoutError:
-                proc.kill()
-                os.unlink(temp_file)
-                return create_response(False, 
-                    message=f"Tool execution timed out after {timeout} seconds")
-        
-        elif runtime == "bash":
-            # Execute bash commands
-            try:
-                proc = await asyncio.create_subprocess_shell(
-                    code,
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE
-                )
-                stdout, stderr = await asyncio.wait_for(
-                    proc.communicate(),
-                    timeout=timeout
-                )
-                
-                if proc.returncode != 0:
-                    return create_response(False, 
-                        message=f"Bash execution failed: {stderr.decode()}")
-                
-                result = stdout.decode()
-                
-            except asyncio.TimeoutError:
-                proc.kill()
-                return create_response(False, 
-                    message=f"Tool execution timed out after {timeout} seconds")
-        
-        # Store execution history
-        try:
-            # Get user-scoped collections - use database access for custom collections
-            collections = db_connection.get_collections(ctx.user if ctx else None)
-            byo_collection = collections.database["byo_tools"]
-            execution_record = {
-                "tool_id": tool_id,
-                "tool_name": tool_name,
-                "full_name": full_tool_name,
-                "code": code[:1000],  # Store first 1000 chars
-                "runtime": runtime,
-                "args": args,
-                "result": str(result)[:500] if result else None,  # Store first 500 chars
-                "user": user_id,
-                "timestamp": datetime.now(timezone.utc),
-                "persist": persist,
-                "success": True
-            }
-            byo_collection.insert_one(execution_record)
-            
-            # If persist is True, save to a persistent tools collection
-            if persist:
-                persistent_tools = collections.database["persistent_byo_tools"]
-                persistent_tools.update_one(
-                    {"tool_name": tool_name},
-                    {"$set": {
-                        "tool_name": tool_name,
-                        "code": code,
-                        "runtime": runtime,
-                        "created_by": user_id,
-                        "created_at": datetime.now(timezone.utc),
-                        "last_used": datetime.now(timezone.utc),
-                        "execution_count": 1
-                    }, "$inc": {"execution_count": 1}},
-                    upsert=True
-                )
-                
-        except Exception as e:
-            logger.debug(f"Failed to store BYO tool execution: {e}")
-        
-        # Publish to MQTT for monitoring
-        mqtt_publish("tools/byo/execution", {
-            "tool_id": tool_id,
-            "tool_name": full_tool_name,
-            "runtime": runtime,
-            "user": user_id,
-            "success": True
-        })
-        
-        return create_response(True, {
-            "tool_id": tool_id,
-            "tool_name": full_tool_name,
-            "result": result,
-            "runtime": runtime,
-            "execution_time": f"{timeout}s max",
-            "persisted": persist,
-            "meta": {
-                "warning": "Custom tool executed successfully. Use with caution.",
-                "security_note": "This tool allows arbitrary code execution.",
-                "user": user_id
-            }
-        })
-        
-    except Exception as e:
-        logger.error(f"BYO tool creation/execution failed: {str(e)}")
-        
-        # Log failure
-        try:
-            # Get user-scoped collections - use database access for custom collections
-            collections = db_connection.get_collections(ctx.user if ctx else None)
-            byo_collection = collections.database["byo_tools"]
-            byo_collection.insert_one({
-                "tool_id": tool_id,
-                "tool_name": tool_name,
-                "error": str(e),
-                "user": user_id,
-                "timestamp": datetime.now(timezone.utc),
-                "success": False
-            })
-        except:
-            pass
-        
-        return create_response(False, 
-            message=f"Failed to create/execute custom tool: {str(e)}")
+    return create_response(False, 
+        message="SECURITY: The 'bring_your_own' tool has been disabled for security reasons. "
+                "This tool previously allowed arbitrary code execution which poses significant "
+                "security risks. Please contact an administrator if you need custom tool functionality.")

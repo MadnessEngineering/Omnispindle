@@ -33,7 +33,7 @@ TOOL_LOADOUTS = {
         "mark_todo_complete", "list_todos_by_status", "search_todos", "list_project_todos",
         "add_lesson", "get_lesson", "update_lesson", "delete_lesson", "search_lessons",
         "grep_lessons", "list_lessons", "query_todo_logs", "list_projects",
-        "explain", "add_explanation", "point_out_obvious", "bring_your_own"
+        "explain", "add_explanation", "point_out_obvious"
     ],
     "basic": [
         "add_todo", "query_todos", "update_todo", "get_todo", "mark_todo_complete",

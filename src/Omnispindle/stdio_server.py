@@ -40,7 +40,7 @@ TOOL_LOADOUTS = {
         "mark_todo_complete", "list_todos_by_status", "search_todos", "list_project_todos",
         "add_lesson", "get_lesson", "update_lesson", "delete_lesson", "search_lessons",
         "grep_lessons", "list_lessons", "query_todo_logs", "list_projects",
-        "explain", "add_explanation", "point_out_obvious", "bring_your_own"
+        "explain", "add_explanation", "point_out_obvious"
     ],
     "basic": [
         "add_todo", "query_todos", "update_todo", "get_todo", "mark_todo_complete",
@@ -271,11 +271,6 @@ class OmniSpindleStdioServer:
                 "doc": "Points out something obvious to the human user with humor.",
                 "params": {"observation": str, "sarcasm_level": int}
             },
-            "bring_your_own": {
-                "func": tools.bring_your_own,
-                "doc": "Temporarily hijack the MCP server to run custom tool code.",
-                "params": {"tool_name": str, "code": str, "runtime": str, "timeout": int, "args": Optional[Dict[str, Any]], "persist": bool}
-            }
         }
 
         # Register enabled tools dynamically
@@ -460,15 +455,6 @@ class OmniSpindleStdioServer:
                             point_out_obvious.__doc__ = docstring
                             return point_out_obvious
                         
-                        elif name == "bring_your_own":
-                            @self.server.tool()
-                            async def bring_your_own(tool_name: str, code: str, runtime: str = "python",
-                                                    timeout: int = 30, args: Optional[Dict[str, Any]] = None,
-                                                    persist: bool = False) -> str:
-                                ctx = _create_context()
-                                return await func(tool_name, code, runtime, timeout, args, persist, ctx=ctx)
-                            bring_your_own.__doc__ = docstring
-                            return bring_your_own
                     
                     return create_wrapper()
                 

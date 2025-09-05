@@ -27,7 +27,7 @@ TOOL_LOADOUTS = {
         "mark_todo_complete", "list_todos_by_status", "search_todos", "list_project_todos",
         "add_lesson", "get_lesson", "update_lesson", "delete_lesson", "search_lessons",
         "grep_lessons", "list_lessons", "query_todo_logs", "list_projects",
-        "explain", "add_explanation", "point_out_obvious", "bring_your_own"
+        "explain", "add_explanation", "point_out_obvious"
     ],
     "basic": [
         "add_todo", "query_todos", "update_todo", "get_todo", "mark_todo_complete",
@@ -147,7 +147,6 @@ class Omnispindle:
             "explain": (tools.explain_tool, "Provides a detailed explanation for a project or concept. For projects, it dynamically generates a summary with recent activity."),
             "add_explanation": (tools.add_explanation, "Add a new static explanation to the knowledge base."),
             "point_out_obvious": (tools.point_out_obvious, "Points out something obvious to the human user with humor."),
-            "bring_your_own": (tools.bring_your_own, "Temporarily hijack the MCP server to run custom tool code.")
         }
 
         # Register enabled tools
