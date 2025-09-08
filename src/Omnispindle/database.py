@@ -82,7 +82,7 @@ class Database:
         Get the appropriate database for a user context.
         Returns user-specific database if user is authenticated, otherwise shared database.
         """
-        if not self.client:
+        if self.client is None:
             raise RuntimeError("MongoDB client not initialized")
 
         # If no user context, return shared database
@@ -128,33 +128,43 @@ class Database:
 
     @property 
     def todos(self) -> Collection:
-        """Legacy property - returns shared todos collection"""
-        return self.shared_db["todos"] if self.shared_db else None
+        """
+        Legacy property for todos collection from shared database
+        """
+        return self.shared_db["todos"] if self.shared_db is not None else None
 
     @property
     def lessons(self) -> Collection:
-        """Legacy property - returns shared lessons collection"""
-        return self.shared_db["lessons_learned"] if self.shared_db else None
+        """
+        Legacy property for lessons_learned collection from shared database
+        """
+        return self.shared_db["lessons_learned"] if self.shared_db is not None else None
 
     @property
     def tags_cache(self) -> Collection:
-        """Legacy property - returns shared tags_cache collection"""
-        return self.shared_db["tags_cache"] if self.shared_db else None
+        """
+        Legacy property for tags_cache collection from shared database
+        """
+        return self.shared_db["tags_cache"] if self.shared_db is not None else None
 
     @property
     def projects(self) -> Collection:
-        """Legacy property - returns shared projects collection"""
-        return self.shared_db["projects"] if self.shared_db else None
-
+        """
+        Legacy property for projects collection from shared database
+        """
+        return self.shared_db["projects"] if self.shared_db is not None else None
+    
     @property
     def explanations(self) -> Collection:
-        """Legacy property - returns shared explanations collection"""
-        return self.shared_db["explanations"] if self.shared_db else None
+        """
+        Legacy property for explanations collection from shared database
+        """
+        return self.shared_db["explanations"] if self.shared_db is not None else None
 
     @property
     def logs(self) -> Collection:
-        """Legacy property - returns shared logs collection"""
-        return self.shared_db["todo_logs"] if self.shared_db else None
+
+        return self.shared_db["todo_logs"] if self.shared_db is not None else None
 
 
 # Export a single instance for the application to use

@@ -66,7 +66,7 @@ class TodoLogService:
         """
         try:
             if self.db is None or self.logs_collection is None:
-                logger.error("Database connection not available. Cannot initialize TodoLogService.")
+                logger.error("Database or collections not initialized, cannot create indexes.")
                 return False
 
             logger.info("Verifying database and collections for TodoLogService")
@@ -100,12 +100,12 @@ class TodoLogService:
                     self.logs_collection.create_index([("todoId", pymongo.ASCENDING)])
                     self.logs_collection.create_index([("project", pymongo.ASCENDING)])
                     logger.info(f"Created indexes for {self.logs_collection.name} collection")
-                    
+
                 except Exception as e:
                     logger.warning(f"Failed to create collection with validator, creating simple collection: {str(e)}")
                     # Fallback: create collection without validator
                     self.db.create_collection(self.logs_collection.name)
-            
+
             # Verify the collection is accessible
             count = self.logs_collection.count_documents({})
             logger.info(f"Database setup verified. Found {count} existing log entries.")
@@ -128,19 +128,19 @@ class TodoLogService:
         """
         if not description or description == 'Unknown':
             return 'Unknown'
-        
+
         # If description is short enough, return as-is
         if len(description) <= 60:
             return description
-        
+
         # Truncate at 60 chars and find the last space to avoid cutting words
         truncated = description[:60]
         last_space = truncated.rfind(' ')
-        
+
         # Only truncate at word if we have reasonable length
         if last_space > 30:
             return truncated[:last_space] + '...'
-        
+
         return truncated + '...'
 
     async def log_todo_action(self, operation: str, todo_id: str, description: str,
@@ -204,7 +204,7 @@ class TodoLogService:
             # Convert datetime to string for JSON serialization
             log_data = log_entry.copy()
             log_data['timestamp'] = log_data['timestamp'].isoformat()
-            
+
             # Convert ObjectId to string if present
             if '_id' in log_data:
                 log_data['_id'] = str(log_data['_id'])
@@ -379,7 +379,7 @@ async def log_todo_create(todo_id: str, description: str, project: str, user_age
             return False
     return await service.log_todo_action('create', todo_id, description, project, None, user_agent)
 
-async def log_todo_update(todo_id: str, description: str, project: str, 
+async def log_todo_update(todo_id: str, description: str, project: str,
                          changes: List[Dict] = None, user_agent: str = None) -> bool:
     """
     Log a todo update action.
