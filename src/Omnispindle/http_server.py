@@ -68,14 +68,19 @@ async def get_authenticated_context(request_headers: Optional[Dict[str, str]] = 
     if not request_headers:
         try:
             request_headers = get_http_headers()
+            logger.info(f"Retrieved headers from FastMCP context: {list(request_headers.keys()) if request_headers else 'None'}")
         except Exception as e:
-            logger.debug(f"Could not get HTTP headers from FastMCP context: {e}")
+            logger.warning(f"Could not get HTTP headers from FastMCP context: {e}")
             request_headers = {}
     
     if request_headers:
         auth_header = request_headers.get("authorization") or request_headers.get("Authorization")
+        logger.info(f"Authorization header found: {'Yes' if auth_header else 'No'}")
         if auth_header and auth_header.startswith("Bearer "):
             token = auth_header[7:]  # Remove "Bearer " prefix
+            logger.info(f"Token extracted successfully (length: {len(token)})")
+        elif auth_header:
+            logger.warning(f"Authorization header present but doesn't start with 'Bearer ': {auth_header[:20]}...")
 
     if not token:
         auth_url = f"https://{AUTH_CONFIG.domain}/authorize?client_id={AUTH_CONFIG.client_id}&audience={AUTH_CONFIG.audience}&response_type=token&redirect_uri=http://localhost:8765/callback"
