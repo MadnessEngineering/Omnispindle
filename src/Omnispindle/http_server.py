@@ -13,6 +13,8 @@ from typing import Dict, Any, Optional, Union, List
 
 from fastmcp import FastMCP, Context as MCPContext
 from fastmcp.server.dependencies import get_http_headers
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
 from dotenv import load_dotenv
 
 from src.Omnispindle.context import Context
@@ -53,8 +55,24 @@ TOOL_LOADOUTS = {
     ]
 }
 
+# Global variable to store current request headers (not ideal but might work)
+_current_request_headers = {}
+
+class HeaderCaptureMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        global _current_request_headers
+        # Capture headers from the request
+        _current_request_headers = dict(request.headers)
+        logger.info(f"Middleware captured headers: {list(_current_request_headers.keys())}")
+        
+        response = await call_next(request)
+        return response
+
 # Create the FastMCP instance that fastmcp run will use
 mcp = FastMCP("Omnispindle 🌪️")
+
+# Add middleware to capture headers
+mcp.app.add_middleware(HeaderCaptureMiddleware)
 
 
 async def get_authenticated_context_from_mcp(mcp_ctx: MCPContext) -> Context:
@@ -63,6 +81,12 @@ async def get_authenticated_context_from_mcp(mcp_ctx: MCPContext) -> Context:
     Returns authenticated user context or raises an error.
     """
     token = None
+    
+    # Debug: Log what MCP context contains
+    logger.info(f"MCP Context received: {mcp_ctx}")
+    if mcp_ctx:
+        logger.info(f"MCP Context type: {type(mcp_ctx)}")
+        logger.info(f"MCP Context attributes: {dir(mcp_ctx)}")
     
     # Try to get headers from MCP context
     if mcp_ctx and hasattr(mcp_ctx, 'headers'):
@@ -74,6 +98,22 @@ async def get_authenticated_context_from_mcp(mcp_ctx: MCPContext) -> Context:
             if auth_header and auth_header.startswith("Bearer "):
                 token = auth_header[7:]
                 logger.info(f"Token extracted from MCP context (length: {len(token)})")
+    
+    # Try other potential MCP context attributes
+    if not token and mcp_ctx:
+        for attr_name in ['request', 'http_headers', 'context', 'session']:
+            if hasattr(mcp_ctx, attr_name):
+                attr = getattr(mcp_ctx, attr_name)
+                logger.info(f"MCP Context has {attr_name}: {attr}")
+                if hasattr(attr, 'headers'):
+                    headers = attr.headers
+                    logger.info(f"Found headers in {attr_name}: {list(headers.keys()) if headers else 'None'}")
+                    if headers:
+                        auth_header = headers.get("authorization") or headers.get("Authorization")
+                        if auth_header and auth_header.startswith("Bearer "):
+                            token = auth_header[7:]
+                            logger.info(f"Token extracted from {attr_name} (length: {len(token)})")
+                            break
     
     # Fallback to get_http_headers
     if not token:
@@ -87,6 +127,14 @@ async def get_authenticated_context_from_mcp(mcp_ctx: MCPContext) -> Context:
                     logger.info(f"Token extracted from get_http_headers (length: {len(token)})")
         except Exception as e:
             logger.warning(f"Could not get HTTP headers from FastMCP context: {e}")
+    
+    # Final fallback: check global headers variable
+    if not token and _current_request_headers:
+        logger.info(f"Trying global headers: {list(_current_request_headers.keys())}")
+        auth_header = _current_request_headers.get("authorization") or _current_request_headers.get("Authorization")
+        if auth_header and auth_header.startswith("Bearer "):
+            token = auth_header[7:]
+            logger.info(f"Token extracted from global headers (length: {len(token)})")
 
     if not token:
         auth_url = f"https://{AUTH_CONFIG.domain}/authorize?client_id={AUTH_CONFIG.client_id}&audience={AUTH_CONFIG.audience}&response_type=token&redirect_uri=http://localhost:8765/callback"
