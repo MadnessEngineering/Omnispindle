@@ -12,6 +12,7 @@ import os
 from typing import Dict, Any, Optional, Union, List
 
 from fastmcp import FastMCP
+from fastmcp.server.dependencies import get_http_headers
 from dotenv import load_dotenv
 
 from src.Omnispindle.context import Context
@@ -56,19 +57,29 @@ TOOL_LOADOUTS = {
 mcp = FastMCP("Omnispindle 🌪️")
 
 
-async def get_authenticated_context() -> Context:
+async def get_authenticated_context(request_headers: Optional[Dict[str, str]] = None) -> Context:
     """
     Extract and verify Auth0 token from HTTP request context.
     Returns authenticated user context or raises an error.
-    
-    Note: This function needs to be enhanced with actual HTTP request access
-    when FastMCP provides request context access.
     """
-    # TODO: Extract Authorization header from FastMCP request context
-    # For now, we'll check environment variables as a fallback
-
-    # Check if there's a token in environment (for testing/development)
-    token = os.getenv("OMNISPINDLE_AUTH0_TOKEN") or os.getenv("AUTH0_TOKEN")
+    token = None
+    
+    # First try to get token from FastMCP request headers
+    if not request_headers:
+        try:
+            request_headers = get_http_headers()
+        except Exception as e:
+            logger.debug(f"Could not get HTTP headers from FastMCP context: {e}")
+            request_headers = {}
+    
+    if request_headers:
+        auth_header = request_headers.get("authorization") or request_headers.get("Authorization")
+        if auth_header and auth_header.startswith("Bearer "):
+            token = auth_header[7:]  # Remove "Bearer " prefix
+    
+    # Fall back to environment variables (for testing/development)
+    if not token:
+        token = os.getenv("OMNISPINDLE_AUTH0_TOKEN") or os.getenv("AUTH0_TOKEN")
 
     if not token:
         # In production, this would extract from Authorization: Bearer <token> header
