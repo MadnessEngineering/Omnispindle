@@ -68,7 +68,7 @@ async def get_authenticated_context() -> Context:
     # For now, we'll check environment variables as a fallback
     
     # Check if there's a token in environment (for testing/development)
-    token = os.getenv("AUTH0_TOKEN")
+    token = os.getenv("OMNISPINDLE_AUTH0_TOKEN") or os.getenv("AUTH0_TOKEN")
     
     if not token:
         # In production, this would extract from Authorization: Bearer <token> header
