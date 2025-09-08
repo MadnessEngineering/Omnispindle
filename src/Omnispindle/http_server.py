@@ -71,8 +71,12 @@ class HeaderCaptureMiddleware(BaseHTTPMiddleware):
 # Create the FastMCP instance that fastmcp run will use
 mcp = FastMCP("Omnispindle 🌪️")
 
-# Add middleware to capture headers
-mcp.app.add_middleware(HeaderCaptureMiddleware)
+# Add middleware to capture headers (if FastMCP supports it)
+if hasattr(mcp, 'app') and hasattr(mcp.app, 'add_middleware'):
+    mcp.app.add_middleware(HeaderCaptureMiddleware)
+    logger.info("Added HeaderCaptureMiddleware to FastMCP app")
+else:
+    logger.warning("FastMCP doesn't support app.add_middleware - using fallback header capture")
 
 
 async def get_authenticated_context_from_mcp(mcp_ctx: MCPContext) -> Context:
