@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.11
 """
 FastMCP HTTP Server for Omnispindle with user-scoped databases.
 
@@ -47,7 +47,7 @@ TOOL_LOADOUTS = {
         "grep_lessons", "list_lessons"
     ],
     "admin": [
-        "query_todos", "update_todo", "delete_todo", "query_todo_logs", 
+        "query_todos", "update_todo", "delete_todo", "query_todo_logs",
         "list_projects", "explain", "add_explanation"
     ]
 }
@@ -66,10 +66,10 @@ async def get_authenticated_context() -> Context:
     """
     # TODO: Extract Authorization header from FastMCP request context
     # For now, we'll check environment variables as a fallback
-    
+
     # Check if there's a token in environment (for testing/development)
     token = os.getenv("OMNISPINDLE_AUTH0_TOKEN") or os.getenv("AUTH0_TOKEN")
-    
+
     if not token:
         # In production, this would extract from Authorization: Bearer <token> header
         auth_url = f"https://{AUTH_CONFIG.domain}/authorize?client_id={AUTH_CONFIG.client_id}&audience={AUTH_CONFIG.audience}&response_type=token&redirect_uri=http://localhost:8765/callback"
@@ -78,12 +78,12 @@ async def get_authenticated_context() -> Context:
             f"Please obtain a token by visiting: {auth_url}\n"
             f"Then include it in the Authorization header: 'Bearer <your-token>'"
         )
-    
+
     # Verify the token
     user_payload = await verify_auth0_token(token)
     if not user_payload:
         raise ValueError("Invalid or expired Auth0 token. Please re-authenticate.")
-    
+
     user_payload["auth_method"] = "auth0"
     logger.info(f"HTTP request authenticated via Auth0: {user_payload.get('sub')}")
     return Context(user=user_payload)
