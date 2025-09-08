@@ -76,16 +76,11 @@ async def get_authenticated_context(request_headers: Optional[Dict[str, str]] = 
         auth_header = request_headers.get("authorization") or request_headers.get("Authorization")
         if auth_header and auth_header.startswith("Bearer "):
             token = auth_header[7:]  # Remove "Bearer " prefix
-    
-    # Fall back to environment variables (for testing/development)
-    if not token:
-        token = os.getenv("OMNISPINDLE_AUTH0_TOKEN") or os.getenv("AUTH0_TOKEN")
 
     if not token:
-        # In production, this would extract from Authorization: Bearer <token> header
         auth_url = f"https://{AUTH_CONFIG.domain}/authorize?client_id={AUTH_CONFIG.client_id}&audience={AUTH_CONFIG.audience}&response_type=token&redirect_uri=http://localhost:8765/callback"
         raise ValueError(
-            f"Authentication required. No valid Auth0 token found.\n"
+            f"Authentication required. No Authorization header found in request.\n"
             f"Please obtain a token by visiting: {auth_url}\n"
             f"Then include it in the Authorization header: 'Bearer <your-token>'"
         )
