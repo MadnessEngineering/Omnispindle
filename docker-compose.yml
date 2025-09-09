@@ -1,22 +1,4 @@
 services:
-  # MongoDB for task storage
-  mongo:
-    image: mongo:6
-    restart: unless-stopped
-    ports:
-      - "27017:27017"
-    volumes:
-      - mongodb_data:/data/db
-    environment:
-      - MONGO_INITDB_DATABASE=swarmonomicon
-    deploy:
-      resources:
-        limits:
-          memory: 1G
-          cpus: '1'
-    networks:
-      - madness_network
-
   # Mosquitto MQTT broker for messaging
   mosquitto:
     image: eclipse-mosquitto:2
@@ -41,21 +23,26 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: danedens31/omnispindle:latest
+    image: danedens31/omnispindle:0.0.9
     restart: unless-stopped
     ports:
-      - "8000:8000"  # Exposing the Uvicorn port for SSE connections
+      - "8000:8000"  # FastAPI web server and MCP stdio endpoints
     environment:
-      - MONGODB_URI=mongodb://${AWSIP:-AWS_IP_ADDRESS}:27017
-      - MONGODB_DB=swarmonomicon
-      - MONGODB_COLLECTION=todos
-      - AWSIP=${AWSIP:-AWS_IP_ADDRESS}
-      - AWSPORT=${AWSPORT:-1883}
-      - MQTT_HOST=${AWSIP:-AWS_IP_ADDRESS}
-      - MQTT_PORT=${AWSPORT:-1883}
-      - DeNa=omnispindle
+      - OMNISPINDLE_MODE=${OMNISPINDLE_MODE:-api}
+      - OMNISPINDLE_TOOL_LOADOUT=${OMNISPINDLE_TOOL_LOADOUT:-basic}
+      - MADNESS_API_URL=${MADNESS_API_URL:-https://madnessinteractive.cc/api}
+      - MADNESS_AUTH_TOKEN=${MADNESS_AUTH_TOKEN}
+      - MCP_USER_EMAIL=${MCP_USER_EMAIL}
+      - MQTT_HOST=mosquitto
+      - MQTT_PORT=1883
       - HOST=0.0.0.0
       - PORT=8000
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
     deploy:
       resources:
         limits:
@@ -87,6 +74,5 @@ networks:
     external: true
 
 volumes:
-  mongodb_data:
   mosquitto_data:
   mosquitto_log:
