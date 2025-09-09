@@ -1,9 +1,18 @@
 # Environment and credentials
-.env
+.env*
 .env.local
 .env.production
 .env.development
 AUTH0_TOKEN*
+*_secrets.json
+*client_secrets*
+*.key
+*.pem
+*.p12
+*.pfx
+config/*.json
+config/*secrets*
+*.credentials
 
 # Python
 __pycache__/
