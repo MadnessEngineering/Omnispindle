@@ -17,30 +17,23 @@ MONGODB_DB_NAME = os.getenv("MONGODB_DB", "swarmonomicon")  # Fallback/shared da
 def sanitize_database_name(user_context: Dict[str, Any]) -> str:
     """
     Convert user context to a valid MongoDB database name.
-    Uses email-based naming for consistency with Inventorium.
+    REQUIRES Auth0 'sub' field - no email fallbacks to prevent database fragmentation.
     MongoDB database names cannot contain certain characters.
     """
-    # Prefer email-based naming (consistent with Inventorium)
-    if 'email' in user_context:
-        email = user_context['email']
-        if '@' in email:
-            username, domain = email.split('@', 1)
-            # Create safe database name from email components
-            safe_username = re.sub(r'[^a-zA-Z0-9]', '_', username)
-            safe_domain = re.sub(r'[^a-zA-Z0-9]', '_', domain)
-            database_name = f"user_{safe_username}_{safe_domain}"
-        else:
-            # Fallback if email format is unexpected
-            safe_email = re.sub(r'[^a-zA-Z0-9]', '_', email)
-            database_name = f"user_{safe_email}"
-    elif 'sub' in user_context:
-        # Fallback to sub-based naming if no email
+    # REQUIRE Auth0 'sub' - the canonical, immutable user identifier
+    if 'sub' in user_context and user_context['sub']:
         user_id = user_context['sub']
         sanitized = re.sub(r'[^a-zA-Z0-9_]', '_', user_id)
         database_name = f"user_{sanitized}"
+        print(f"✅ Database naming: Using Auth0 sub: {user_id} -> {database_name}")
     else:
-        # Last resort fallback
-        database_name = "user_unknown"
+        # NO FALLBACKS - this prevents database fragmentation
+        # If there's no Auth0 sub, use shared database instead of creating user-specific one
+        database_name = "swarmonomicon"
+        user_info = user_context.get('email', user_context.get('id', 'unknown'))
+        print(f"⚠️ Database naming: No Auth0 sub found for user {user_info}")
+        print(f"⚠️ Database naming: Using shared database to prevent fragmentation: {database_name}")
+        print(f"⚠️ Database naming: User should authenticate via Auth0 for private database")
     
     # MongoDB database names are limited to 64 characters
     if len(database_name) > 64:
