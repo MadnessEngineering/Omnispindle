@@ -3,15 +3,131 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "Omnispindle"
-version = "0.1.0"
-description = "A FastMCP-based todo list server"
+name = "omnispindle"
+version = "1.0.0"
+description = "API-first MCP Todo Server for AI agents with Auth0 integration"
+readme = "README.md"
 requires-python = ">=3.11"
-dependencies = [
-    "fastmcp",
-    "pymongo",
-    "python-dotenv",
+license = {text = "MIT"}
+authors = [
+    {name = "Dan Edens", email = "danedens31@gmail.com"}
 ]
+maintainers = [
+    {name = "Dan Edens", email = "danedens31@gmail.com"}
+]
+keywords = [
+    "mcp",
+    "model-context-protocol", 
+    "todo",
+    "task-management",
+    "ai-agents",
+    "fastmcp",
+    "auth0",
+    "api-first",
+    "madness-interactive"
+]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Internet :: WWW/HTTP :: HTTP Servers",
+    "Topic :: Office/Business :: Scheduling",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Framework :: FastAPI",
+    "Environment :: Console",
+    "Environment :: Web Environment"
+]
+dependencies = [
+    "fastmcp>=0.1.0",
+    "pymongo>=4.0.0", 
+    "paho-mqtt>=2.0.0",
+    "python-dotenv>=0.19.0",
+    "uvicorn>=0.17.0",
+    "starlette>=0.17.1",
+    "numpy>=1.20.0",
+    "python-dateutil>=2.8.2",
+    "python-jose>=3.3.0",
+    "httpx>=0.23.0"
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-asyncio>=0.21.0",
+    "black>=22.0.0",
+    "isort>=5.10.0",
+    "mypy>=1.0.0"
+]
+ai = [
+    "lmstudio",
+    "scikit-learn>=1.0.0"
+]
+
+[project.urls]
+Homepage = "https://github.com/DanEdens/Omnispindle"
+Repository = "https://github.com/DanEdens/Omnispindle.git"
+Issues = "https://github.com/DanEdens/Omnispindle/issues"
+Documentation = "https://github.com/DanEdens/Omnispindle/blob/main/README.md"
+
+[project.scripts]
+omnispindle = "src.Omnispindle.__main__:main"
+omnispindle-server = "src.Omnispindle.__main__:main"
+omnispindle-stdio = "src.Omnispindle.stdio_server:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/Omnispindle"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/src",
+    "/README.md", 
+    "/pyproject.toml",
+    "/requirements.txt"
+]
+exclude = [
+    "/.git",
+    "/tests",
+    "/docs",
+    "*.pyc",
+    "__pycache__",
+    "/.env*",
+    "/config/*.json"
+]
+
+[tool.hatch.version]
+path = "src/Omnispindle/__init__.py"
+
+[tool.black]
+line-length = 88
+target-version = ['py311']
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  # directories
+  \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | build
+  | dist
+)/
+'''
+
+[tool.isort]
+profile = "black"
+multi_line_output = 3
+line_length = 88
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true

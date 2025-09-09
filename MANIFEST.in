@@ -1,0 +1,49 @@
+# Include the README and other documentation files
+include README.md
+include LICENSE
+include pyproject.toml
+include requirements.txt
+
+# Include package data files
+recursive-include src *.py
+recursive-include src *.json
+recursive-include src *.yaml
+recursive-include src *.yml
+
+# Include config templates but exclude actual config files
+include config/mosquitto.conf
+exclude config/*secrets*
+exclude config/*.json
+
+# Exclude sensitive and development files
+exclude .env*
+exclude *.pyc
+exclude .DS_Store
+recursive-exclude * __pycache__
+recursive-exclude * *.py[co]
+recursive-exclude * *.orig
+recursive-exclude * *.rej
+
+# Exclude git and other VCS files
+exclude .git*
+exclude .gitignore
+
+# Exclude build and distribution files
+exclude build/*
+exclude dist/*
+exclude *.egg-info/*
+
+# Exclude test files
+exclude tests/*
+exclude pytest.ini
+exclude tox.ini
+
+# Exclude development and deployment files
+exclude docker-compose*.yml
+exclude Dockerfile*
+exclude *.sh
+exclude Makefile
+
+# Exclude documentation source files
+exclude docs/*
+recursive-exclude docs *
