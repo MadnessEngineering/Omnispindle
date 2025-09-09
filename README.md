@@ -2,7 +2,7 @@
 
 **FastMCP-based task and knowledge management system for AI agents**
 
-Omnispindle is the coordination layer of the Madness Interactive ecosystem. It provides standardized MCP tools for todo management, lesson capture, and cross-project coordination that AI agents can use to actually get work done.
+Omnispindle is the coordination layer of the Madness Interactive ecosystem. It provides standardized MCP tools for todo management, lesson capture, and cross-project coordination that AI agents can use to actually get work done. 
 
 ## What it does
 
@@ -13,7 +13,7 @@ Omnispindle is the coordination layer of the Madness Interactive ecosystem. It p
 - Coordinate work across the Madness Interactive ecosystem
 
 **For Humans:**
-- Visual dashboard through [Inventorium](../Inventorium) 
+- Visual dashboard through [Inventorium](../Inventorium)
 - Real-time updates via MQTT
 - Claude Desktop integration via MCP
 - Project-aware working directories
@@ -47,7 +47,7 @@ Just add Omnispindle to your MCP client configuration:
 **That's it!** The first time you use an Omnispindle tool:
 
 1. 🌐 Your browser opens automatically for Auth0 login
-2. 🔐 Log in with Google (or Auth0 credentials) 
+2. 🔐 Log in with Google (or Auth0 credentials)
 3. ✅ Token is saved locally for future use
 4. 🎯 All MCP tools work seamlessly with your authenticated context
 
@@ -73,7 +73,7 @@ For more details, see the [MCP Client Auth Guide](./docs/MCP_CLIENT_AUTH.md).
 ## Architecture
 
 **MCP Tools** - Standard interface for AI agents to manage work
-**MongoDB** - Persistent storage with audit trails  
+**MongoDB** - Persistent storage with audit trails
 **MQTT** - Real-time coordination across components
 **FastMCP** - High-performance MCP server implementation
 **Auth0/Cloudflare** - Secure authentication and access control
@@ -83,7 +83,7 @@ For more details, see the [MCP Client Auth Guide](./docs/MCP_CLIENT_AUTH.md).
 Configure `OMNISPINDLE_TOOL_LOADOUT` to control available functionality:
 
 - `basic` - Essential todo management (7 tools)
-- `minimal` - Core functionality only (4 tools) 
+- `minimal` - Core functionality only (4 tools)
 - `lessons` - Knowledge management focus (7 tools)
 - `full` - Everything (22 tools)
 
@@ -91,7 +91,7 @@ Configure `OMNISPINDLE_TOOL_LOADOUT` to control available functionality:
 
 Part of the Madness Interactive ecosystem:
 - **Inventorium** - Web dashboard and 3D workspace
-- **SwarmDesk** - Project-specific AI environments  
+- **SwarmDesk** - Project-specific AI environments
 - **Terraria Integration** - Game-based AI interaction (coming soon)
 
 ## Development
@@ -152,7 +152,7 @@ Configure MCP client:
 {
   "mcpServers": {
     "omnispindle": {
-      "command": "mcp-remote", 
+      "command": "mcp-remote",
       "args": ["https://madnessinteractive.cc/mcp/"]
     }
   }
@@ -163,7 +163,7 @@ Configure MCP client:
 
 **This repository contains sensitive configurations:**
 - Auth0 client credentials and domain settings
-- Database connection strings and API endpoints  
+- Database connection strings and API endpoints
 - MCP tool implementations with business logic
 - Infrastructure as Code with account identifiers
 
