@@ -16,6 +16,8 @@ from pymongo import MongoClient
 from .database import db_connection
 from .utils import create_response, mqtt_publish, _format_duration
 from .todo_log_service import log_todo_create, log_todo_update, log_todo_delete, log_todo_complete
+from .schemas.todo_metadata_schema import validate_todo_metadata, validate_todo, TodoMetadata
+from .query_handlers import enhance_todo_query, build_metadata_aggregation, get_query_enhancer
 
 # Load environment variables
 load_dotenv()
@@ -358,6 +360,20 @@ async def add_todo(description: str, project: str, priority: str = "Medium", tar
     """
     todo_id = str(uuid.uuid4())
     validated_project = validate_project_name(project)
+    
+    # Validate metadata against schema if provided
+    validated_metadata = {}
+    if metadata:
+        try:
+            validated_metadata_obj = validate_todo_metadata(metadata)
+            validated_metadata = validated_metadata_obj.model_dump(exclude_none=True)
+            logger.info(f"Metadata validated successfully for todo {todo_id}")
+        except Exception as e:
+            logger.warning(f"Metadata validation failed for todo {todo_id}: {str(e)}")
+            # For backward compatibility, store raw metadata with validation warning
+            validated_metadata = metadata.copy() if metadata else {}
+            validated_metadata["_validation_warning"] = f"Schema validation failed: {str(e)}"
+    
     todo = {
         "id": todo_id,
         "description": description,
@@ -366,7 +382,7 @@ async def add_todo(description: str, project: str, priority: str = "Medium", tar
         "status": "pending",
         "target_agent": target_agent,
         "created_at": int(datetime.now(timezone.utc).timestamp()),
-        "metadata": metadata or {}
+        "metadata": validated_metadata
     }
     try:
         # Get user-scoped collections
@@ -428,6 +444,18 @@ async def update_todo(todo_id: str, updates: dict, ctx: Optional[Context] = None
     """
     if "updated_at" not in updates:
         updates["updated_at"] = int(datetime.now(timezone.utc).timestamp())
+    
+    # Validate metadata if being updated
+    if "metadata" in updates and updates["metadata"] is not None:
+        try:
+            validated_metadata_obj = validate_todo_metadata(updates["metadata"])
+            updates["metadata"] = validated_metadata_obj.model_dump(exclude_none=True)
+            logger.info(f"Metadata validated successfully for todo update {todo_id}")
+        except Exception as e:
+            logger.warning(f"Metadata validation failed for todo update {todo_id}: {str(e)}")
+            # For backward compatibility, keep raw metadata with validation warning
+            if isinstance(updates["metadata"], dict):
+                updates["metadata"]["_validation_warning"] = f"Schema validation failed: {str(e)}"
     try:
         # Get user-scoped collections
         collections = db_connection.get_collections(ctx.user if ctx else None)
@@ -642,6 +670,244 @@ async def search_todos(query: str, fields: Optional[list] = None, limit: int = 1
         "$or": [{field: {"$regex": query, "$options": "i"}} for field in fields]
     }
     return await query_todos(filter=search_query, limit=limit, ctx=ctx)
+
+
+async def query_todos_by_metadata(metadata_filters: Dict[str, Any], 
+                                 base_filter: Optional[Dict[str, Any]] = None,
+                                 limit: int = 100, 
+                                 ctx: Optional[Context] = None) -> str:
+    """
+    Query todos with enhanced metadata filtering capabilities.
+    
+    Args:
+        metadata_filters: Metadata-specific filters like tags, complexity, confidence, etc.
+        base_filter: Base MongoDB filter to combine with metadata filters
+        limit: Maximum results to return
+        ctx: User context
+        
+    Returns:
+        JSON response with filtered todos
+        
+    Example metadata_filters:
+        {
+            "tags": ["bug", "urgent"],
+            "complexity": "High", 
+            "confidence": {"min": 3, "max": 5},
+            "phase": "implementation",
+            "files": {"files": ["*.jsx"], "match_type": "extension"}
+        }
+    """
+    try:
+        # Get user-scoped collections
+        collections = db_connection.get_collections(ctx.user if ctx else None)
+        todos_collection = collections['todos']
+        
+        # Build enhanced query
+        enhancer = get_query_enhancer()
+        enhanced_filter = enhancer.enhance_query_filter(base_filter or {}, metadata_filters)
+        
+        logger.info(f"Enhanced metadata query: {enhanced_filter}")
+        
+        # Execute query
+        cursor = todos_collection.find(enhanced_filter).limit(limit).sort("created_at", -1)
+        results = list(cursor)
+        
+        return create_response(True, {
+            "items": results,
+            "count": len(results),
+            "metadata_filters_applied": list(metadata_filters.keys()),
+            "enhanced_query": enhanced_filter
+        })
+        
+    except Exception as e:
+        logger.error(f"Failed to query todos by metadata: {str(e)}")
+        return create_response(False, message=str(e))
+
+
+async def search_todos_advanced(query: str, 
+                               metadata_filters: Optional[Dict[str, Any]] = None,
+                               fields: Optional[List[str]] = None, 
+                               limit: int = 100,
+                               ctx: Optional[Context] = None) -> str:
+    """
+    Advanced todo search with metadata filtering and text search.
+    
+    Combines traditional text search with metadata filtering for precise results.
+    
+    Args:
+        query: Text search query
+        metadata_filters: Optional metadata filters to apply
+        fields: Fields to search in (description, project by default)
+        limit: Maximum results
+        ctx: User context
+        
+    Returns:
+        JSON response with search results
+    """
+    try:
+        # Get user-scoped collections
+        collections = db_connection.get_collections(ctx.user if ctx else None)
+        todos_collection = collections['todos']
+        
+        # Build text search filter
+        if fields is None:
+            fields = ["description", "project"]
+        
+        text_search_filter = {
+            "$or": [{field: {"$regex": query, "$options": "i"}} for field in fields]
+        }
+        
+        # Combine with metadata filters if provided
+        if metadata_filters:
+            enhancer = get_query_enhancer()
+            combined_filter = enhancer.enhance_query_filter(text_search_filter, metadata_filters)
+        else:
+            combined_filter = text_search_filter
+        
+        logger.info(f"Advanced search query: {combined_filter}")
+        
+        # Use aggregation pipeline for better performance with complex queries
+        if metadata_filters:
+            pipeline = build_metadata_aggregation(
+                text_search_filter, 
+                metadata_filters or {},
+                limit=limit
+            )
+            results = list(todos_collection.aggregate(pipeline))
+        else:
+            # Simple query for text-only search
+            cursor = todos_collection.find(combined_filter).limit(limit).sort("created_at", -1)
+            results = list(cursor)
+        
+        return create_response(True, {
+            "items": results,
+            "count": len(results),
+            "search_query": query,
+            "metadata_filters": metadata_filters or {},
+            "search_fields": fields
+        })
+        
+    except Exception as e:
+        logger.error(f"Failed to perform advanced todo search: {str(e)}")
+        return create_response(False, message=str(e))
+
+
+async def get_metadata_stats(project: Optional[str] = None, 
+                           ctx: Optional[Context] = None) -> str:
+    """
+    Get statistics about metadata usage across todos.
+    
+    Provides insights into:
+    - Most common tags
+    - Complexity distribution  
+    - Confidence levels
+    - Phase usage
+    - File type distribution
+    
+    Args:
+        project: Optional project filter
+        ctx: User context
+        
+    Returns:
+        JSON response with metadata statistics
+    """
+    try:
+        # Get user-scoped collections
+        collections = db_connection.get_collections(ctx.user if ctx else None)
+        todos_collection = collections['todos']
+        
+        # Base match filter
+        match_filter = {}
+        if project:
+            match_filter["project"] = project.lower()
+        
+        # Aggregation pipeline for metadata stats
+        pipeline = [
+            {"$match": match_filter},
+            {
+                "$facet": {
+                    "tag_stats": [
+                        {"$unwind": {"path": "$metadata.tags", "preserveNullAndEmptyArrays": True}},
+                        {"$group": {"_id": "$metadata.tags", "count": {"$sum": 1}}},
+                        {"$sort": {"count": -1}},
+                        {"$limit": 20}
+                    ],
+                    "complexity_stats": [
+                        {"$group": {"_id": "$metadata.complexity", "count": {"$sum": 1}}},
+                        {"$sort": {"count": -1}}
+                    ],
+                    "confidence_stats": [
+                        {"$group": {"_id": "$metadata.confidence", "count": {"$sum": 1}}},
+                        {"$sort": {"_id": 1}}
+                    ],
+                    "phase_stats": [
+                        {"$group": {"_id": "$metadata.phase", "count": {"$sum": 1}}},
+                        {"$sort": {"count": -1}},
+                        {"$limit": 15}
+                    ],
+                    "file_type_stats": [
+                        {"$unwind": {"path": "$metadata.files", "preserveNullAndEmptyArrays": True}},
+                        {
+                            "$addFields": {
+                                "file_extension": {
+                                    "$arrayElemAt": [
+                                        {"$split": ["$metadata.files", "."]}, -1
+                                    ]
+                                }
+                            }
+                        },
+                        {"$group": {"_id": "$file_extension", "count": {"$sum": 1}}},
+                        {"$sort": {"count": -1}},
+                        {"$limit": 10}
+                    ],
+                    "total_counts": [
+                        {
+                            "$group": {
+                                "_id": None,
+                                "total_todos": {"$sum": 1},
+                                "with_metadata": {
+                                    "$sum": {"$cond": [{"$ne": ["$metadata", {}]}, 1, 0]}
+                                },
+                                "with_tags": {
+                                    "$sum": {"$cond": [{"$isArray": "$metadata.tags"}, 1, 0]}
+                                },
+                                "with_complexity": {
+                                    "$sum": {"$cond": [{"$ne": ["$metadata.complexity", None]}, 1, 0]}
+                                }
+                            }
+                        }
+                    ]
+                }
+            }
+        ]
+        
+        results = list(todos_collection.aggregate(pipeline))
+        
+        if results:
+            stats = results[0]
+            
+            # Clean up None values from tag stats
+            stats["tag_stats"] = [item for item in stats["tag_stats"] if item["_id"] is not None]
+            stats["complexity_stats"] = [item for item in stats["complexity_stats"] if item["_id"] is not None]
+            stats["confidence_stats"] = [item for item in stats["confidence_stats"] if item["_id"] is not None]
+            stats["phase_stats"] = [item for item in stats["phase_stats"] if item["_id"] is not None]
+            stats["file_type_stats"] = [item for item in stats["file_type_stats"] if item["_id"] is not None]
+            
+            return create_response(True, {
+                "project_filter": project,
+                "statistics": stats,
+                "generated_at": int(datetime.now(timezone.utc).timestamp())
+            })
+        else:
+            return create_response(True, {
+                "project_filter": project,
+                "statistics": {"message": "No todos found"},
+                "generated_at": int(datetime.now(timezone.utc).timestamp())
+            })
+        
+    except Exception as e:
+        logger.error(f"Failed to get metadata stats: {str(e)}")
+        return create_response(False, message=str(e))
 
 async def grep_lessons(pattern: str, limit: int = 20, ctx: Optional[Context] = None) -> str:
     """

@@ -15,6 +15,7 @@ from .patches import apply_patches
 from . import tools
 from . import hybrid_tools
 from .hybrid_tools import OmnispindleMode
+from .documentation_manager import get_tool_doc
 
 # --- Initializations ---
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -139,30 +140,30 @@ class Omnispindle:
         enabled = TOOL_LOADOUTS[loadout]
         logger.info(f"Loading '{loadout}' loadout: {enabled}")
 
-        # Tool registry - keeps AI docstrings minimal
+        # Tool registry - uses loadout-aware documentation
         tool_registry = {
-            "add_todo": (tools_module.add_todo, "Creates a task in the specified project with the given priority and target agent. Returns a compact representation of the created todo with an ID for reference."),
-            "query_todos": (tools_module.query_todos, "Query todos with flexible filtering options. Searches the todo database using MongoDB-style query filters and projections."),
-            "update_todo": (tools_module.update_todo, "Update a todo with the provided changes. Common fields to update: description, priority, status, metadata."),
-            "delete_todo": (tools_module.delete_todo, "Delete a todo by its ID."),
-            "get_todo": (tools_module.get_todo, "Get a specific todo by ID."),
-            "mark_todo_complete": (tools_module.mark_todo_complete, "Mark a todo as completed. Calculates the duration from creation to completion."),
-            "list_todos_by_status": (tools_module.list_todos_by_status, "List todos filtered by status ('initial', 'pending', 'completed'). Results are formatted for efficiency with truncated descriptions."),
-            "search_todos": (tools_module.search_todos, "Search todos with text search capabilities across specified fields. Special format: \"project:ProjectName\" to search by project."),
-            "list_project_todos": (tools_module.list_project_todos, "List recent active todos for a specific project."),
-            "add_lesson": (tools_module.add_lesson, "Add a new lesson learned to the knowledge base."),
-            "get_lesson": (tools_module.get_lesson, "Get a specific lesson by ID."),
-            "update_lesson": (tools_module.update_lesson, "Update an existing lesson by ID."),
-            "delete_lesson": (tools_module.delete_lesson, "Delete a lesson by ID."),
-            "search_lessons": (tools_module.search_lessons, "Search lessons with text search capabilities."),
-            "grep_lessons": (tools_module.grep_lessons, "Search lessons with grep-style pattern matching across topic and content."),
-            "list_lessons": (tools_module.list_lessons, "List all lessons, sorted by creation date."),
-            "query_todo_logs": (tools_module.query_todo_logs, "Query todo logs with filtering options."),
-            "list_projects": (tools_module.list_projects, "List all valid projects from the centralized project management system. `include_details`: False (names only), True (full metadata), \"filemanager\" (for UI)."),
-            "explain": (tools_module.explain_tool, "Provides a detailed explanation for a project or concept. For projects, it dynamically generates a summary with recent activity."),
-            "add_explanation": (tools_module.add_explanation, "Add a new static explanation to the knowledge base."),
-            "point_out_obvious": (tools_module.point_out_obvious, "Points out something obvious to the human user with humor."),
-            "bring_your_own": (tools_module.bring_your_own, "Temporarily hijack the MCP server to run custom tool code."),
+            "add_todo": (tools_module.add_todo, get_tool_doc("add_todo")),
+            "query_todos": (tools_module.query_todos, get_tool_doc("query_todos")),
+            "update_todo": (tools_module.update_todo, get_tool_doc("update_todo")),
+            "delete_todo": (tools_module.delete_todo, get_tool_doc("delete_todo")),
+            "get_todo": (tools_module.get_todo, get_tool_doc("get_todo")),
+            "mark_todo_complete": (tools_module.mark_todo_complete, get_tool_doc("mark_todo_complete")),
+            "list_todos_by_status": (tools_module.list_todos_by_status, get_tool_doc("list_todos_by_status")),
+            "search_todos": (tools_module.search_todos, get_tool_doc("search_todos")),
+            "list_project_todos": (tools_module.list_project_todos, get_tool_doc("list_project_todos")),
+            "add_lesson": (tools_module.add_lesson, get_tool_doc("add_lesson")),
+            "get_lesson": (tools_module.get_lesson, get_tool_doc("get_lesson")),
+            "update_lesson": (tools_module.update_lesson, get_tool_doc("update_lesson")),
+            "delete_lesson": (tools_module.delete_lesson, get_tool_doc("delete_lesson")),
+            "search_lessons": (tools_module.search_lessons, get_tool_doc("search_lessons")),
+            "grep_lessons": (tools_module.grep_lessons, get_tool_doc("grep_lessons")),
+            "list_lessons": (tools_module.list_lessons, get_tool_doc("list_lessons")),
+            "query_todo_logs": (tools_module.query_todo_logs, get_tool_doc("query_todo_logs")),
+            "list_projects": (tools_module.list_projects, get_tool_doc("list_projects")),
+            "explain": (tools_module.explain_tool, get_tool_doc("explain")),
+            "add_explanation": (tools_module.add_explanation, get_tool_doc("add_explanation")),
+            "point_out_obvious": (tools_module.point_out_obvious, get_tool_doc("point_out_obvious")),
+            "bring_your_own": (tools_module.bring_your_own, get_tool_doc("bring_your_own")),
             # Hybrid-specific tools
             "get_hybrid_status": (hybrid_tools.get_hybrid_status, "Get current hybrid mode status and performance statistics."),
             "test_api_connectivity": (hybrid_tools.test_api_connectivity, "Test API connectivity and response times.")

@@ -2,7 +2,7 @@
 
 **FastMCP-based task and knowledge management system for AI agents**
 
-Omnispindle is the coordination layer of the Madness Interactive ecosystem. It provides standardized MCP tools for todo management, lesson capture, and cross-project coordination that AI agents can use to actually get work done. 
+Omnispindle is the coordination layer of the Madness Interactive ecosystem. It provides standardized MCP tools for todo management, lesson capture, and cross-project coordination that AI agents can use to actually get work done.
 
 ## What it does
 
@@ -13,7 +13,7 @@ Omnispindle is the coordination layer of the Madness Interactive ecosystem. It p
 - Coordinate work across the Madness Interactive ecosystem
 
 **For Humans:**
-- Visual dashboard through [Inventorium](../Inventorium)
+- Visual dashboard through [Inventorium](https://github.com/MadnessEngineering/Inventorium)
 - Real-time updates via MQTT
 - Claude Desktop integration via MCP
 - Project-aware working directories
@@ -65,7 +65,7 @@ Add to your `claude_desktop_config.json`:
 **That's it!** The first time you use an Omnispindle tool:
 
 1. 🌐 Your browser opens automatically for Auth0 login
-2. 🔐 Log in with Google (or Auth0 credentials)  
+2. 🔐 Log in with Google (or Auth0 credentials)
 3. ✅ Token is saved locally for future use
 4. 🎯 All MCP tools work seamlessly with your authenticated context
 
@@ -94,7 +94,7 @@ Omnispindle v1.0.0 features a modern API-first architecture:
 ### 🏗 Core Components
 - **FastMCP Server** - High-performance MCP implementation with stdio/HTTP transports
 - **API-First Design** - HTTP calls to `madnessinteractive.cc/api` (recommended)
-- **Hybrid Mode** - API-first with local database fallback for reliability  
+- **Hybrid Mode** - API-first with local database fallback for reliability
 - **Zero-Config Auth** - Automatic Auth0 device flow authentication
 - **Tool Loadouts** - Configurable tool sets to reduce AI agent token usage
 
@@ -136,7 +136,7 @@ Configure `OMNISPINDLE_TOOL_LOADOUT` to control available functionality:
 
 - **`full`** - All 22 tools available (default)
 - **`basic`** - Essential todo management (7 tools)
-- **`minimal`** - Core functionality only (4 tools)  
+- **`minimal`** - Core functionality only (4 tools)
 - **`lessons`** - Knowledge management focus (7 tools)
 - **`admin`** - Administrative tools (6 tools)
 - **`hybrid_test`** - Testing hybrid functionality (6 tools)

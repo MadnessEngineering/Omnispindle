@@ -25,6 +25,7 @@ from .auth_utils import verify_auth0_token
 from fastmcp import FastMCP
 from .context import Context
 from . import tools
+from .documentation_manager import get_tool_doc
 
 # Configure logging to stderr so it doesn't interfere with stdio protocol
 logging.basicConfig(
@@ -202,117 +203,95 @@ class OmniSpindleStdioServer:
         enabled = TOOL_LOADOUTS[loadout]
         logger.info(f"Loading '{loadout}' loadout: {enabled}")
 
-        # Tool registry with streamlined docstrings for MCP
+        # Tool registry with loadout-aware documentation
         tool_registry = {
             "add_todo": {
                 "func": tools.add_todo,
-                "doc": "Creates a task in the specified project with the given priority and target agent. Returns a compact representation of the created todo with an ID for reference.",
-                "params": {"description": str, "project": str, "priority": str, "target_agent": str, "metadata": Optional[Dict[str, Any]]}
+                "doc": get_tool_doc("add_todo")
             },
             "query_todos": {
                 "func": tools.query_todos,
-                "doc": "Query todos with flexible filtering options. Searches the todo database using MongoDB-style query filters and projections.",
-                "params": {"filter": Optional[Dict[str, Any]], "projection": Optional[Dict[str, Any]], "limit": int, "ctx": Optional[str]}
+                "doc": get_tool_doc("query_todos")
             },
             "update_todo": {
                 "func": tools.update_todo,
-                "doc": "Update a todo with the provided changes. Common fields to update: description, priority, status, metadata.",
-                "params": {"todo_id": str, "updates": dict}
+                "doc": get_tool_doc("update_todo")
             },
             "delete_todo": {
                 "func": tools.delete_todo,
-                "doc": "Delete a todo by its ID.",
-                "params": {"todo_id": str}
+                "doc": get_tool_doc("delete_todo")
             },
             "get_todo": {
                 "func": tools.get_todo,
-                "doc": "Get a specific todo by ID.",
-                "params": {"todo_id": str}
+                "doc": get_tool_doc("get_todo")
             },
             "mark_todo_complete": {
                 "func": tools.mark_todo_complete,
-                "doc": "Mark a todo as completed. Calculates the duration from creation to completion.",
-                "params": {"todo_id": str, "comment": Optional[str]}
+                "doc": get_tool_doc("mark_todo_complete")
             },
             "list_todos_by_status": {
                 "func": tools.list_todos_by_status,
-                "doc": "List todos filtered by status ('initial', 'pending', 'completed'). Results are formatted for efficiency with truncated descriptions.",
-                "params": {"status": str, "limit": int}
+                "doc": get_tool_doc("list_todos_by_status")
             },
             "search_todos": {
                 "func": tools.search_todos,
-                "doc": "Search todos with text search capabilities across specified fields. Special format: \"project:ProjectName\" to search by project.",
-                "params": {"query": str, "fields": Optional[list], "limit": int, "ctx": Optional[str]}
+                "doc": get_tool_doc("search_todos")
             },
             "list_project_todos": {
                 "func": tools.list_project_todos,
-                "doc": "List recent active todos for a specific project.",
-                "params": {"project": str, "limit": int}
+                "doc": get_tool_doc("list_project_todos")
             },
             "add_lesson": {
                 "func": tools.add_lesson,
-                "doc": "Add a new lesson learned to the knowledge base.",
-                "params": {"language": str, "topic": str, "lesson_learned": str, "tags": Optional[list]}
+                "doc": get_tool_doc("add_lesson")
             },
             "get_lesson": {
                 "func": tools.get_lesson,
-                "doc": "Get a specific lesson by ID.",
-                "params": {"lesson_id": str}
+                "doc": get_tool_doc("get_lesson")
             },
             "update_lesson": {
                 "func": tools.update_lesson,
-                "doc": "Update an existing lesson by ID.",
-                "params": {"lesson_id": str, "updates": dict}
+                "doc": get_tool_doc("update_lesson")
             },
             "delete_lesson": {
                 "func": tools.delete_lesson,
-                "doc": "Delete a lesson by ID.",
-                "params": {"lesson_id": str}
+                "doc": get_tool_doc("delete_lesson")
             },
             "search_lessons": {
                 "func": tools.search_lessons,
-                "doc": "Search lessons with text search capabilities.",
-                "params": {"query": str, "fields": Optional[list], "limit": int}
+                "doc": get_tool_doc("search_lessons")
             },
             "grep_lessons": {
                 "func": tools.grep_lessons,
-                "doc": "Search lessons with grep-style pattern matching across topic and content.",
-                "params": {"pattern": str, "limit": int}
+                "doc": get_tool_doc("grep_lessons")
             },
             "list_lessons": {
                 "func": tools.list_lessons,
-                "doc": "List all lessons, sorted by creation date.",
-                "params": {"limit": int}
+                "doc": get_tool_doc("list_lessons")
             },
             "query_todo_logs": {
                 "func": tools.query_todo_logs,
-                "doc": "Query todo logs with filtering options.",
-                "params": {"filter_type": str, "project": str, "page": int, "page_size": int}
+                "doc": get_tool_doc("query_todo_logs")
             },
             "list_projects": {
                 "func": tools.list_projects,
-                "doc": "List all valid projects from the centralized project management system. `include_details`: False (names only), True (full metadata), \"filemanager\" (for UI).",
-                "params": {"include_details": bool, "madness_root": str}
+                "doc": get_tool_doc("list_projects")
             },
             "explain": {
                 "func": tools.explain_tool,
-                "doc": "Provides a detailed explanation for a project or concept. For projects, it dynamically generates a summary with recent activity.",
-                "params": {"topic": str}
+                "doc": get_tool_doc("explain")
             },
             "add_explanation": {
                 "func": tools.add_explanation,
-                "doc": "Add a new static explanation to the knowledge base.",
-                "params": {"topic": str, "content": str, "kind": str, "author": str}
+                "doc": get_tool_doc("add_explanation")
             },
             "point_out_obvious": {
                 "func": tools.point_out_obvious,
-                "doc": "Points out something obvious to the human user with humor.",
-                "params": {"observation": str, "sarcasm_level": int}
+                "doc": get_tool_doc("point_out_obvious")
             },
             "bring_your_own": {
                 "func": tools.bring_your_own,
-                "doc": "Temporarily hijack the MCP server to run custom tool code.",
-                "params": {"tool_name": str, "code": str, "runtime": str, "timeout": int, "args": Optional[Dict[str, Any]], "persist": bool}
+                "doc": get_tool_doc("bring_your_own")
             }
         }
 
