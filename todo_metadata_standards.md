@@ -10,12 +10,12 @@ These fields appear consistently across all todos:
 ```json
 {
   "_id": "ObjectId",
-  "id": "uuid-v4-string", 
+  "id": "uuid-v4-string",
   "description": "string",
   "project": "string",
   "priority": "High|Medium|Low|Critical",
   "status": "pending|completed|in_progress",
-  "target_agent": "user|claude|system", 
+  "target_agent": "user|claude|system",
   "created_at": "unix_timestamp",
   "updated_at": "unix_timestamp"
 }
@@ -48,7 +48,7 @@ From your example in the conversation:
 ```json
 "metadata": {
   "file": "src/Omnispindle/stdio_server.py",
-  "current_state": "hardcoded_all_tools", 
+  "current_state": "hardcoded_all_tools",
   "needed": "respect_OMNISPINDLE_TOOL_LOADOUT"
 }
 ```
@@ -58,7 +58,7 @@ From inventorium todos:
 ```json
 "metadata": {
   "component": "TodoList Integration",
-  "file": "src/components/TodoList.jsx", 
+  "file": "src/components/TodoList.jsx",
   "changes": "170+ lines modified",
   "features": ["field validation", "MCP updates", "real-time saving", "TTS integration"],
   "completed_by": "email_address",
@@ -114,7 +114,7 @@ Current analysis task:
 ```json
 {
   "completed_at": "unix_timestamp",
-  "completed_by": "email_or_agent_id", 
+  "completed_by": "email_or_agent_id",
   "completion_comment": "string (optional)",
   "duration_sec": "number (calculated)"
 }
@@ -126,27 +126,27 @@ Current analysis task:
   // Technical Context (optional)
   "files": ["array", "of", "file/paths"],
   "components": ["ComponentName1", "ComponentName2"],
-  "dependencies": ["todo-id-1", "todo-id-2"],
-  
+  "commit_hash": "string (optional)",
+  "branch": "string (optional)",
+
   // Project Organization (optional)
   "phase": "string (for multi-phase projects)",
   "epic": "string (for grouping related features)",
   "tags": ["tag1", "tag2", "tag3"],
-  
+
   // State Tracking (optional)
   "current_state": "string (what exists now)",
-  "target_state": "string (desired end state)",
-  "blockers": ["blocker1", "blocker2"],
-  
+  "target_state": "string (desired end state) (or epic-todo uuid)",
+  "blockers": ["blocker1-uuid", "blocker2-uuid"],
+
   // Deliverables (optional)
   "deliverables": ["file1.md", "component.jsx"],
   "acceptance_criteria": ["criteria1", "criteria2"],
-  
+
   // Analysis & Estimates (optional)
-  "estimated_hours": "number",
   "complexity": "Low|Medium|High|Complex",
-  "risk_level": "Low|Medium|High",
-  
+  "confidence": "1|2|3|4|5",
+
   // Custom fields (project-specific)
   "custom": {
     // Project-specific metadata goes here
@@ -158,7 +158,7 @@ Current analysis task:
 
 ### Phase 1: Immediate Standardization
 1. Standardize core fields naming (`target_agent` over `target`)
-2. Move `completed_by` and `completion_comment` to top level
+2. Move `completed_by` and `completion_comment` to top level, including updating Inventorium to use the new fields
 3. Ensure all timestamps use unix format
 4. Add validation for required fields
 
@@ -168,7 +168,7 @@ Current analysis task:
 3. Normalize file path references
 4. Add missing completion tracking fields
 
-### Phase 3: Enhanced Features  
+### Phase 3: Enhanced Features
 1. Add dependency tracking between todos
 2. Implement epic/phase grouping
 3. Add estimation and complexity tracking
