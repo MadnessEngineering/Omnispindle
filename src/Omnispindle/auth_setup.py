@@ -31,9 +31,9 @@ class Auth0CLISetup:
     
     def __init__(self):
         # Use same Auth0 config as main application
-        self.auth0_domain = "dev-eoi0koiaujjbib20.us.auth0.com"
-        self.client_id = "U43kJwbd1xPcCzJsu3kZIIeNV1ygS7x1"
-        self.audience = "https://madnessinteractive.cc/api"
+        self.auth0_domain = os.getenv("AUTH0_DOMAIN", "dev-eoi0koiaujjbib20.us.auth0.com").strip('"')
+        self.client_id = os.getenv("AUTH0_CLIENT_ID", "h1P85iu75KBmyjDcOtuoYXsQLgFtn6Tl").strip('"')
+        self.audience = os.getenv("AUTH0_AUDIENCE", "https://madnessinteractive.cc/api").strip('"')
     
     def generate_pkce_pair(self) -> tuple[str, str]:
         """Generate PKCE code verifier and challenge for secure auth flow."""
@@ -82,11 +82,13 @@ class Auth0CLISetup:
             
             if error == "authorization_pending":
                 print("⏳ Waiting for user authorization...")
-                asyncio.sleep(interval)
+                import time
+                time.sleep(interval)
                 continue
             elif error == "slow_down":
                 interval += 5
-                asyncio.sleep(interval)
+                import time
+                time.sleep(interval)
                 continue
             elif error == "expired_token":
                 raise Exception("❌ Authorization expired. Please run setup again.")
@@ -107,25 +109,29 @@ class Auth0CLISetup:
     
     def generate_mcp_config(self, user_info: Dict[str, Any]) -> Dict[str, Any]:
         """Generate Claude Desktop MCP configuration."""
-        omnispindle_path = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
-        
+        # Get the main Omnispindle directory (two levels up from src/Omnispindle)
+        omnispindle_path = os.path.abspath(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+
         config = {
             "mcpServers": {
                 "omnispindle": {
-                    "command": "python",
-                    "args": ["stdio_main.py"],
+                    "command": "python3.13",
+                    "args": ["-m", "src.Omnispindle.stdio_server"],
                     "cwd": omnispindle_path,
                     "env": {
+                        "MCP_USER_EMAIL": user_info.get("email"),
+                        "MCP_USER_ID": user_info.get("sub"),
+                        "OMNISPINDLE_MODE": "local",
+                        "OMNISPINDLE_TOOL_LOADOUT": "full",
+                        "PYTHONPATH": omnispindle_path,
                         "MONGODB_URI": os.getenv("MONGODB_URI", "mongodb://localhost:27017"),
                         "MONGODB_DB": os.getenv("MONGODB_DB", "swarmonomicon"),
-                        "OMNISPINDLE_TOOL_LOADOUT": "basic",
-                        "MCP_USER_EMAIL": user_info.get("email"),
-                        "MCP_USER_ID": user_info.get("sub")
+                        "AUTH0_CLIENT_ID": self.client_id
                     }
                 }
             }
         }
-        
+
         return config
     
     def save_config(self, config: Dict[str, Any], output_path: Optional[str] = None) -> str:
