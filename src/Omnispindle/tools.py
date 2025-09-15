@@ -511,17 +511,39 @@ async def delete_todo(todo_id: str, ctx: Optional[Context] = None) -> str:
 async def get_todo(todo_id: str, ctx: Optional[Context] = None) -> str:
     """
     Get a specific todo item by its ID.
+    Searches user database first, then falls back to shared database if not found.
     """
     try:
-        # Get user-scoped collections
-        collections = db_connection.get_collections(ctx.user if ctx else None)
-        todos_collection = collections['todos']
-        
-        todo = todos_collection.find_one({"id": todo_id})
+        user_context = ctx.user if ctx else None
+        searched_databases = []
+
+        # First, try user-specific database
+        if user_context and user_context.get('sub'):
+            user_collections = db_connection.get_collections(user_context)
+            user_todos_collection = user_collections['todos']
+            user_db_name = user_collections['database'].name
+            searched_databases.append(f"user database '{user_db_name}'")
+
+            todo = user_todos_collection.find_one({"id": todo_id})
+            if todo:
+                todo['source'] = 'user'
+                return create_response(True, todo)
+
+        # If not found in user database (or no user database), try shared database
+        shared_collections = db_connection.get_collections(None)  # None = shared database
+        shared_todos_collection = shared_collections['todos']
+        shared_db_name = shared_collections['database'].name
+        searched_databases.append(f"shared database '{shared_db_name}'")
+
+        todo = shared_todos_collection.find_one({"id": todo_id})
         if todo:
+            todo['source'] = 'shared'
             return create_response(True, todo)
-        else:
-            return create_response(False, message=f"Todo with ID {todo_id} not found.")
+
+        # Not found in any database
+        searched_locations = " and ".join(searched_databases)
+        return create_response(False, message=f"Todo with ID {todo_id} not found. Searched in: {searched_locations}")
+
     except Exception as e:
         logger.error(f"Failed to get todo: {str(e)}")
         return create_response(False, message=str(e))
