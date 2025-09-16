@@ -1056,14 +1056,72 @@ async def list_project_todos(project: str, limit: int = 5, ctx: Optional[Context
     )
 
 async def query_todo_logs(filter_type: str = 'all', project: str = 'all',
-                       page: int = 1, page_size: int = 20, ctx: Optional[Context] = None) -> str:
+                       page: int = 1, page_size: int = 20, unified: bool = False, ctx: Optional[Context] = None) -> str:
     """
     Query the todo logs with filtering and pagination.
+    Supports unified view to query both personal and shared databases.
     """
     from .todo_log_service import get_service_instance
-    service = get_service_instance()
-    logs = await service.get_logs(filter_type, project, page, page_size, ctx.user if ctx else None)
-    return create_response(True, logs)
+
+    if unified and ctx and ctx.user and ctx.user.get('sub'):
+        # Unified view: get logs from both personal and shared databases
+        try:
+            service = get_service_instance()
+
+            # Get personal logs
+            personal_logs = await service.get_logs(filter_type, project, page, page_size, ctx.user)
+            personal_entries = personal_logs.get('logEntries', [])
+
+            # Add source tag to personal logs
+            for log in personal_entries:
+                log['source'] = 'personal'
+
+            # Get shared logs
+            shared_logs = await service.get_logs(filter_type, project, page, page_size, None)
+            shared_entries = shared_logs.get('logEntries', [])
+
+            # Add source tag to shared logs
+            for log in shared_entries:
+                log['source'] = 'shared'
+
+            # Combine and sort by timestamp
+            all_logs = personal_entries + shared_entries
+            all_logs.sort(key=lambda x: x.get('timestamp', ''), reverse=True)
+
+            # Apply pagination to combined results
+            start_index = (page - 1) * page_size
+            end_index = start_index + page_size
+            paginated_logs = all_logs[start_index:end_index]
+
+            combined_result = {
+                'logEntries': paginated_logs,
+                'totalCount': len(all_logs),
+                'page': page,
+                'pageSize': page_size,
+                'hasMore': len(all_logs) > end_index,
+                'projects': list(set([log.get('project') for log in all_logs if log.get('project')]))
+            }
+
+            return create_response(True, combined_result)
+
+        except Exception as e:
+            logger.error(f"Failed to query unified todo logs: {str(e)}")
+            # Fallback to user-specific logs only
+            service = get_service_instance()
+            logs = await service.get_logs(filter_type, project, page, page_size, ctx.user if ctx else None)
+            return create_response(True, logs)
+    else:
+        # Regular view: single database based on user context
+        service = get_service_instance()
+        logs = await service.get_logs(filter_type, project, page, page_size, ctx.user if ctx else None)
+
+        # Add source tag for consistency
+        log_entries = logs.get('logEntries', [])
+        source = 'personal' if ctx and ctx.user and ctx.user.get('sub') else 'shared'
+        for log in log_entries:
+            log['source'] = source
+
+        return create_response(True, logs)
 
 async def list_projects(include_details: Union[bool, str] = False, madness_root: str = "/Users/d.edens/lab/madness_interactive", ctx: Optional[Context] = None) -> str:
     """
