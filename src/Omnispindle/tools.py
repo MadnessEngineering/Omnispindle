@@ -457,18 +457,46 @@ async def update_todo(todo_id: str, updates: dict, ctx: Optional[Context] = None
             if isinstance(updates["metadata"], dict):
                 updates["metadata"]["_validation_warning"] = f"Schema validation failed: {str(e)}"
     try:
-        # Get user-scoped collections
-        collections = db_connection.get_collections(ctx.user if ctx else None)
-        todos_collection = collections['todos']
-        
-        existing_todo = todos_collection.find_one({"id": todo_id})
-        if not existing_todo:
-            return create_response(False, message=f"Todo {todo_id} not found.")
+        user_context = ctx.user if ctx else None
+        searched_databases = []
+        existing_todo = None
+        todos_collection = None
+        database_source = None
 
+        # First, try user-specific database
+        if user_context and user_context.get('sub'):
+            user_collections = db_connection.get_collections(user_context)
+            user_todos_collection = user_collections['todos']
+            user_db_name = user_collections['database'].name
+            searched_databases.append(f"user database '{user_db_name}'")
+
+            existing_todo = user_todos_collection.find_one({"id": todo_id})
+            if existing_todo:
+                todos_collection = user_todos_collection
+                database_source = "user"
+
+        # If not found in user database (or no user database), try shared database
+        if not existing_todo:
+            shared_collections = db_connection.get_collections(None)  # None = shared database
+            shared_todos_collection = shared_collections['todos']
+            shared_db_name = shared_collections['database'].name
+            searched_databases.append(f"shared database '{shared_db_name}'")
+
+            existing_todo = shared_todos_collection.find_one({"id": todo_id})
+            if existing_todo:
+                todos_collection = shared_todos_collection
+                database_source = "shared"
+
+        # If todo not found in any database
+        if not existing_todo:
+            searched_locations = " and ".join(searched_databases)
+            return create_response(False, message=f"Todo {todo_id} not found. Searched in: {searched_locations}")
+
+        # Update the todo in the database where it was found
         result = todos_collection.update_one({"id": todo_id}, {"$set": updates})
         if result.modified_count == 1:
             user_email = ctx.user.get("email", "anonymous") if ctx and ctx.user else "anonymous"
-            logger.info(f"Todo updated by {user_email}: {todo_id}")
+            logger.info(f"Todo updated by {user_email}: {todo_id} in {database_source} database")
             description = updates.get('description', existing_todo.get('description', 'Unknown'))
             project = updates.get('project', existing_todo.get('project', 'Unknown'))
             changes = [
@@ -477,9 +505,9 @@ async def update_todo(todo_id: str, updates: dict, ctx: Optional[Context] = None
                 if field != 'updated_at' and existing_todo.get(field) != value
             ]
             await log_todo_update(todo_id, description, project, changes, user_email)
-            return create_response(True, message=f"Todo {todo_id} updated successfully")
+            return create_response(True, message=f"Todo {todo_id} updated successfully in {database_source} database")
         else:
-            return create_response(False, message=f"Todo {todo_id} not found or no changes made.")
+            return create_response(False, message=f"Todo {todo_id} found but no changes made.")
     except Exception as e:
         logger.error(f"Failed to update todo: {str(e)}")
         return create_response(False, message=str(e))
@@ -553,13 +581,40 @@ async def mark_todo_complete(todo_id: str, comment: Optional[str] = None, ctx: O
     Mark a todo as completed.
     """
     try:
-        # Get user-scoped collections
-        collections = db_connection.get_collections(ctx.user if ctx else None)
-        todos_collection = collections['todos']
-        
-        existing_todo = todos_collection.find_one({"id": todo_id})
+        user_context = ctx.user if ctx else None
+        searched_databases = []
+        existing_todo = None
+        todos_collection = None
+        database_source = None
+
+        # First, try user-specific database
+        if user_context and user_context.get('sub'):
+            user_collections = db_connection.get_collections(user_context)
+            user_todos_collection = user_collections['todos']
+            user_db_name = user_collections['database'].name
+            searched_databases.append(f"user database '{user_db_name}'")
+
+            existing_todo = user_todos_collection.find_one({"id": todo_id})
+            if existing_todo:
+                todos_collection = user_todos_collection
+                database_source = "user"
+
+        # If not found in user database (or no user database), try shared database
         if not existing_todo:
-            return create_response(False, message=f"Todo {todo_id} not found.")
+            shared_collections = db_connection.get_collections(None)  # None = shared database
+            shared_todos_collection = shared_collections['todos']
+            shared_db_name = shared_collections['database'].name
+            searched_databases.append(f"shared database '{shared_db_name}'")
+
+            existing_todo = shared_todos_collection.find_one({"id": todo_id})
+            if existing_todo:
+                todos_collection = shared_todos_collection
+                database_source = "shared"
+
+        # If todo not found in any database
+        if not existing_todo:
+            searched_locations = " and ".join(searched_databases)
+            return create_response(False, message=f"Todo {todo_id} not found. Searched in: {searched_locations}")
 
         completed_at = int(datetime.now(timezone.utc).timestamp())
         duration_sec = completed_at - existing_todo.get('created_at', completed_at)
@@ -575,15 +630,16 @@ async def mark_todo_complete(todo_id: str, comment: Optional[str] = None, ctx: O
             user_email = ctx.user.get("email", "anonymous") if ctx and ctx.user else "anonymous"
             updates["metadata.completed_by"] = user_email
 
+        # Complete the todo in the database where it was found
         result = todos_collection.update_one({"id": todo_id}, {"$set": updates})
         if result.modified_count == 1:
             user_email = ctx.user.get("email", "anonymous") if ctx and ctx.user else "anonymous"
-            logger.info(f"Todo completed by {user_email}: {todo_id}")
+            logger.info(f"Todo completed by {user_email}: {todo_id} in {database_source} database")
             await log_todo_complete(todo_id, existing_todo.get('description', 'Unknown'),
                                     existing_todo.get('project', 'Unknown'), user_email)
-            return create_response(True, message=f"Todo {todo_id} marked as complete.")
+            return create_response(True, message=f"Todo {todo_id} marked as complete in {database_source} database.")
         else:
-            return create_response(False, message=f"Failed to update todo {todo_id}.")
+            return create_response(False, message=f"Todo {todo_id} found but failed to mark as complete.")
     except Exception as e:
         logger.error(f"Failed to mark todo complete: {str(e)}")
         return create_response(False, message=str(e))
