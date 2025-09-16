@@ -79,21 +79,28 @@ class Database:
             raise RuntimeError("MongoDB client not initialized")
 
         # If no user context, return shared database
-        if not user_context or not user_context.get('sub'):
+        if not user_context:
+            print("⚠️ Database routing: No user context provided, using shared database")
+            return self.shared_db
+
+        # Check for Auth0 'sub' field - the canonical user identifier
+        if not user_context.get('sub'):
+            user_info = user_context.get('email', user_context.get('id', 'unknown'))
+            print(f"⚠️ Database routing: No Auth0 'sub' for user {user_info}, using shared database")
             return self.shared_db
 
         db_name = sanitize_database_name(user_context)
-        
+
         # Return cached database if we have it
         if db_name in self._user_databases:
             return self._user_databases[db_name]
-        
+
         # Create and cache new user database
         user_db = self.client[db_name]
         self._user_databases[db_name] = user_db
-        
+
         user_id = user_context.get('sub', user_context.get('email', 'unknown'))
-        print(f"Initialized user database: {db_name} for user {user_id}")
+        print(f"✅ Database routing: Initialized user database: {db_name} for user {user_id}")
         return user_db
 
     def get_collections(self, user_context: Optional[Dict[str, Any]] = None) -> Dict[str, Collection]:

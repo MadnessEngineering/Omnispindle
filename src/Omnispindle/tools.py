@@ -392,7 +392,7 @@ async def add_todo(description: str, project: str, priority: str = "Medium", tar
         todos_collection.insert_one(todo)
         user_email = ctx.user.get("email", "anonymous") if ctx and ctx.user else "anonymous"
         logger.info(f"Todo created by {user_email} in user database: {todo_id}")
-        await log_todo_create(todo_id, description, project, user_email)
+        await log_todo_create(todo_id, description, project, user_email, ctx.user if ctx else None)
 
         # Get project todo counts from user's database
         pipeline = [
@@ -504,7 +504,7 @@ async def update_todo(todo_id: str, updates: dict, ctx: Optional[Context] = None
                 for field, value in updates.items()
                 if field != 'updated_at' and existing_todo.get(field) != value
             ]
-            await log_todo_update(todo_id, description, project, changes, user_email)
+            await log_todo_update(todo_id, description, project, changes, user_email, ctx.user if ctx else None)
             return create_response(True, message=f"Todo {todo_id} updated successfully in {database_source} database")
         else:
             return create_response(False, message=f"Todo {todo_id} found but no changes made.")
@@ -526,7 +526,7 @@ async def delete_todo(todo_id: str, ctx: Optional[Context] = None) -> str:
             user_email = ctx.user.get("email", "anonymous") if ctx and ctx.user else "anonymous"
             logger.info(f"Todo deleted by {user_email}: {todo_id}")
             await log_todo_delete(todo_id, existing_todo.get('description', 'Unknown'),
-                                  existing_todo.get('project', 'Unknown'), user_email)
+                                  existing_todo.get('project', 'Unknown'), user_email, ctx.user if ctx else None)
         result = todos_collection.delete_one({"id": todo_id})
         if result.deleted_count == 1:
             return create_response(True, message=f"Todo {todo_id} deleted successfully.")
@@ -636,7 +636,7 @@ async def mark_todo_complete(todo_id: str, comment: Optional[str] = None, ctx: O
             user_email = ctx.user.get("email", "anonymous") if ctx and ctx.user else "anonymous"
             logger.info(f"Todo completed by {user_email}: {todo_id} in {database_source} database")
             await log_todo_complete(todo_id, existing_todo.get('description', 'Unknown'),
-                                    existing_todo.get('project', 'Unknown'), user_email)
+                                    existing_todo.get('project', 'Unknown'), user_email, ctx.user if ctx else None)
             return create_response(True, message=f"Todo {todo_id} marked as complete in {database_source} database.")
         else:
             return create_response(False, message=f"Todo {todo_id} found but failed to mark as complete.")
@@ -1026,7 +1026,7 @@ async def query_todo_logs(filter_type: str = 'all', project: str = 'all',
     """
     from .todo_log_service import get_service_instance
     service = get_service_instance()
-    logs = await service.get_logs(filter_type, project, page, page_size)
+    logs = await service.get_logs(filter_type, project, page, page_size, ctx.user if ctx else None)
     return create_response(True, logs)
 
 async def list_projects(include_details: Union[bool, str] = False, madness_root: str = "/Users/d.edens/lab/madness_interactive", ctx: Optional[Context] = None) -> str:
