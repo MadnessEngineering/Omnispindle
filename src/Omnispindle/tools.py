@@ -672,7 +672,7 @@ async def mark_todo_complete(todo_id: str, comment: Optional[str] = None, ctx: O
             user_email = ctx.user.get("email", "anonymous") if ctx and ctx.user else "anonymous"
             logger.info(f"Todo completed by {user_email}: {todo_id} in {database_source} database")
             await log_todo_complete(todo_id, existing_todo.get('description', 'Unknown'),
-                                    existing_todo.get('project', 'Unknown'), user_email, ctx.user if ctx else None)
+                                    existing_todo.get('project', 'Unknown'), user_email, ctx.user if ctx else None, comment)
             return create_response(True, message=f"Todo {todo_id} marked as complete in {database_source} database.")
         else:
             return create_response(False, message=f"Todo {todo_id} found but failed to mark as complete.")
