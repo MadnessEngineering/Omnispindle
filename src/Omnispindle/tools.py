@@ -1068,24 +1068,35 @@ async def query_todo_logs(filter_type: str = 'all', project: str = 'all',
         try:
             service = get_service_instance()
 
-            # Get personal logs
+            # Get personal logs (user-specific database)
             personal_logs = await service.get_logs(filter_type, project, page, page_size, ctx.user)
             personal_entries = personal_logs.get('logEntries', [])
 
-            # Add source tag to personal logs
-            for log in personal_entries:
-                log['source'] = 'personal'
-
-            # Get shared logs
+            # Get shared logs (shared database)
             shared_logs = await service.get_logs(filter_type, project, page, page_size, None)
             shared_entries = shared_logs.get('logEntries', [])
 
-            # Add source tag to shared logs
-            for log in shared_entries:
-                log['source'] = 'shared'
+            # Create a set to track unique log entries and prevent duplicates
+            seen_logs = set()
+            all_logs = []
 
-            # Combine and sort by timestamp
-            all_logs = personal_entries + shared_entries
+            # Process personal logs first
+            for log in personal_entries:
+                log_key = f"{log.get('todoId', '')}_{log.get('operation', '')}_{log.get('timestamp', '')}"
+                if log_key not in seen_logs:
+                    log['source'] = 'personal'
+                    all_logs.append(log)
+                    seen_logs.add(log_key)
+
+            # Process shared logs, but only add if not already seen
+            for log in shared_entries:
+                log_key = f"{log.get('todoId', '')}_{log.get('operation', '')}_{log.get('timestamp', '')}"
+                if log_key not in seen_logs:
+                    log['source'] = 'shared'
+                    all_logs.append(log)
+                    seen_logs.add(log_key)
+
+            # Sort by timestamp
             all_logs.sort(key=lambda x: x.get('timestamp', ''), reverse=True)
 
             # Apply pagination to combined results
@@ -1102,6 +1113,7 @@ async def query_todo_logs(filter_type: str = 'all', project: str = 'all',
                 'projects': list(set([log.get('project') for log in all_logs if log.get('project')]))
             }
 
+            logger.info(f"Unified view: personal={len(personal_entries)}, shared={len(shared_entries)}, unique={len(all_logs)}")
             return create_response(True, combined_result)
 
         except Exception as e:
