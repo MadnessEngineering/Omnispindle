@@ -353,11 +353,22 @@ def validate_project_name(project: str) -> str:
     # Default to "madness_interactive" if not found
     return "madness_interactive"
 
+def _is_read_only_user(ctx: Optional[Context]) -> bool:
+    """
+    Check if the user is in read-only mode (unauthenticated demo user).
+    Returns True if user should have read-only access.
+    """
+    return not ctx or not ctx.user or not ctx.user.get('sub')
+
 async def add_todo(description: str, project: str, priority: str = "Medium", target_agent: str = "user", metadata: Optional[Dict[str, Any]] = None, ctx: Optional[Context] = None) -> str:
     """
     Creates a task in the specified project with the given priority and target agent.
     Returns a compact representation of the created todo with an ID for reference.
     """
+    # Check for read-only mode (unauthenticated demo users)
+    if _is_read_only_user(ctx):
+        return create_response(False, message="Demo mode: Todo creation is disabled. Please authenticate to create todos.")
+
     todo_id = str(uuid.uuid4())
     validated_project = validate_project_name(project)
     
@@ -424,16 +435,29 @@ async def add_todo(description: str, project: str, priority: str = "Medium", tar
 
 async def query_todos(filter: Optional[Dict[str, Any]] = None, projection: Optional[Dict[str, Any]] = None, limit: int = 100, ctx: Optional[Context] = None) -> str:
     """
-    Query todos with flexible filtering options from user's database.
+    Query todos with flexible filtering options.
+    - Authenticated users: returns their personal todos
+    - Unauthenticated users: returns shared database todos (read-only demo mode)
     """
     try:
-        # Get user-scoped collections
-        collections = db_connection.get_collections(ctx.user if ctx else None)
-        todos_collection = collections['todos']
-        
+        user_context = ctx.user if ctx else None
+
+        # For authenticated users with Auth0 'sub', use their personal database
+        if user_context and user_context.get('sub'):
+            collections = db_connection.get_collections(user_context)
+            todos_collection = collections['todos']
+            database_source = "personal"
+        else:
+            # For unauthenticated users, provide read-only access to shared database
+            collections = db_connection.get_collections(None)  # None = shared database
+            todos_collection = collections['todos']
+            database_source = "shared (read-only demo)"
+
         cursor = todos_collection.find(filter or {}, projection).limit(limit)
         results = list(cursor)
-        return create_response(True, {"items": results})
+
+        logger.info(f"Query returned {len(results)} todos from {database_source} database")
+        return create_response(True, {"items": results, "database_source": database_source})
     except Exception as e:
         logger.error(f"Failed to query todos: {str(e)}")
         return create_response(False, message=str(e))
@@ -442,6 +466,10 @@ async def update_todo(todo_id: str, updates: dict, ctx: Optional[Context] = None
     """
     Update a todo with the provided changes.
     """
+    # Check for read-only mode (unauthenticated demo users)
+    if _is_read_only_user(ctx):
+        return create_response(False, message="Demo mode: Todo updates are disabled. Please authenticate to modify todos.")
+
     if "updated_at" not in updates:
         updates["updated_at"] = int(datetime.now(timezone.utc).timestamp())
     
@@ -516,6 +544,10 @@ async def delete_todo(todo_id: str, ctx: Optional[Context] = None) -> str:
     """
     Delete a todo item by its ID.
     """
+    # Check for read-only mode (unauthenticated demo users)
+    if _is_read_only_user(ctx):
+        return create_response(False, message="Demo mode: Todo deletion is disabled. Please authenticate to delete todos.")
+
     try:
         # Get user-scoped collections
         collections = db_connection.get_collections(ctx.user if ctx else None)
@@ -580,6 +612,10 @@ async def mark_todo_complete(todo_id: str, comment: Optional[str] = None, ctx: O
     """
     Mark a todo as completed.
     """
+    # Check for read-only mode (unauthenticated demo users)
+    if _is_read_only_user(ctx):
+        return create_response(False, message="Demo mode: Todo completion is disabled. Please authenticate to modify todos.")
+
     try:
         user_context = ctx.user if ctx else None
         searched_databases = []
