@@ -17,28 +17,33 @@ MONGODB_DB_NAME = os.getenv("MONGODB_DB", "swarmonomicon")  # Fallback/shared da
 def sanitize_database_name(user_context: Dict[str, Any]) -> str:
     """
     Convert user context to a valid MongoDB database name.
-    REQUIRES Auth0 'sub' field - no email fallbacks to prevent database fragmentation.
+    Prefers email over Auth0 'sub' for consistent database naming.
     MongoDB database names cannot contain certain characters.
     """
-    # REQUIRE Auth0 'sub' - the canonical, immutable user identifier
-    if 'sub' in user_context and user_context['sub']:
+    # Prefer email as primary identifier (more stable than Auth0 sub)
+    # This matches the Inventorium backend logic for consistency
+    user_id = None
+    if 'email' in user_context and user_context['email']:
+        user_id = user_context['email']
+        sanitized = re.sub(r'[^a-zA-Z0-9_]', '_', user_id).lower()
+        database_name = f"user_{sanitized}"
+        print(f"✅ Database naming: Using email: {user_id} -> {database_name}")
+    elif 'sub' in user_context and user_context['sub']:
         user_id = user_context['sub']
-        sanitized = re.sub(r'[^a-zA-Z0-9_]', '_', user_id)
+        sanitized = re.sub(r'[^a-zA-Z0-9_]', '_', user_id).lower()
         database_name = f"user_{sanitized}"
         print(f"✅ Database naming: Using Auth0 sub: {user_id} -> {database_name}")
     else:
-        # NO FALLBACKS - this prevents database fragmentation
-        # If there's no Auth0 sub, use shared database instead of creating user-specific one
+        # Fallback to shared database if no personal identifier available
         database_name = "swarmonomicon"
-        user_info = user_context.get('email', user_context.get('id', 'unknown'))
-        print(f"⚠️ Database naming: No Auth0 sub found for user {user_info}")
-        print(f"⚠️ Database naming: Using shared database to prevent fragmentation: {database_name}")
-        print(f"⚠️ Database naming: User should authenticate via Auth0 for private database")
-    
+        user_info = user_context.get('id', 'unknown')
+        print(f"⚠️ Database naming: No email or Auth0 sub found for user {user_info}")
+        print(f"⚠️ Database naming: Using shared database: {database_name}")
+
     # MongoDB database names are limited to 64 characters
     if len(database_name) > 64:
         database_name = database_name[:64]
-    
+
     return database_name
 
 
