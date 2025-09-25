@@ -15,8 +15,8 @@ async def mcp_handler(request: Request, get_current_user: Callable[[], Coroutine
     Handle MCP JSON-RPC requests over HTTP
     """
     try:
-        # Get user from authentication
-        user = await get_current_user()
+        # Get user from authentication (passed as lambda that returns the user dict)
+        user = get_current_user()
         if not user:
             return JSONResponse(
                 content={"error": "Unauthorized"},

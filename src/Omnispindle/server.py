@@ -59,7 +59,7 @@ from .scheduler import scheduler
 
 # Configure logger
 MQTT_HOST = os.getenv("MQTT_HOST", "localhost")
-MQTT_PORT = int(os.getenv("MQTT_PORT", 1883))
+MQTT_PORT = int(os.getenv("MQTT_PORT", 4140))
 DEVICE_NAME = os.getenv("DeNa", os.uname().nodename)
 
 # For debugging double initialization
@@ -145,9 +145,9 @@ class Omnispindle:
 
             # Add the new /api/mcp endpoint
             @app.post("/api/mcp")
-            async def mcp_endpoint(request: Request, token: str = Depends(get_current_user_from_query)):
+            async def mcp_endpoint(request: Request, user: dict = Depends(get_current_user_from_query)):
                 from .mcp_handler import mcp_handler
-                return await mcp_handler(request, lambda: get_current_user_from_query(token))
+                return await mcp_handler(request, lambda: user)
 
             # SSE endpoint for MCP connections
             @app.get("/api/mcp/sse")
@@ -188,7 +188,7 @@ class Omnispindle:
 
                     except asyncio.CancelledError:
                         logger.info("SSE connection cancelled")
-                        break
+                        return
                     except Exception as e:
                         logger.error(f"Error in SSE generator: {e}")
                         yield {
