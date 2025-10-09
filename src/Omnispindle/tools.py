@@ -33,6 +33,8 @@ PROJECTS_CACHE_EXPIRY = 43200  # Cache expiry in seconds (12 hours)
 
 VALID_PROJECTS = get_valid_projects()
 
+# TODO move non-tool functions to utils.py
+
 # Cache utility functions
 def cache_lesson_tags(tags_list, ctx=None):
     """
@@ -44,6 +46,7 @@ def cache_lesson_tags(tags_list, ctx=None):
     """
     try:
         # Get user-scoped collections
+        # TODO FIx this to use both databases
         collections = db_connection.get_collections(ctx.user if ctx else None)
         tags_cache_collection = collections['tags_cache']
 
