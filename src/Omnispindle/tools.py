@@ -14,7 +14,7 @@ from .context import Context
 from pymongo import MongoClient
 
 from .database import db_connection
-from .utils import create_response, mqtt_publish, _format_duration
+from .utils import create_response, mqtt_publish, _format_duration, get_valid_projects
 from .todo_log_service import log_todo_create, log_todo_update, log_todo_delete, log_todo_complete
 from .schemas.todo_metadata_schema import validate_todo_metadata, validate_todo, TodoMetadata
 from .query_handlers import enhance_todo_query, build_metadata_aggregation, get_query_enhancer
@@ -26,21 +26,12 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 # Cache constants
-TAGS_CACHE_KEY = "all_lesson_tags"
+TAGS_CACHE_KEY = "lesson_tags"
 TAGS_CACHE_EXPIRY = 43200  # Cache expiry in seconds (12 hours)
 PROJECTS_CACHE_KEY = "all_valid_projects"
 PROJECTS_CACHE_EXPIRY = 43200  # Cache expiry in seconds (12 hours)
 
-# Valid project list - all lowercase for case-insensitive matching
-# TODO: This will be migrated to MongoDB and deprecated
-VALID_PROJECTS = [
-    "madness_interactive", "regressiontestkit", "omnispindle",
-    "todomill_projectorium", "swarmonomicon", "hammerspoon",
-
-    "lab_management", "cogwyrm", "docker_implementation",
-    "documentation", "eventghost-rust", "hammerghost",
-    "quality_assurance", "spindlewrit", "inventorium"
-]
+VALID_PROJECTS = get_valid_projects()
 
 # Cache utility functions
 def cache_lesson_tags(tags_list, ctx=None):
@@ -55,7 +46,7 @@ def cache_lesson_tags(tags_list, ctx=None):
         # Get user-scoped collections
         collections = db_connection.get_collections(ctx.user if ctx else None)
         tags_cache_collection = collections['tags_cache']
-        
+
         # Add timestamp for cache expiry management
         cache_entry = {
             "key": TAGS_CACHE_KEY,
@@ -88,7 +79,7 @@ def get_cached_lesson_tags(ctx=None):
         # Get user-scoped collections
         collections = db_connection.get_collections(ctx.user if ctx else None)
         tags_cache_collection = collections['tags_cache']
-        
+
         # Find the cache entry
         cache_entry = tags_cache_collection.find_one({"key": TAGS_CACHE_KEY})
 
@@ -107,6 +98,7 @@ def get_cached_lesson_tags(ctx=None):
         logging.error(f"Failed to retrieve cached lesson tags: {str(e)}")
         return None
 
+
 def invalidate_lesson_tags_cache(ctx=None):
     """
     Invalidate the lesson tags cache in MongoDB.
@@ -121,7 +113,7 @@ def invalidate_lesson_tags_cache(ctx=None):
         # Get user-scoped collections
         collections = db_connection.get_collections(ctx.user if ctx else None)
         tags_cache_collection = collections['tags_cache']
-        
+
         tags_cache_collection.delete_one({"key": TAGS_CACHE_KEY})
         return True
     except Exception as e:
@@ -150,7 +142,7 @@ def get_all_lesson_tags(ctx=None):
         # Get user-scoped collections
         collections = db_connection.get_collections(ctx.user if ctx else None)
         lessons_collection = collections['lessons']
-        
+
         # Use MongoDB aggregation to get all unique tags
         pipeline = [
             {"$project": {"tags": 1}},
@@ -184,7 +176,7 @@ def cache_projects(projects_list, ctx=None):
         # Get user-scoped collections
         collections = db_connection.get_collections(ctx.user if ctx else None)
         tags_cache_collection = collections['tags_cache']
-        
+
         cache_entry = {
             "key": PROJECTS_CACHE_KEY,
             "projects": list(projects_list),
@@ -214,7 +206,7 @@ def get_cached_projects(ctx=None):
         # Get user-scoped collections
         collections = db_connection.get_collections(ctx.user if ctx else None)
         tags_cache_collection = collections['tags_cache']
-        
+
         cache_entry = tags_cache_collection.find_one({"key": PROJECTS_CACHE_KEY})
 
         if not cache_entry:
@@ -245,104 +237,14 @@ def invalidate_projects_cache(ctx=None):
         # Get user-scoped collections
         collections = db_connection.get_collections(ctx.user if ctx else None)
         tags_cache_collection = collections['tags_cache']
-        
+
         tags_cache_collection.delete_one({"key": PROJECTS_CACHE_KEY})
         return True
     except Exception as e:
         logging.error(f"Failed to invalidate projects cache: {str(e)}")
         return False
 
-def initialize_projects_collection(ctx=None):
-    """
-    Initialize the projects collection with the current VALID_PROJECTS list.
-    This is a one-time migration function that includes git URLs and paths.
-    
-    Args:
-        ctx: Optional context for user-scoped collections
-    
-    Returns:
-        True if successful, False otherwise
-    """
-    try:
-        # Get user-scoped collections
-        collections = db_connection.get_collections(ctx.user if ctx else None)
-        projects_collection = collections['projects']
-        
-        # Check if projects collection is already populated
-        existing_count = projects_collection.count_documents({})
-        if existing_count > 0:
-            logging.info(f"Projects collection already has {existing_count} projects")
-            return True
-
-        # Insert all valid projects with enhanced metadata
-        current_time = int(datetime.now(timezone.utc).timestamp())
-        project_definitions = {
-            "madness_interactive": {
-                "git_url": "https://github.com/d-edens/madness_interactive.git",
-                "relative_path": "",
-                "description": "Main Madness Interactive project hub"
-            },
-            "regressiontestkit": {
-                "git_url": "https://github.com/d-edens/RegressionTestKit.git",
-                "relative_path": "../RegressionTestKit",
-                "description": "A toolkit for regression testing"
-            }
-        }
-        projects_to_insert = [
-            {
-                "id": name,
-                "name": name,
-                "display_name": name.replace("_", " ").title(),
-                "created_at": current_time,
-                **project_definitions.get(name, {})
-            }
-            for name in VALID_PROJECTS
-        ]
-
-        if projects_to_insert:
-            projects_collection.insert_many(projects_to_insert)
-            logging.info(f"Successfully inserted {len(projects_to_insert)} projects into the collection")
-
-        # Invalidate project cache after initialization
-        invalidate_projects_cache(ctx)
-        return True
-
-    except Exception as e:
-        logging.error(f"Failed to initialize projects collection: {str(e)}")
-        return False
-
-def get_all_projects(ctx=None):
-    """
-    Get all projects from the database, with caching.
-    
-    Args:
-        ctx: Optional context for user-scoped collections
-    """
-    cached_projects = get_cached_projects(ctx)
-    if cached_projects:
-        return cached_projects
-
-    try:
-        # Get user-scoped collections
-        collections = db_connection.get_collections(ctx.user if ctx else None)
-        projects_collection = collections['projects']
-        
-        # Get all projects from the database
-        projects_from_db = list(projects_collection.find({}, {"_id": 0}))
-
-        # If the database is empty, initialize it as a fallback
-        if not projects_from_db:
-            initialize_projects_collection(ctx)
-            projects_from_db = list(projects_collection.find({}, {"_id": 0}))
-
-        # Cache the results for future use
-        cache_projects(projects_from_db, ctx)
-        return projects_from_db
-    except Exception as e:
-        logging.error(f"Failed to get projects from database: {str(e)}")
-        return []
-
-def validate_project_name(project: str) -> str:
+def validate_project_name(project: str, ctx: Optional[Context] = None) -> str:
     # Normalize project name for validation
     project_lower = project.lower()
 
@@ -350,8 +252,9 @@ def validate_project_name(project: str) -> str:
     if project_lower in [p.lower() for p in VALID_PROJECTS]:
         return project_lower  # Return the lowercase version for consistency
 
-    # Default to "madness_interactive" if not found
-    return "madness_interactive"
+    # Return anyway but add a general todo to setup the project
+    add_todo(f"Setup project {project}", "madness_interactive", "Low", "user", None, ctx)
+    return project_lower
 
 def _is_read_only_user(ctx: Optional[Context]) -> bool:
     """
@@ -370,8 +273,8 @@ async def add_todo(description: str, project: str, priority: str = "Medium", tar
         return create_response(False, message="Demo mode: Todo creation is disabled. Please authenticate to create todos.")
 
     todo_id = str(uuid.uuid4())
-    validated_project = validate_project_name(project)
-    
+    validated_project = validate_project_name(project, ctx)
+
     # Validate metadata against schema if provided
     validated_metadata = {}
     if metadata:
@@ -384,7 +287,7 @@ async def add_todo(description: str, project: str, priority: str = "Medium", tar
             # For backward compatibility, store raw metadata with validation warning
             validated_metadata = metadata.copy() if metadata else {}
             validated_metadata["_validation_warning"] = f"Schema validation failed: {str(e)}"
-    
+
     todo = {
         "id": todo_id,
         "description": description,
@@ -399,7 +302,7 @@ async def add_todo(description: str, project: str, priority: str = "Medium", tar
         # Get user-scoped collections
         collections = db_connection.get_collections(ctx.user if ctx else None)
         todos_collection = collections['todos']
-        
+
         todos_collection.insert_one(todo)
         user_email = ctx.user.get("email", "anonymous") if ctx and ctx.user else "anonymous"
         logger.info(f"Todo created by {user_email} in user database: {todo_id}")
@@ -472,7 +375,7 @@ async def update_todo(todo_id: str, updates: dict, ctx: Optional[Context] = None
 
     if "updated_at" not in updates:
         updates["updated_at"] = int(datetime.now(timezone.utc).timestamp())
-    
+
     # Validate metadata if being updated
     if "metadata" in updates and updates["metadata"] is not None:
         try:
@@ -552,7 +455,7 @@ async def delete_todo(todo_id: str, ctx: Optional[Context] = None) -> str:
         # Get user-scoped collections
         collections = db_connection.get_collections(ctx.user if ctx else None)
         todos_collection = collections['todos']
-        
+
         existing_todo = todos_collection.find_one({"id": todo_id})
         if existing_todo:
             user_email = ctx.user.get("email", "anonymous") if ctx and ctx.user else "anonymous"
@@ -705,7 +608,7 @@ async def add_lesson(language: str, topic: str, lesson_learned: str, tags: Optio
         # Get user-scoped collections
         collections = db_connection.get_collections(ctx.user if ctx else None)
         lessons_collection = collections['lessons']
-        
+
         lessons_collection.insert_one(lesson)
         if tags:
             # Invalidate the tags cache when new tags are added
@@ -723,7 +626,7 @@ async def get_lesson(lesson_id: str, ctx: Optional[Context] = None) -> str:
         # Get user-scoped collections
         collections = db_connection.get_collections(ctx.user if ctx else None)
         lessons_collection = collections['lessons']
-        
+
         lesson = lessons_collection.find_one({"id": lesson_id})
         if lesson:
             return create_response(True, lesson)
@@ -741,7 +644,7 @@ async def update_lesson(lesson_id: str, updates: dict, ctx: Optional[Context] = 
         # Get user-scoped collections
         collections = db_connection.get_collections(ctx.user if ctx else None)
         lessons_collection = collections['lessons']
-        
+
         result = lessons_collection.update_one({"id": lesson_id}, {"$set": updates})
         if result.modified_count == 1:
             if 'tags' in updates:
@@ -762,7 +665,7 @@ async def delete_lesson(lesson_id: str, ctx: Optional[Context] = None) -> str:
         # Get user-scoped collections
         collections = db_connection.get_collections(ctx.user if ctx else None)
         lessons_collection = collections['lessons']
-        
+
         result = lessons_collection.delete_one({"id": lesson_id})
         if result.deleted_count == 1:
             # Invalidate the tags cache when lessons are deleted
@@ -786,9 +689,9 @@ async def search_todos(query: str, fields: Optional[list] = None, limit: int = 1
     return await query_todos(filter=search_query, limit=limit, ctx=ctx)
 
 
-async def query_todos_by_metadata(metadata_filters: Dict[str, Any], 
+async def query_todos_by_metadata(metadata_filters: Dict[str, Any],
                                  base_filter: Optional[Dict[str, Any]] = None,
-                                 limit: int = 100, 
+                                 limit: int = 100,
                                  ctx: Optional[Context] = None) -> str:
     """
     Query todos with enhanced metadata filtering capabilities.
@@ -815,32 +718,32 @@ async def query_todos_by_metadata(metadata_filters: Dict[str, Any],
         # Get user-scoped collections
         collections = db_connection.get_collections(ctx.user if ctx else None)
         todos_collection = collections['todos']
-        
+
         # Build enhanced query
         enhancer = get_query_enhancer()
         enhanced_filter = enhancer.enhance_query_filter(base_filter or {}, metadata_filters)
-        
+
         logger.info(f"Enhanced metadata query: {enhanced_filter}")
-        
+
         # Execute query
         cursor = todos_collection.find(enhanced_filter).limit(limit).sort("created_at", -1)
         results = list(cursor)
-        
+
         return create_response(True, {
             "items": results,
             "count": len(results),
             "metadata_filters_applied": list(metadata_filters.keys()),
             "enhanced_query": enhanced_filter
         })
-        
+
     except Exception as e:
         logger.error(f"Failed to query todos by metadata: {str(e)}")
         return create_response(False, message=str(e))
 
 
-async def search_todos_advanced(query: str, 
+async def search_todos_advanced(query: str,
                                metadata_filters: Optional[Dict[str, Any]] = None,
-                               fields: Optional[List[str]] = None, 
+                               fields: Optional[List[str]] = None,
                                limit: int = 100,
                                ctx: Optional[Context] = None) -> str:
     """
@@ -862,28 +765,28 @@ async def search_todos_advanced(query: str,
         # Get user-scoped collections
         collections = db_connection.get_collections(ctx.user if ctx else None)
         todos_collection = collections['todos']
-        
+
         # Build text search filter
         if fields is None:
             fields = ["description", "project"]
-        
+
         text_search_filter = {
             "$or": [{field: {"$regex": query, "$options": "i"}} for field in fields]
         }
-        
+
         # Combine with metadata filters if provided
         if metadata_filters:
             enhancer = get_query_enhancer()
             combined_filter = enhancer.enhance_query_filter(text_search_filter, metadata_filters)
         else:
             combined_filter = text_search_filter
-        
+
         logger.info(f"Advanced search query: {combined_filter}")
-        
+
         # Use aggregation pipeline for better performance with complex queries
         if metadata_filters:
             pipeline = build_metadata_aggregation(
-                text_search_filter, 
+                text_search_filter,
                 metadata_filters or {},
                 limit=limit
             )
@@ -892,7 +795,7 @@ async def search_todos_advanced(query: str,
             # Simple query for text-only search
             cursor = todos_collection.find(combined_filter).limit(limit).sort("created_at", -1)
             results = list(cursor)
-        
+
         return create_response(True, {
             "items": results,
             "count": len(results),
@@ -900,13 +803,13 @@ async def search_todos_advanced(query: str,
             "metadata_filters": metadata_filters or {},
             "search_fields": fields
         })
-        
+
     except Exception as e:
         logger.error(f"Failed to perform advanced todo search: {str(e)}")
         return create_response(False, message=str(e))
 
 
-async def get_metadata_stats(project: Optional[str] = None, 
+async def get_metadata_stats(project: Optional[str] = None,
                            ctx: Optional[Context] = None) -> str:
     """
     Get statistics about metadata usage across todos.
@@ -929,12 +832,12 @@ async def get_metadata_stats(project: Optional[str] = None,
         # Get user-scoped collections
         collections = db_connection.get_collections(ctx.user if ctx else None)
         todos_collection = collections['todos']
-        
+
         # Base match filter
         match_filter = {}
         if project:
             match_filter["project"] = project.lower()
-        
+
         # Aggregation pipeline for metadata stats
         pipeline = [
             {"$match": match_filter},
@@ -994,19 +897,19 @@ async def get_metadata_stats(project: Optional[str] = None,
                 }
             }
         ]
-        
+
         results = list(todos_collection.aggregate(pipeline))
-        
+
         if results:
             stats = results[0]
-            
+
             # Clean up None values from tag stats
             stats["tag_stats"] = [item for item in stats["tag_stats"] if item["_id"] is not None]
             stats["complexity_stats"] = [item for item in stats["complexity_stats"] if item["_id"] is not None]
             stats["confidence_stats"] = [item for item in stats["confidence_stats"] if item["_id"] is not None]
             stats["phase_stats"] = [item for item in stats["phase_stats"] if item["_id"] is not None]
             stats["file_type_stats"] = [item for item in stats["file_type_stats"] if item["_id"] is not None]
-            
+
             return create_response(True, {
                 "project_filter": project,
                 "statistics": stats,
@@ -1018,7 +921,7 @@ async def get_metadata_stats(project: Optional[str] = None,
                 "statistics": {"message": "No todos found"},
                 "generated_at": int(datetime.now(timezone.utc).timestamp())
             })
-        
+
     except Exception as e:
         logger.error(f"Failed to get metadata stats: {str(e)}")
         return create_response(False, message=str(e))
@@ -1031,7 +934,7 @@ async def grep_lessons(pattern: str, limit: int = 20, ctx: Optional[Context] = N
         # Get user-scoped collections
         collections = db_connection.get_collections(ctx.user if ctx else None)
         lessons_collection = collections['lessons']
-        
+
         search_query = {
             "$or": [
                 {"topic": {"$regex": pattern, "$options": "i"}},
@@ -1157,7 +1060,7 @@ async def add_explanation(topic: str, content: str, kind: str = "concept", autho
         # Get user-scoped collections
         collections = db_connection.get_collections(ctx.user if ctx else None)
         explanations_collection = collections['explanations']
-        
+
         explanations_collection.update_one(
             {"topic": topic},
             {"$set": explanation},
@@ -1174,7 +1077,7 @@ async def get_explanation(topic: str, ctx: Optional[Context] = None) -> str:
         # Get user-scoped collections
         collections = db_connection.get_collections(ctx.user if ctx else None)
         explanations_collection = collections['explanations']
-        
+
         explanation = explanations_collection.find_one({"topic": topic})
         if explanation:
             return create_response(True, explanation)
@@ -1189,7 +1092,7 @@ async def update_explanation(topic: str, updates: dict, ctx: Optional[Context] =
         # Get user-scoped collections
         collections = db_connection.get_collections(ctx.user if ctx else None)
         explanations_collection = collections['explanations']
-        
+
         result = explanations_collection.update_one({"topic": topic}, {"$set": updates})
         if result.modified_count:
             return create_response(True, message="Explanation updated.")
@@ -1204,7 +1107,7 @@ async def delete_explanation(topic: str, ctx: Optional[Context] = None) -> str:
         # Get user-scoped collections
         collections = db_connection.get_collections(ctx.user if ctx else None)
         explanations_collection = collections['explanations']
-        
+
         result = explanations_collection.delete_one({"topic": topic})
         if result.deleted_count:
             return create_response(True, message="Explanation deleted.")
@@ -1231,7 +1134,7 @@ async def list_lessons(limit: int = 100, brief: bool = False, ctx: Optional[Cont
         # Get user-scoped collections
         collections = db_connection.get_collections(ctx.user if ctx else None)
         lessons_collection = collections['lessons']
-        
+
         cursor = lessons_collection.find().sort("created_at", -1).limit(limit)
         results = list(cursor)
         if brief:
@@ -1254,7 +1157,7 @@ async def search_lessons(query: str, fields: Optional[list] = None, limit: int =
         # Get user-scoped collections
         collections = db_connection.get_collections(ctx.user if ctx else None)
         lessons_collection = collections['lessons']
-        
+
         cursor = lessons_collection.find(search_query).limit(limit)
         results = list(cursor)
         if brief:
@@ -1278,7 +1181,7 @@ async def point_out_obvious(observation: str, sarcasm_level: int = 5, ctx: Optio
         A response highlighting the obvious with appropriate commentary
     """
     import random
-    
+
     # Sarcasm templates based on level
     templates = {
         1: ["Just a friendly observation: {obs}", "I noticed that {obs}"],
@@ -1292,25 +1195,25 @@ async def point_out_obvious(observation: str, sarcasm_level: int = 5, ctx: Optio
         9: ["In other groundbreaking revelations: {obs}", "Nobel Prize committee, take note: {obs}"],
         10: ["🤯 Mind = Blown: {obs}", "Call the scientists, we've confirmed that {obs}"]
     }
-    
+
     # Clamp sarcasm level
     level = max(1, min(10, sarcasm_level))
-    
+
     # Pick a random template for the level
     template_options = templates.get(level, templates[5])
     template = random.choice(template_options)
-    
+
     # Format the response
     response = template.format(obs=observation)
-    
+
     # Add emoji based on level
     if level >= 7:
         emojis = ["🙄", "😏", "🤔", "🧐", "🎭"]
         response = f"{random.choice(emojis)} {response}"
-    
+
     # Log the obvious observation (for science)
     logger.info(f"Obvious observation made (sarcasm={level}): {observation}")
-    
+
     # Store in a special "obvious_things" collection if we have DB
     try:
         # Get user-scoped collections - use a generic collection access
@@ -1326,7 +1229,7 @@ async def point_out_obvious(observation: str, sarcasm_level: int = 5, ctx: Optio
         })
     except Exception as e:
         logger.debug(f"Failed to store obvious observation: {e}")
-    
+
     # Publish to MQTT for other systems to enjoy the obviousness
     try:
         mqtt_publish("observations/obvious", {
@@ -1336,7 +1239,7 @@ async def point_out_obvious(observation: str, sarcasm_level: int = 5, ctx: Optio
         })
     except Exception as e:
         logger.debug(f"Failed to publish obvious observation: {e}")
-    
+
     return create_response(True, {
         "response": response,
         "observation": observation,
@@ -1349,7 +1252,7 @@ async def point_out_obvious(observation: str, sarcasm_level: int = 5, ctx: Optio
     })
 
 
-async def bring_your_own(tool_name: str, code: str, runtime: str = "python", 
+async def bring_your_own(tool_name: str, code: str, runtime: str = "python",
                          timeout: int = 30, args: Optional[Dict[str, Any]] = None,
                          persist: bool = False, ctx: Optional[Context] = None) -> str:
     """
@@ -1375,7 +1278,7 @@ async def bring_your_own(tool_name: str, code: str, runtime: str = "python",
     import asyncio
     import hashlib
     import pickle
-    
+
     # Security check (basic - you'd want more in production)
     if ctx and ctx.user:
         user_id = ctx.user.get("sub", "anonymous")
@@ -1386,28 +1289,28 @@ async def bring_your_own(tool_name: str, code: str, runtime: str = "python",
             # Simple in-memory rate limiting (use Redis in production)
             if not hasattr(bring_your_own, "_rate_limits"):
                 bring_your_own._rate_limits = {}
-            
+
             last_call = bring_your_own._rate_limits.get(rate_limit_key, 0)
             now = datetime.now(timezone.utc).timestamp()
             if now - last_call < 10:  # 10 second cooldown
-                return create_response(False, 
+                return create_response(False,
                     message=f"Rate limited. Please wait {10 - (now - last_call):.1f} seconds")
             bring_your_own._rate_limits[rate_limit_key] = now
     else:
         user_id = "anonymous"
-    
+
     # Validate runtime
     allowed_runtimes = ["python", "javascript", "bash"]
     if runtime not in allowed_runtimes:
-        return create_response(False, 
+        return create_response(False,
             message=f"Invalid runtime. Allowed: {allowed_runtimes}")
-    
+
     # Create a unique ID for this tool
     tool_id = hashlib.md5(f"{tool_name}_{code}_{datetime.now(timezone.utc)}".encode()).hexdigest()[:8]
     full_tool_name = f"byo_{tool_name}_{tool_id}"
-    
+
     logger.warning(f"BYO Tool execution requested: {full_tool_name} by {user_id}")
-    
+
     try:
         if runtime == "python":
             # Create a temporary module for the code
@@ -1433,7 +1336,7 @@ async def _execute_byo_tool(args):
 """
                 f.write(module_code)
                 temp_file = f.name
-            
+
             # Execute the code with timeout
             try:
                 # Import and run the temporary module
@@ -1441,27 +1344,27 @@ async def _execute_byo_tool(args):
                 spec = importlib.util.spec_from_file_location(full_tool_name, temp_file)
                 module = importlib.util.module_from_spec(spec)
                 spec.loader.exec_module(module)
-                
+
                 # Execute with timeout
                 result = await asyncio.wait_for(
                     module._execute_byo_tool(args or {}),
                     timeout=timeout
                 )
-                
+
                 # Clean up
                 os.unlink(temp_file)
-                
+
             except asyncio.TimeoutError:
                 os.unlink(temp_file)
-                return create_response(False, 
+                return create_response(False,
                     message=f"Tool execution timed out after {timeout} seconds")
             except Exception as e:
                 if os.path.exists(temp_file):
                     os.unlink(temp_file)
                 logger.error(f"BYO tool execution failed: {str(e)}")
-                return create_response(False, 
+                return create_response(False,
                     message=f"Tool execution failed: {str(e)}")
-        
+
         elif runtime == "javascript":
             # Use subprocess to run Node.js
             with tempfile.NamedTemporaryFile(mode='w', suffix='.js', delete=False) as f:
@@ -1481,7 +1384,7 @@ async def _execute_byo_tool(args):
 """
                 f.write(js_code)
                 temp_file = f.name
-            
+
             try:
                 proc = await asyncio.create_subprocess_exec(
                     'node', temp_file,
@@ -1493,19 +1396,19 @@ async def _execute_byo_tool(args):
                     timeout=timeout
                 )
                 os.unlink(temp_file)
-                
+
                 if proc.returncode != 0:
-                    return create_response(False, 
+                    return create_response(False,
                         message=f"JavaScript execution failed: {stderr.decode()}")
-                
+
                 result = json.loads(stdout.decode())
-                
+
             except asyncio.TimeoutError:
                 proc.kill()
                 os.unlink(temp_file)
-                return create_response(False, 
+                return create_response(False,
                     message=f"Tool execution timed out after {timeout} seconds")
-        
+
         elif runtime == "bash":
             # Execute bash commands
             try:
@@ -1518,18 +1421,18 @@ async def _execute_byo_tool(args):
                     proc.communicate(),
                     timeout=timeout
                 )
-                
+
                 if proc.returncode != 0:
-                    return create_response(False, 
+                    return create_response(False,
                         message=f"Bash execution failed: {stderr.decode()}")
-                
+
                 result = stdout.decode()
-                
+
             except asyncio.TimeoutError:
                 proc.kill()
-                return create_response(False, 
+                return create_response(False,
                     message=f"Tool execution timed out after {timeout} seconds")
-        
+
         # Store execution history
         try:
             # Get user-scoped collections - use database access for custom collections
@@ -1549,7 +1452,7 @@ async def _execute_byo_tool(args):
                 "success": True
             }
             byo_collection.insert_one(execution_record)
-            
+
             # If persist is True, save to a persistent tools collection
             if persist:
                 persistent_tools = collections.database["persistent_byo_tools"]
@@ -1566,10 +1469,10 @@ async def _execute_byo_tool(args):
                     }, "$inc": {"execution_count": 1}},
                     upsert=True
                 )
-                
+
         except Exception as e:
             logger.debug(f"Failed to store BYO tool execution: {e}")
-        
+
         # Publish to MQTT for monitoring
         mqtt_publish("tools/byo/execution", {
             "tool_id": tool_id,
@@ -1578,7 +1481,7 @@ async def _execute_byo_tool(args):
             "user": user_id,
             "success": True
         })
-        
+
         return create_response(True, {
             "tool_id": tool_id,
             "tool_name": full_tool_name,
@@ -1592,10 +1495,10 @@ async def _execute_byo_tool(args):
                 "user": user_id
             }
         })
-        
+
     except Exception as e:
         logger.error(f"BYO tool creation/execution failed: {str(e)}")
-        
+
         # Log failure
         try:
             # Get user-scoped collections - use database access for custom collections
@@ -1611,6 +1514,6 @@ async def _execute_byo_tool(args):
             })
         except:
             pass
-        
-        return create_response(False, 
+
+        return create_response(False,
             message=f"Failed to create/execute custom tool: {str(e)}")

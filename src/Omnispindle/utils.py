@@ -256,3 +256,42 @@ async def deploy_nodered_flow(flow_json_name: str) -> str:
     except Exception as e:
         logging.exception("Unhandled exception")
         return create_response(False, message=f"Deployment error: {str(e)}")
+
+def get_valid_projects(ctx=None):
+    """
+    Retrieve a list of valid project names from the database.
+    
+    Fetches from the user's personal database and the shared swarmonomicon database.
+    
+    Args:
+        ctx: Optional context for user-scoped collections
+    
+    Returns:
+        A list of unique project names.
+    """
+    from .database import db_connection
+    project_names = set()
+
+    try:
+        # Get user-scoped database if context is available
+        user_db = db_connection.get_user_database(ctx.user if ctx else None)
+        if user_db:
+            user_projects_collection = user_db["projects"]
+            for project in user_projects_collection.find({}, {"name": 1}):
+                if "name" in project:
+                    project_names.add(project["name"])
+
+        # Always include projects from the shared database
+        shared_db = db_connection.shared_db
+        if shared_db:
+            shared_projects_collection = shared_db["projects"]
+            for project in shared_projects_collection.find({}, {"name": 1}):
+                if "name" in project:
+                    project_names.add(project["name"])
+
+    except Exception as e:
+        logging.error(f"Failed to retrieve valid projects: {str(e)}")
+        # Fallback to a minimal list or empty list in case of DB error
+        return ["madness_interactive", "omnispindle"]
+
+    return sorted(list(project_names))
