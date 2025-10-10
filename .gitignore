@@ -81,3 +81,5 @@ Thumbs.db
 # Temporary files
 *.tmp
 *.temp
+/.claude/data
+uv.lock
