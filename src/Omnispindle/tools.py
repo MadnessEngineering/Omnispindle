@@ -1614,3 +1614,23 @@ async def _execute_byo_tool(args):
         
         return create_response(False, 
             message=f"Failed to create/execute custom tool: {str(e)}")
+
+
+# --- Chat session API wrappers (Phase 2) ---
+
+async def inventorium_sessions_list(project: Optional[str] = None, limit: int = 50, ctx: Optional[Context] = None) -> str:
+    return await api_toolset.inventorium_sessions_list(project=project, limit=limit, ctx=ctx)
+
+async def inventorium_sessions_get(session_id: str, ctx: Optional[Context] = None) -> str:
+    return await api_toolset.inventorium_sessions_get(session_id, ctx=ctx)
+
+async def inventorium_sessions_create(project: str, title: Optional[str] = None, initial_prompt: Optional[str] = None,
+                                      agentic_tool: str = "claude-code", ctx: Optional[Context] = None) -> str:
+    return await api_toolset.inventorium_sessions_create(project, title, initial_prompt, agentic_tool, ctx=ctx)
+
+async def inventorium_sessions_spawn(parent_session_id: str, prompt: str, todo_id: Optional[str] = None,
+                                     title: Optional[str] = None, ctx: Optional[Context] = None) -> str:
+    return await api_toolset.inventorium_sessions_spawn(parent_session_id, prompt, todo_id, title, ctx=ctx)
+
+async def inventorium_todos_link_session(todo_id: str, session_id: str, ctx: Optional[Context] = None) -> str:
+    return await api_toolset.inventorium_todos_link_session(todo_id, session_id, ctx=ctx)

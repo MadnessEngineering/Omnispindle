@@ -277,6 +277,41 @@ Special formats:
         "basic": "Temporarily hijack the MCP server to run custom tool code.",
         "admin": "Execute custom tool code in Python, JavaScript, or Bash runtimes. Includes rate limiting and execution history.",
         "full": "Temporarily hijack the MCP server to run custom tool code. Supports Python, JavaScript, and Bash runtimes with configurable timeout and argument passing. Includes rate limiting for non-admin users and comprehensive execution logging. Use with caution - allows arbitrary code execution."
+    },
+
+    "inventorium_sessions_list": {
+        "minimal": "List chat sessions",
+        "basic": "List chat sessions for the authenticated user with optional project filter and count metadata.",
+        "admin": "List chat sessions filtered by project or status. Returns short IDs, message counts, linked todos, and MCP token availability.",
+        "full": "List chat sessions for the authenticated user. Parameters: project (optional) filters on project slug/name, limit controls results (default 50, max 200). Returns session metadata including short_id, message_count, linked_todo_ids, status, and mcp_token for MCP integrations."
+    },
+
+    "inventorium_sessions_get": {
+        "minimal": "Get chat session",
+        "basic": "Fetch full chat session details (messages, linked todos, MCP token) by session_id.",
+        "admin": "Get chat session by UUID. Includes genealogy info, linked todos, MCP token, and full message history for downstream analysis.",
+        "full": "Fetch a chat session by session_id. Returns complete document including messages, linked todos, genealogy metadata, MCP token, agentic tool, and timestamps. Requires ownership via Auth0/API key."
+    },
+
+    "inventorium_sessions_create": {
+        "minimal": "Create session",
+        "basic": "Create a new chat session for a project with optional title and initial prompt.",
+        "admin": "Create a chat session with customizable title, agentic tool, initial prompt, and default MCP token generation. Returns session + token.",
+        "full": "Create a new chat session for a project. Parameters: project (required), title (optional), agentic_tool (default claude-code), initial_prompt (optional user message). Generates MCP session token automatically and persists it with the session."
+    },
+
+    "inventorium_sessions_spawn": {
+        "minimal": "Spawn child session",
+        "basic": "Spawn a child session from a parent session using a prompt and optional todo link.",
+        "admin": "Spawn a child session inheriting project/tool from parent, link to todo_id, set genealogy references, and seed prompt as first message.",
+        "full": "Spawn a child session to delegate work. Parameters: parent_session_id (required), prompt (required), todo_id/title optional. Inherits project + agentic tool, links todo if provided, registers genealogy.child, and seeds prompt as first message."
+    },
+
+    "inventorium_todos_link_session": {
+        "minimal": "Link todo to session",
+        "basic": "Add a todo_id to a chat session's linked_todo_ids list (idempotent).",
+        "admin": "Link a todo to a session and update todo metadata with linked_session_ids for cross referencing.",
+        "full": "Link an Omnispindle todo to a chat session. Parameters: todo_id, session_id. Adds todo to session.linked_todo_ids (no duplicates) and updates todo metadata with linked_session_ids for downstream tooling."
     }
 }
 
@@ -309,6 +344,41 @@ PARAMETER_HINTS = {
   Examples: {"description": 1, "status": 1}, {"metadata": 0}
 - limit (int, optional): Maximum number of results (default: 100)
 - ctx (str, optional): Additional context for the query"""
+    },
+
+    "inventorium_sessions_list": {
+        "basic": "project (str optional): filter sessions, limit (int optional): max results (default 50, max 200)",
+        "full": """Parameters:
+- project (str, optional): Filter sessions by project slug/name. Use "all" for everything.
+- limit (int, optional): Cap results (default 50, max 200)."""
+    },
+
+    "inventorium_sessions_get": {
+        "basic": "session_id (str): Chat session UUIDv7",
+        "full": "session_id (str, required): UUID of the chat session to fetch."
+    },
+
+    "inventorium_sessions_create": {
+        "basic": "project (required), title (optional), initial_prompt (optional), agentic_tool (default claude-code)",
+        "full": """Parameters:
+- project (str, required): Project slug (e.g., inventorium)
+- title (str, optional): Friendly session title
+- initial_prompt (str, optional): First user message
+- agentic_tool (str, optional): claude-code|codex|gemini|opencode (default claude-code)"""
+    },
+
+    "inventorium_sessions_spawn": {
+        "basic": "parent_session_id, prompt required. Optional todo_id, title override.",
+        "full": """Parameters:
+- parent_session_id (str, required): Source session UUID  
+- prompt (str, required): Instructions for the child session
+- todo_id (str, optional): Link todo immediately
+- title (str, optional): Override default "Child of ..." title"""
+    },
+
+    "inventorium_todos_link_session": {
+        "basic": "todo_id + session_id required. Idempotent add.",
+        "full": "Parameters: todo_id (str) - Omnispindle todo; session_id (str) - chat session UUID. Adds todo to session.linked_todo_ids and todo.metadata.linked_session_ids."
     }
 }
 

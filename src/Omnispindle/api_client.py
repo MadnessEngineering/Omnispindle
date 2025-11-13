@@ -259,6 +259,34 @@ class MadnessAPIClient:
         """Get available projects"""
         return await self._make_request("GET", "/projects")
 
+    # Chat session operations
+    async def list_chat_sessions(self, project: Optional[str] = None, limit: int = 50, status: Optional[str] = None) -> APIResponse:
+        """List chat sessions for the authenticated user."""
+        params: Dict[str, Any] = {}
+        if project:
+            params["project"] = project
+        if limit:
+            params["limit"] = limit
+        if status:
+            params["status"] = status
+        return await self._make_request("GET", "/chat-sessions", params=params or None)
+
+    async def get_chat_session(self, session_id: str) -> APIResponse:
+        """Fetch a specific chat session by ID."""
+        return await self._make_request("GET", f"/chat-sessions/{session_id}")
+
+    async def create_chat_session(self, payload: Dict[str, Any]) -> APIResponse:
+        """Create a chat session."""
+        return await self._make_request("POST", "/chat-sessions", json=payload)
+
+    async def update_chat_session(self, session_id: str, updates: Dict[str, Any]) -> APIResponse:
+        """Update chat session metadata."""
+        return await self._make_request("PATCH", f"/chat-sessions/{session_id}", json=updates)
+
+    async def append_chat_message(self, session_id: str, message: Dict[str, Any]) -> APIResponse:
+        """Append a message to a chat session."""
+        return await self._make_request("POST", f"/chat-sessions/{session_id}/messages", json=message)
+
 # Factory function for creating API client instances
 def create_api_client(auth_token: str = None, api_key: str = None) -> MadnessAPIClient:
     """Factory function to create API client with authentication"""

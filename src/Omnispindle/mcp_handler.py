@@ -103,6 +103,68 @@ async def mcp_handler(request: Request, get_current_user: Callable[[], Coroutine
                         },
                         "required": ["todo_id"]
                     }
+                },
+                {
+                    "name": "inventorium_sessions_list",
+                    "description": "List chat sessions for the authenticated user",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "project": {"type": "string", "description": "Project slug to filter"},
+                            "limit": {"type": "number", "description": "Maximum results (default 50)"}
+                        }
+                    }
+                },
+                {
+                    "name": "inventorium_sessions_get",
+                    "description": "Load a specific chat session",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "session_id": {"type": "string", "description": "Chat session UUID"}
+                        },
+                        "required": ["session_id"]
+                    }
+                },
+                {
+                    "name": "inventorium_sessions_create",
+                    "description": "Create a chat session for a project",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "project": {"type": "string", "description": "Project slug"},
+                            "title": {"type": "string", "description": "Optional session title"},
+                            "initial_prompt": {"type": "string", "description": "Seed prompt"},
+                            "agentic_tool": {"type": "string", "description": "claude-code|codex|gemini|opencode"}
+                        },
+                        "required": ["project"]
+                    }
+                },
+                {
+                    "name": "inventorium_sessions_spawn",
+                    "description": "Spawn a child session from an existing session",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "parent_session_id": {"type": "string", "description": "Parent session UUID"},
+                            "prompt": {"type": "string", "description": "Instructions for the child session"},
+                            "todo_id": {"type": "string", "description": "Optional todo to link"},
+                            "title": {"type": "string", "description": "Optional child session title"}
+                        },
+                        "required": ["parent_session_id", "prompt"]
+                    }
+                },
+                {
+                    "name": "inventorium_todos_link_session",
+                    "description": "Link a todo to a chat session",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "todo_id": {"type": "string", "description": "Todo identifier"},
+                            "session_id": {"type": "string", "description": "Chat session UUID"}
+                        },
+                        "required": ["todo_id", "session_id"]
+                    }
                 }
             ]
 
@@ -134,7 +196,12 @@ async def mcp_handler(request: Request, get_current_user: Callable[[], Coroutine
                 "delete_todo": tools.delete_todo,
                 "list_project_todos": tools.list_project_todos,
                 "search_todos": tools.search_todos,
-                "list_projects": tools.list_projects
+                "list_projects": tools.list_projects,
+                "inventorium_sessions_list": tools.inventorium_sessions_list,
+                "inventorium_sessions_get": tools.inventorium_sessions_get,
+                "inventorium_sessions_create": tools.inventorium_sessions_create,
+                "inventorium_sessions_spawn": tools.inventorium_sessions_spawn,
+                "inventorium_todos_link_session": tools.inventorium_todos_link_session
             }
 
             if tool_name not in tool_functions:
