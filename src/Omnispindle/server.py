@@ -145,7 +145,7 @@ class Omnispindle:
 
             # Add the new /api/mcp endpoint
             @app.post("/api/mcp")
-            async def mcp_endpoint(request: Request, user: dict = Depends(get_current_user_from_query)):
+            async def mcp_endpoint(request: Request, user: dict = Depends(get_current_user)):
                 from .mcp_handler import mcp_handler
                 return await mcp_handler(request, lambda: user)
 
