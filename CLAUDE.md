@@ -128,6 +128,14 @@ python -m twine upload dist/*
 
 ### MCP Tool Interface
 
+**CRITICAL**: When integrating with HTTP MCP endpoints (for Inventorium chat, etc.), see integration standards in Inventorium's `docs/MCP_INTEGRATION_GUIDE.md`
+
+**HTTP Endpoint Standards**:
+- **URL**: `/api/mcp` (NOT `/mcp/` or `/mcp`)
+- **Auth**: Use `get_current_user` dependency (header-based, NOT query param)
+- **Context**: ALWAYS pass `ctx=Context(user=user)` to tools with Auth0 user
+- **Never** use `Context(user=None)` - this breaks user database routing!
+
 The server exposes standardized MCP tools that AI agents can call:
 
 **Todo Management**:
