@@ -1,8 +1,9 @@
 
-import asyncio
 import json
 import logging
 from typing import Dict, Any, Callable, Coroutine
+
+import asyncio
 
 from starlette.requests import Request
 from starlette.responses import JSONResponse
@@ -16,7 +17,10 @@ async def mcp_handler(request: Request, get_current_user: Callable[[], Coroutine
     """
     try:
         # Get user from authentication (passed as lambda that returns the user dict)
-        user = await get_current_user()
+        # get_current_user is provided by FastAPI dependency; it may be a simple value or coroutine.
+        user = get_current_user()
+        if asyncio.iscoroutine(user):
+            user = await user
         if not user:
             return JSONResponse(
                 content={"error": "Unauthorized"},
