@@ -16,7 +16,7 @@ async def mcp_handler(request: Request, get_current_user: Callable[[], Coroutine
     """
     try:
         # Get user from authentication (passed as lambda that returns the user dict)
-        user = get_current_user()
+        user = await get_current_user()
         if not user:
             return JSONResponse(
                 content={"error": "Unauthorized"},
@@ -177,7 +177,12 @@ async def mcp_handler(request: Request, get_current_user: Callable[[], Coroutine
         elif method == "tools/call":
             # Handle tool calls
             tool_name = params.get("name")
-            tool_arguments = params.get("arguments", {})
+            tool_arguments = params.get("arguments", {}) or {}
+
+            # Never allow client-provided ctx to collide with server ctx
+            if "ctx" in tool_arguments:
+                logger.warning("Stripping client-provided ctx from tool arguments to avoid conflicts")
+                tool_arguments.pop("ctx", None)
 
             # Import tools module to access the actual tool functions
             from . import tools
