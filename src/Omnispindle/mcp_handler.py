@@ -63,157 +63,157 @@ async def mcp_handler(request: Request, get_current_user: Callable[[], Coroutine
             tools = [
                 {
                     "name": "add_todo",
-                    "description": "Create a new todo item",
+                    "description": "Create todo",
                     "inputSchema": {
                         "type": "object",
                         "properties": {
-                            "description": {"type": "string", "description": "Todo description"},
-                            "project": {"type": "string", "description": "Project name"},
-                            "priority": {"type": "string", "description": "Priority level (High, Medium, Low)"},
-                            "target_agent": {"type": "string", "description": "Target agent for the todo (default: user)"},
-                            "metadata": {"type": "object", "description": "Additional metadata as key-value pairs"}
+                            "description": {"type": "string"},
+                            "project": {"type": "string"},
+                            "priority": {"type": "string", "description": "High|Medium|Low"},
+                            "target_agent": {"type": "string"},
+                            "metadata": {"type": "object", "description": "{key: value} pairs"}
                         },
                         "required": ["description", "project"]
                     }
                 },
                 {
                     "name": "query_todos",
-                    "description": "Query todos with filters",
+                    "description": "Query todos",
                     "inputSchema": {
                         "type": "object",
                         "properties": {
-                            "filter": {"type": "object", "description": "Filter conditions"},
-                            "limit": {"type": "number", "description": "Result limit"}
+                            "filter": {"type": "object", "description": "{project: 'name', status: 'pending'|'completed'}"},
+                            "limit": {"type": "number"}
                         }
                     }
                 },
                 {
                     "name": "get_todo",
-                    "description": "Get a specific todo by ID",
+                    "description": "Get todo by ID",
                     "inputSchema": {
                         "type": "object",
                         "properties": {
-                            "todo_id": {"type": "string", "description": "Todo ID"}
+                            "todo_id": {"type": "string"}
                         },
                         "required": ["todo_id"]
                     }
                 },
                 {
                     "name": "mark_todo_complete",
-                    "description": "Mark a todo as completed",
+                    "description": "Complete todo",
                     "inputSchema": {
                         "type": "object",
                         "properties": {
-                            "todo_id": {"type": "string", "description": "Todo ID"},
-                            "comment": {"type": "string", "description": "Completion comment"}
+                            "todo_id": {"type": "string"},
+                            "comment": {"type": "string"}
                         },
                         "required": ["todo_id"]
                     }
                 },
                 {
                     "name": "add_lesson",
-                    "description": "Add a new lesson to the knowledge base",
+                    "description": "Add lesson",
                     "inputSchema": {
                         "type": "object",
                         "properties": {
-                            "language": {"type": "string", "description": "Programming language or technology"},
-                            "topic": {"type": "string", "description": "Topic or subject"},
-                            "lesson_learned": {"type": "string", "description": "The lesson content"},
-                            "tags": {"type": "array", "items": {"type": "string"}, "description": "Optional tags"}
+                            "language": {"type": "string", "description": "python|javascript|rust|etc"},
+                            "topic": {"type": "string"},
+                            "lesson_learned": {"type": "string"},
+                            "tags": {"type": "array", "items": {"type": "string"}}
                         },
                         "required": ["language", "topic", "lesson_learned"]
                     }
                 },
                 {
                     "name": "get_lesson",
-                    "description": "Get a specific lesson by ID",
+                    "description": "Get lesson by ID",
                     "inputSchema": {
                         "type": "object",
                         "properties": {
-                            "lesson_id": {"type": "string", "description": "Lesson ID"}
+                            "lesson_id": {"type": "string"}
                         },
                         "required": ["lesson_id"]
                     }
                 },
                 {
                     "name": "update_lesson",
-                    "description": "Update an existing lesson",
+                    "description": "Update lesson",
                     "inputSchema": {
                         "type": "object",
                         "properties": {
-                            "lesson_id": {"type": "string", "description": "Lesson ID"},
-                            "updates": {"type": "object", "description": "Fields to update"}
+                            "lesson_id": {"type": "string"},
+                            "updates": {"type": "object"}
                         },
                         "required": ["lesson_id", "updates"]
                     }
                 },
                 {
                     "name": "delete_lesson",
-                    "description": "Delete a lesson by ID",
+                    "description": "Delete lesson",
                     "inputSchema": {
                         "type": "object",
                         "properties": {
-                            "lesson_id": {"type": "string", "description": "Lesson ID"}
+                            "lesson_id": {"type": "string"}
                         },
                         "required": ["lesson_id"]
                     }
                 },
                 {
                     "name": "search_lessons",
-                    "description": "Search lessons by text query",
+                    "description": "Text search lessons",
                     "inputSchema": {
                         "type": "object",
                         "properties": {
-                            "query": {"type": "string", "description": "Search query"},
-                            "fields": {"type": "array", "items": {"type": "string"}, "description": "Fields to search"},
-                            "limit": {"type": "number", "description": "Result limit"}
+                            "query": {"type": "string"},
+                            "fields": {"type": "array", "items": {"type": "string"}, "description": "['topic','lesson_learned','tags']"},
+                            "limit": {"type": "number"}
                         },
                         "required": ["query"]
                     }
                 },
                 {
                     "name": "grep_lessons",
-                    "description": "Pattern match lessons content",
+                    "description": "Pattern match lessons",
                     "inputSchema": {
                         "type": "object",
                         "properties": {
-                            "pattern": {"type": "string", "description": "Pattern to match"},
-                            "limit": {"type": "number", "description": "Result limit"}
+                            "pattern": {"type": "string", "description": "regex pattern"},
+                            "limit": {"type": "number"}
                         },
                         "required": ["pattern"]
                     }
                 },
                 {
                     "name": "inventorium_sessions_list",
-                    "description": "List chat sessions for the authenticated user",
+                    "description": "List chat sessions",
                     "inputSchema": {
                         "type": "object",
                         "properties": {
-                            "project": {"type": "string", "description": "Project slug to filter"},
-                            "limit": {"type": "number", "description": "Maximum results (default 50)"}
+                            "project": {"type": "string"},
+                            "limit": {"type": "number", "description": "default 50"}
                         }
                     }
                 },
                 {
                     "name": "inventorium_sessions_get",
-                    "description": "Load a specific chat session",
+                    "description": "Get session by ID",
                     "inputSchema": {
                         "type": "object",
                         "properties": {
-                            "session_id": {"type": "string", "description": "Chat session UUID"}
+                            "session_id": {"type": "string"}
                         },
                         "required": ["session_id"]
                     }
                 },
                 {
                     "name": "inventorium_sessions_create",
-                    "description": "Create a chat session for a project",
+                    "description": "Create session",
                     "inputSchema": {
                         "type": "object",
                         "properties": {
-                            "project": {"type": "string", "description": "Project slug"},
-                            "title": {"type": "string", "description": "Optional session title"},
-                            "initial_prompt": {"type": "string", "description": "Seed prompt"},
+                            "project": {"type": "string"},
+                            "title": {"type": "string"},
+                            "initial_prompt": {"type": "string"},
                             "agentic_tool": {"type": "string", "description": "claude-code|codex|gemini|opencode"}
                         },
                         "required": ["project"]
@@ -221,26 +221,26 @@ async def mcp_handler(request: Request, get_current_user: Callable[[], Coroutine
                 },
                 {
                     "name": "inventorium_sessions_spawn",
-                    "description": "Spawn a child session from an existing session",
+                    "description": "Spawn child session",
                     "inputSchema": {
                         "type": "object",
                         "properties": {
-                            "parent_session_id": {"type": "string", "description": "Parent session UUID"},
-                            "prompt": {"type": "string", "description": "Instructions for the child session"},
-                            "todo_id": {"type": "string", "description": "Optional todo to link"},
-                            "title": {"type": "string", "description": "Optional child session title"}
+                            "parent_session_id": {"type": "string"},
+                            "prompt": {"type": "string"},
+                            "todo_id": {"type": "string"},
+                            "title": {"type": "string"}
                         },
                         "required": ["parent_session_id", "prompt"]
                     }
                 },
                 {
                     "name": "inventorium_todos_link_session",
-                    "description": "Link a todo to a chat session",
+                    "description": "Link todo to session",
                     "inputSchema": {
                         "type": "object",
                         "properties": {
-                            "todo_id": {"type": "string", "description": "Todo identifier"},
-                            "session_id": {"type": "string", "description": "Chat session UUID"}
+                            "todo_id": {"type": "string"},
+                            "session_id": {"type": "string"}
                         },
                         "required": ["todo_id", "session_id"]
                     }
@@ -258,13 +258,8 @@ async def mcp_handler(request: Request, get_current_user: Callable[[], Coroutine
             tool_name = params.get("name")
             tool_arguments = params.get("arguments", {}) or {}
 
-            logger.info(f"🐛 MCP Handler - tool_name: {tool_name}")
-            logger.info(f"🐛 MCP Handler - tool_arguments keys: {list(tool_arguments.keys())}")
-            logger.info(f"🐛 MCP Handler - full tool_arguments: {tool_arguments}")
-
             # Never allow client-provided ctx to collide with server ctx
             if "ctx" in tool_arguments:
-                logger.warning("Stripping client-provided ctx from tool arguments to avoid conflicts")
                 tool_arguments.pop("ctx", None)
 
             # Import tools module to access the actual tool functions
