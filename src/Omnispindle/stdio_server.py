@@ -387,10 +387,12 @@ class OmniSpindleStdioServer:
 
                         elif name == "delete_todo":
                             @self.server.tool()
-                            async def delete_todo(todo_id: str) -> str:
+                            async def delete_todo(
+                                todo_id: Annotated[str, Field(description="Todo ID")]
+                            ) -> str:
+                                """Delete todo by ID"""
                                 ctx = _create_context()
                                 return await func(todo_id, ctx=ctx)
-                            delete_todo.__doc__ = docstring
                             return delete_todo
 
                         elif name == "get_todo":
@@ -427,11 +429,15 @@ class OmniSpindleStdioServer:
 
                         elif name == "search_todos":
                             @self.server.tool()
-                            async def search_todos(query: str, fields: Optional[list] = None,
-                                                   limit: int = 100, ctx: Optional[str] = None) -> str:
+                            async def search_todos(
+                                query: Annotated[str, Field(description="Search text. Use 'project:Name' for project filter")],
+                                fields: Annotated[Optional[list], Field(description="Fields to search")] = None,
+                                limit: Annotated[int, Field(description="Max results")] = 100,
+                                ctx: Annotated[Optional[str], Field(description="Additional context")] = None
+                            ) -> str:
+                                """Text search across fields. Use 'project:Name' for project filter."""
                                 context = _create_context()
                                 return await func(query, fields, limit, ctx=context)
-                            search_todos.__doc__ = docstring
                             return search_todos
 
                         elif name == "list_project_todos":
@@ -447,182 +453,246 @@ class OmniSpindleStdioServer:
 
                         elif name == "add_lesson":
                             @self.server.tool()
-                            async def add_lesson(language: str, topic: str, lesson_learned: str, tags: Optional[list] = None) -> str:
+                            async def add_lesson(
+                                language: Annotated[str, Field(description="Programming language")],
+                                topic: Annotated[str, Field(description="Topic/category")],
+                                lesson_learned: Annotated[str, Field(description="Lesson content")],
+                                tags: Annotated[Optional[list], Field(description="Tags (optional)")] = None
+                            ) -> str:
+                                """Add lesson to knowledge base"""
                                 ctx = _create_context()
                                 return await func(language, topic, lesson_learned, tags, ctx=ctx)
-                            add_lesson.__doc__ = docstring
                             return add_lesson
 
                         elif name == "get_lesson":
                             @self.server.tool()
-                            async def get_lesson(lesson_id: str) -> str:
+                            async def get_lesson(
+                                lesson_id: Annotated[str, Field(description="Lesson ID")]
+                            ) -> str:
+                                """Get lesson by ID"""
                                 ctx = _create_context()
                                 return await func(lesson_id, ctx=ctx)
-                            get_lesson.__doc__ = docstring
                             return get_lesson
 
                         elif name == "update_lesson":
                             @self.server.tool()
-                            async def update_lesson(lesson_id: str, updates: dict) -> str:
+                            async def update_lesson(
+                                lesson_id: Annotated[str, Field(description="Lesson ID")],
+                                updates: Annotated[dict, Field(description="{field: new_value}")]
+                            ) -> str:
+                                """Update lesson by ID"""
                                 ctx = _create_context()
                                 return await func(lesson_id, updates, ctx=ctx)
-                            update_lesson.__doc__ = docstring
                             return update_lesson
 
                         elif name == "delete_lesson":
                             @self.server.tool()
-                            async def delete_lesson(lesson_id: str) -> str:
+                            async def delete_lesson(
+                                lesson_id: Annotated[str, Field(description="Lesson ID")]
+                            ) -> str:
+                                """Delete lesson by ID"""
                                 ctx = _create_context()
                                 return await func(lesson_id, ctx=ctx)
-                            delete_lesson.__doc__ = docstring
                             return delete_lesson
 
                         elif name == "search_lessons":
                             @self.server.tool()
-                            async def search_lessons(query: str, fields: Optional[list] = None, limit: int = 100) -> str:
+                            async def search_lessons(
+                                query: Annotated[str, Field(description="Search text")],
+                                fields: Annotated[Optional[list], Field(description="Fields to search")] = None,
+                                limit: Annotated[int, Field(description="Max results")] = 100
+                            ) -> str:
+                                """Text search lessons"""
                                 ctx = _create_context()
                                 return await func(query, fields, limit, ctx=ctx)
-                            search_lessons.__doc__ = docstring
                             return search_lessons
 
                         elif name == "grep_lessons":
                             @self.server.tool()
-                            async def grep_lessons(pattern: str, limit: int = 20) -> str:
+                            async def grep_lessons(
+                                pattern: Annotated[str, Field(description="Regex pattern")],
+                                limit: Annotated[int, Field(description="Max results")] = 20
+                            ) -> str:
+                                """Pattern match across topic and content"""
                                 ctx = _create_context()
                                 return await func(pattern, limit, ctx=ctx)
-                            grep_lessons.__doc__ = docstring
                             return grep_lessons
 
                         elif name == "list_lessons":
                             @self.server.tool()
-                            async def list_lessons(limit: int = 100) -> str:
+                            async def list_lessons(
+                                limit: Annotated[int, Field(description="Max results")] = 100
+                            ) -> str:
+                                """List all lessons (newest first)"""
                                 ctx = _create_context()
                                 return await func(limit, ctx=ctx)
-                            list_lessons.__doc__ = docstring
                             return list_lessons
 
                         elif name == "query_todo_logs":
                             @self.server.tool()
-                            async def query_todo_logs(filter_type: str = 'all', project: str = 'all',
-                                                     page: int = 1, page_size: int = 20) -> str:
+                            async def query_todo_logs(
+                                filter_type: Annotated[str, Field(description="all|create|update|delete|complete")] = 'all',
+                                project: Annotated[str, Field(description="Project name or 'all'")] = 'all',
+                                page: Annotated[int, Field(description="Page number")] = 1,
+                                page_size: Annotated[int, Field(description="Results per page")] = 20
+                            ) -> str:
+                                """Query audit logs with filtering"""
                                 ctx = _create_context()
                                 return await func(filter_type, project, page, page_size, ctx=ctx)
-                            query_todo_logs.__doc__ = docstring
                             return query_todo_logs
 
                         elif name == "list_projects":
                             @self.server.tool()
-                            async def list_projects(include_details: bool = False,
-                                                   madness_root: str = "/Users/d.edens/lab/madness_interactive") -> str:
+                            async def list_projects(
+                                include_details: Annotated[bool, Field(description="Include metadata")] = False,
+                                madness_root: Annotated[str, Field(description="Madness root path")] = "/Users/d.edens/lab/madness_interactive"
+                            ) -> str:
+                                """List all valid projects"""
                                 ctx = _create_context()
                                 return await func(include_details, madness_root, ctx=ctx)
-                            list_projects.__doc__ = docstring
                             return list_projects
 
                         elif name == "explain":
                             @self.server.tool()
-                            async def explain(topic: str) -> str:
+                            async def explain(
+                                topic: Annotated[str, Field(description="Topic/project name")]
+                            ) -> str:
+                                """Explain project or concept"""
                                 ctx = _create_context()
                                 return await func(topic, ctx=ctx)
-                            explain.__doc__ = docstring
                             return explain
 
                         elif name == "add_explanation":
                             @self.server.tool()
-                            async def add_explanation(topic: str, content: str, kind: str = "concept", author: str = "system") -> str:
+                            async def add_explanation(
+                                topic: Annotated[str, Field(description="Topic name")],
+                                content: Annotated[str, Field(description="Explanation content")],
+                                kind: Annotated[str, Field(description="Type (concept|project)")] = "concept",
+                                author: Annotated[str, Field(description="Author name")] = "system"
+                            ) -> str:
+                                """Add static explanation to knowledge base"""
                                 ctx = _create_context()
                                 return await func(topic, content, kind, author, ctx=ctx)
-                            add_explanation.__doc__ = docstring
                             return add_explanation
 
                         elif name == "point_out_obvious":
                             @self.server.tool()
-                            async def point_out_obvious(observation: str, sarcasm_level: int = 5) -> str:
+                            async def point_out_obvious(
+                                observation: Annotated[str, Field(description="Obvious observation")],
+                                sarcasm_level: Annotated[int, Field(description="Sarcasm level (1-10)")] = 5
+                            ) -> str:
+                                """Point out obvious with humor"""
                                 ctx = _create_context()
                                 return await func(observation, sarcasm_level, ctx=ctx)
-                            point_out_obvious.__doc__ = docstring
                             return point_out_obvious
 
                         elif name == "bring_your_own":
                             @self.server.tool()
-                            async def bring_your_own(tool_name: str, code: str, runtime: str = "python",
-                                                    timeout: int = 30, args: Optional[Dict[str, Any]] = None,
-                                                    persist: bool = False) -> str:
+                            async def bring_your_own(
+                                tool_name: Annotated[str, Field(description="Tool name")],
+                                code: Annotated[str, Field(description="Code to execute")],
+                                runtime: Annotated[str, Field(description="python|javascript|bash")] = "python",
+                                timeout: Annotated[int, Field(description="Timeout in seconds")] = 30,
+                                args: Annotated[Optional[Dict[str, Any]], Field(description="Arguments dict")] = None,
+                                persist: Annotated[bool, Field(description="Persist tool")] = False
+                            ) -> str:
+                                """Run custom code (Python|JS|Bash)"""
                                 ctx = _create_context()
                                 return await func(tool_name, code, runtime, timeout, args, persist, ctx=ctx)
-                            bring_your_own.__doc__ = docstring
                             return bring_your_own
 
 
                         elif name == "inventorium_sessions_list":
                             @self.server.tool()
-                            async def inventorium_sessions_list(project: Optional[str] = None, limit: int = 50) -> str:
+                            async def inventorium_sessions_list(
+                                project: Annotated[Optional[str], Field(description="Project filter (optional)")] = None,
+                                limit: Annotated[int, Field(description="Max results")] = 50
+                            ) -> str:
+                                """List chat sessions. Filter by project."""
                                 ctx = _create_context()
                                 return await func(project, limit, ctx=ctx)
-                            inventorium_sessions_list.__doc__ = docstring
                             return inventorium_sessions_list
 
                         elif name == "inventorium_sessions_get":
                             @self.server.tool()
-                            async def inventorium_sessions_get(session_id: str) -> str:
+                            async def inventorium_sessions_get(
+                                session_id: Annotated[str, Field(description="Session ID")]
+                            ) -> str:
+                                """Get session details by ID"""
                                 ctx = _create_context()
                                 return await func(session_id, ctx=ctx)
-                            inventorium_sessions_get.__doc__ = docstring
                             return inventorium_sessions_get
 
                         elif name == "inventorium_sessions_create":
                             @self.server.tool()
-                            async def inventorium_sessions_create(project: str, title: Optional[str] = None,
-                                                                  initial_prompt: Optional[str] = None,
-                                                                  agentic_tool: str = "claude-code") -> str:
+                            async def inventorium_sessions_create(
+                                project: Annotated[str, Field(description="Project name")],
+                                title: Annotated[Optional[str], Field(description="Session title (optional)")] = None,
+                                initial_prompt: Annotated[Optional[str], Field(description="First message (optional)")] = None,
+                                agentic_tool: Annotated[str, Field(description="Agent tool name")] = "claude-code"
+                            ) -> str:
+                                """Create chat session for project"""
                                 ctx = _create_context()
                                 return await func(project, title, initial_prompt, agentic_tool, ctx=ctx)
-                            inventorium_sessions_create.__doc__ = docstring
                             return inventorium_sessions_create
 
                         elif name == "inventorium_sessions_spawn":
                             @self.server.tool()
-                            async def inventorium_sessions_spawn(parent_session_id: str, prompt: str,
-                                                                 todo_id: Optional[str] = None,
-                                                                 title: Optional[str] = None) -> str:
+                            async def inventorium_sessions_spawn(
+                                parent_session_id: Annotated[str, Field(description="Parent session ID")],
+                                prompt: Annotated[str, Field(description="Initial prompt")],
+                                todo_id: Annotated[Optional[str], Field(description="Todo ID to link (optional)")] = None,
+                                title: Annotated[Optional[str], Field(description="Session title (optional)")] = None
+                            ) -> str:
+                                """Spawn child session from parent with prompt"""
                                 ctx = _create_context()
                                 return await func(parent_session_id, prompt, todo_id, title, ctx=ctx)
-                            inventorium_sessions_spawn.__doc__ = docstring
                             return inventorium_sessions_spawn
 
                         elif name == "inventorium_todos_link_session":
                             @self.server.tool()
-                            async def inventorium_todos_link_session(todo_id: str, session_id: str) -> str:
+                            async def inventorium_todos_link_session(
+                                todo_id: Annotated[str, Field(description="Todo ID")],
+                                session_id: Annotated[str, Field(description="Session ID")]
+                            ) -> str:
+                                """Link todo to session (idempotent)"""
                                 ctx = _create_context()
                                 return await func(todo_id, session_id, ctx=ctx)
-                            inventorium_todos_link_session.__doc__ = docstring
                             return inventorium_todos_link_session
 
                         elif name == "inventorium_sessions_fork":
                             @self.server.tool()
-                            async def inventorium_sessions_fork(session_id: str, title: Optional[str] = None,
-                                                                include_messages: bool = True,
-                                                                inherit_todos: bool = True,
-                                                                initial_status: Optional[str] = None) -> str:
+                            async def inventorium_sessions_fork(
+                                session_id: Annotated[str, Field(description="Session ID to fork")],
+                                title: Annotated[Optional[str], Field(description="New session title (optional)")] = None,
+                                include_messages: Annotated[bool, Field(description="Copy message history")] = True,
+                                inherit_todos: Annotated[bool, Field(description="Inherit todos")] = True,
+                                initial_status: Annotated[Optional[str], Field(description="Initial status (optional)")] = None
+                            ) -> str:
+                                """Clone session (optional: copy history/todos)"""
                                 ctx = _create_context()
                                 return await func(session_id, title, include_messages, inherit_todos, initial_status, ctx=ctx)
-                            inventorium_sessions_fork.__doc__ = docstring
                             return inventorium_sessions_fork
 
                         elif name == "inventorium_sessions_genealogy":
                             @self.server.tool()
-                            async def inventorium_sessions_genealogy(session_id: str) -> str:
+                            async def inventorium_sessions_genealogy(
+                                session_id: Annotated[str, Field(description="Session ID")]
+                            ) -> str:
+                                """Get parents and children for session"""
                                 ctx = _create_context()
                                 return await func(session_id, ctx=ctx)
-                            inventorium_sessions_genealogy.__doc__ = docstring
                             return inventorium_sessions_genealogy
 
                         elif name == "inventorium_sessions_tree":
                             @self.server.tool()
-                            async def inventorium_sessions_tree(project: Optional[str] = None, limit: int = 200) -> str:
+                            async def inventorium_sessions_tree(
+                                project: Annotated[Optional[str], Field(description="Project filter (optional)")] = None,
+                                limit: Annotated[int, Field(description="Max sessions")] = 200
+                            ) -> str:
+                                """Get full session tree for project"""
                                 ctx = _create_context()
                                 return await func(project, limit, ctx=ctx)
-                            inventorium_sessions_tree.__doc__ = docstring
                             return inventorium_sessions_tree
 
                     return create_wrapper()
