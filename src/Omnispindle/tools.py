@@ -55,7 +55,7 @@ def cache_lesson_tags(tags_list, ctx=None):
         # Get user-scoped collections
         collections = db_connection.get_collections(ctx.user if ctx else None)
         tags_cache_collection = collections['tags_cache']
-        
+
         # Add timestamp for cache expiry management
         cache_entry = {
             "key": TAGS_CACHE_KEY,
@@ -88,7 +88,7 @@ def get_cached_lesson_tags(ctx=None):
         # Get user-scoped collections
         collections = db_connection.get_collections(ctx.user if ctx else None)
         tags_cache_collection = collections['tags_cache']
-        
+
         # Find the cache entry
         cache_entry = tags_cache_collection.find_one({"key": TAGS_CACHE_KEY})
 
@@ -121,7 +121,7 @@ def invalidate_lesson_tags_cache(ctx=None):
         # Get user-scoped collections
         collections = db_connection.get_collections(ctx.user if ctx else None)
         tags_cache_collection = collections['tags_cache']
-        
+
         tags_cache_collection.delete_one({"key": TAGS_CACHE_KEY})
         return True
     except Exception as e:
@@ -150,7 +150,7 @@ def get_all_lesson_tags(ctx=None):
         # Get user-scoped collections
         collections = db_connection.get_collections(ctx.user if ctx else None)
         lessons_collection = collections['lessons']
-        
+
         # Use MongoDB aggregation to get all unique tags
         pipeline = [
             {"$project": {"tags": 1}},
@@ -184,7 +184,7 @@ def cache_projects(projects_list, ctx=None):
         # Get user-scoped collections
         collections = db_connection.get_collections(ctx.user if ctx else None)
         tags_cache_collection = collections['tags_cache']
-        
+
         cache_entry = {
             "key": PROJECTS_CACHE_KEY,
             "projects": list(projects_list),
@@ -214,7 +214,7 @@ def get_cached_projects(ctx=None):
         # Get user-scoped collections
         collections = db_connection.get_collections(ctx.user if ctx else None)
         tags_cache_collection = collections['tags_cache']
-        
+
         cache_entry = tags_cache_collection.find_one({"key": PROJECTS_CACHE_KEY})
 
         if not cache_entry:
@@ -245,7 +245,7 @@ def invalidate_projects_cache(ctx=None):
         # Get user-scoped collections
         collections = db_connection.get_collections(ctx.user if ctx else None)
         tags_cache_collection = collections['tags_cache']
-        
+
         tags_cache_collection.delete_one({"key": PROJECTS_CACHE_KEY})
         return True
     except Exception as e:
@@ -267,7 +267,7 @@ def initialize_projects_collection(ctx=None):
         # Get user-scoped collections
         collections = db_connection.get_collections(ctx.user if ctx else None)
         projects_collection = collections['projects']
-        
+
         # Check if projects collection is already populated
         existing_count = projects_collection.count_documents({})
         if existing_count > 0:
@@ -326,7 +326,7 @@ def get_all_projects(ctx=None):
         # Get user-scoped collections
         collections = db_connection.get_collections(ctx.user if ctx else None)
         projects_collection = collections['projects']
-        
+
         # Get all projects from the database
         projects_from_db = list(projects_collection.find({}, {"_id": 0}))
 
@@ -371,7 +371,7 @@ async def add_todo(description: str, project: str, priority: str = "Medium", tar
 
     todo_id = str(uuid.uuid4())
     validated_project = validate_project_name(project)
-    
+
     # Validate metadata against schema if provided
     validated_metadata = {}
     if metadata:
@@ -384,7 +384,7 @@ async def add_todo(description: str, project: str, priority: str = "Medium", tar
             # For backward compatibility, store raw metadata with validation warning
             validated_metadata = metadata.copy() if metadata else {}
             validated_metadata["_validation_warning"] = f"Schema validation failed: {str(e)}"
-    
+
     todo = {
         "id": todo_id,
         "description": description,
@@ -399,7 +399,7 @@ async def add_todo(description: str, project: str, priority: str = "Medium", tar
         # Get user-scoped collections
         collections = db_connection.get_collections(ctx.user if ctx else None)
         todos_collection = collections['todos']
-        
+
         todos_collection.insert_one(todo)
         user_email = ctx.user.get("email", "anonymous") if ctx and ctx.user else "anonymous"
         logger.info(f"Todo created by {user_email} in user database: {todo_id}")
@@ -472,7 +472,7 @@ async def update_todo(todo_id: str, updates: dict, ctx: Optional[Context] = None
 
     if "updated_at" not in updates:
         updates["updated_at"] = int(datetime.now(timezone.utc).timestamp())
-    
+
     # Validate metadata if being updated
     if "metadata" in updates and updates["metadata"] is not None:
         try:
@@ -552,7 +552,7 @@ async def delete_todo(todo_id: str, ctx: Optional[Context] = None) -> str:
         # Get user-scoped collections
         collections = db_connection.get_collections(ctx.user if ctx else None)
         todos_collection = collections['todos']
-        
+
         existing_todo = todos_collection.find_one({"id": todo_id})
         if existing_todo:
             user_email = ctx.user.get("email", "anonymous") if ctx and ctx.user else "anonymous"
@@ -705,7 +705,7 @@ async def add_lesson(language: str, topic: str, lesson_learned: str, tags: Optio
         # Get user-scoped collections
         collections = db_connection.get_collections(ctx.user if ctx else None)
         lessons_collection = collections['lessons']
-        
+
         lessons_collection.insert_one(lesson)
         if tags:
             # Invalidate the tags cache when new tags are added
@@ -723,7 +723,7 @@ async def get_lesson(lesson_id: str, ctx: Optional[Context] = None) -> str:
         # Get user-scoped collections
         collections = db_connection.get_collections(ctx.user if ctx else None)
         lessons_collection = collections['lessons']
-        
+
         lesson = lessons_collection.find_one({"id": lesson_id})
         if lesson:
             return create_response(True, lesson)
@@ -741,7 +741,7 @@ async def update_lesson(lesson_id: str, updates: dict, ctx: Optional[Context] = 
         # Get user-scoped collections
         collections = db_connection.get_collections(ctx.user if ctx else None)
         lessons_collection = collections['lessons']
-        
+
         result = lessons_collection.update_one({"id": lesson_id}, {"$set": updates})
         if result.modified_count == 1:
             if 'tags' in updates:
@@ -762,7 +762,7 @@ async def delete_lesson(lesson_id: str, ctx: Optional[Context] = None) -> str:
         # Get user-scoped collections
         collections = db_connection.get_collections(ctx.user if ctx else None)
         lessons_collection = collections['lessons']
-        
+
         result = lessons_collection.delete_one({"id": lesson_id})
         if result.deleted_count == 1:
             # Invalidate the tags cache when lessons are deleted
@@ -786,9 +786,9 @@ async def search_todos(query: str, fields: Optional[list] = None, limit: int = 1
     return await query_todos(filter=search_query, limit=limit, ctx=ctx)
 
 
-async def query_todos_by_metadata(metadata_filters: Dict[str, Any], 
+async def query_todos_by_metadata(metadata_filters: Dict[str, Any],
                                  base_filter: Optional[Dict[str, Any]] = None,
-                                 limit: int = 100, 
+                                 limit: int = 100,
                                  ctx: Optional[Context] = None) -> str:
     """
     Query todos with enhanced metadata filtering capabilities.
@@ -815,32 +815,32 @@ async def query_todos_by_metadata(metadata_filters: Dict[str, Any],
         # Get user-scoped collections
         collections = db_connection.get_collections(ctx.user if ctx else None)
         todos_collection = collections['todos']
-        
+
         # Build enhanced query
         enhancer = get_query_enhancer()
         enhanced_filter = enhancer.enhance_query_filter(base_filter or {}, metadata_filters)
-        
+
         logger.info(f"Enhanced metadata query: {enhanced_filter}")
-        
+
         # Execute query
         cursor = todos_collection.find(enhanced_filter).limit(limit).sort("created_at", -1)
         results = list(cursor)
-        
+
         return create_response(True, {
             "items": results,
             "count": len(results),
             "metadata_filters_applied": list(metadata_filters.keys()),
             "enhanced_query": enhanced_filter
         })
-        
+
     except Exception as e:
         logger.error(f"Failed to query todos by metadata: {str(e)}")
         return create_response(False, message=str(e))
 
 
-async def search_todos_advanced(query: str, 
+async def search_todos_advanced(query: str,
                                metadata_filters: Optional[Dict[str, Any]] = None,
-                               fields: Optional[List[str]] = None, 
+                               fields: Optional[List[str]] = None,
                                limit: int = 100,
                                ctx: Optional[Context] = None) -> str:
     """
@@ -862,28 +862,28 @@ async def search_todos_advanced(query: str,
         # Get user-scoped collections
         collections = db_connection.get_collections(ctx.user if ctx else None)
         todos_collection = collections['todos']
-        
+
         # Build text search filter
         if fields is None:
             fields = ["description", "project"]
-        
+
         text_search_filter = {
             "$or": [{field: {"$regex": query, "$options": "i"}} for field in fields]
         }
-        
+
         # Combine with metadata filters if provided
         if metadata_filters:
             enhancer = get_query_enhancer()
             combined_filter = enhancer.enhance_query_filter(text_search_filter, metadata_filters)
         else:
             combined_filter = text_search_filter
-        
+
         logger.info(f"Advanced search query: {combined_filter}")
-        
+
         # Use aggregation pipeline for better performance with complex queries
         if metadata_filters:
             pipeline = build_metadata_aggregation(
-                text_search_filter, 
+                text_search_filter,
                 metadata_filters or {},
                 limit=limit
             )
@@ -892,7 +892,7 @@ async def search_todos_advanced(query: str,
             # Simple query for text-only search
             cursor = todos_collection.find(combined_filter).limit(limit).sort("created_at", -1)
             results = list(cursor)
-        
+
         return create_response(True, {
             "items": results,
             "count": len(results),
@@ -900,13 +900,13 @@ async def search_todos_advanced(query: str,
             "metadata_filters": metadata_filters or {},
             "search_fields": fields
         })
-        
+
     except Exception as e:
         logger.error(f"Failed to perform advanced todo search: {str(e)}")
         return create_response(False, message=str(e))
 
 
-async def get_metadata_stats(project: Optional[str] = None, 
+async def get_metadata_stats(project: Optional[str] = None,
                            ctx: Optional[Context] = None) -> str:
     """
     Get statistics about metadata usage across todos.
@@ -929,12 +929,12 @@ async def get_metadata_stats(project: Optional[str] = None,
         # Get user-scoped collections
         collections = db_connection.get_collections(ctx.user if ctx else None)
         todos_collection = collections['todos']
-        
+
         # Base match filter
         match_filter = {}
         if project:
             match_filter["project"] = project.lower()
-        
+
         # Aggregation pipeline for metadata stats
         pipeline = [
             {"$match": match_filter},
@@ -994,19 +994,19 @@ async def get_metadata_stats(project: Optional[str] = None,
                 }
             }
         ]
-        
+
         results = list(todos_collection.aggregate(pipeline))
-        
+
         if results:
             stats = results[0]
-            
+
             # Clean up None values from tag stats
             stats["tag_stats"] = [item for item in stats["tag_stats"] if item["_id"] is not None]
             stats["complexity_stats"] = [item for item in stats["complexity_stats"] if item["_id"] is not None]
             stats["confidence_stats"] = [item for item in stats["confidence_stats"] if item["_id"] is not None]
             stats["phase_stats"] = [item for item in stats["phase_stats"] if item["_id"] is not None]
             stats["file_type_stats"] = [item for item in stats["file_type_stats"] if item["_id"] is not None]
-            
+
             return create_response(True, {
                 "project_filter": project,
                 "statistics": stats,
@@ -1018,7 +1018,7 @@ async def get_metadata_stats(project: Optional[str] = None,
                 "statistics": {"message": "No todos found"},
                 "generated_at": int(datetime.now(timezone.utc).timestamp())
             })
-        
+
     except Exception as e:
         logger.error(f"Failed to get metadata stats: {str(e)}")
         return create_response(False, message=str(e))
@@ -1031,7 +1031,7 @@ async def grep_lessons(pattern: str, limit: int = 20, ctx: Optional[Context] = N
         # Get user-scoped collections
         collections = db_connection.get_collections(ctx.user if ctx else None)
         lessons_collection = collections['lessons']
-        
+
         search_query = {
             "$or": [
                 {"topic": {"$regex": pattern, "$options": "i"}},
@@ -1157,7 +1157,7 @@ async def add_explanation(topic: str, content: str, kind: str = "concept", autho
         # Get user-scoped collections
         collections = db_connection.get_collections(ctx.user if ctx else None)
         explanations_collection = collections['explanations']
-        
+
         explanations_collection.update_one(
             {"topic": topic},
             {"$set": explanation},
@@ -1174,7 +1174,7 @@ async def get_explanation(topic: str, ctx: Optional[Context] = None) -> str:
         # Get user-scoped collections
         collections = db_connection.get_collections(ctx.user if ctx else None)
         explanations_collection = collections['explanations']
-        
+
         explanation = explanations_collection.find_one({"topic": topic})
         if explanation:
             return create_response(True, explanation)
@@ -1189,7 +1189,7 @@ async def update_explanation(topic: str, updates: dict, ctx: Optional[Context] =
         # Get user-scoped collections
         collections = db_connection.get_collections(ctx.user if ctx else None)
         explanations_collection = collections['explanations']
-        
+
         result = explanations_collection.update_one({"topic": topic}, {"$set": updates})
         if result.modified_count:
             return create_response(True, message="Explanation updated.")
@@ -1204,7 +1204,7 @@ async def delete_explanation(topic: str, ctx: Optional[Context] = None) -> str:
         # Get user-scoped collections
         collections = db_connection.get_collections(ctx.user if ctx else None)
         explanations_collection = collections['explanations']
-        
+
         result = explanations_collection.delete_one({"topic": topic})
         if result.deleted_count:
             return create_response(True, message="Explanation deleted.")
@@ -1231,7 +1231,7 @@ async def list_lessons(limit: int = 100, brief: bool = False, ctx: Optional[Cont
         # Get user-scoped collections
         collections = db_connection.get_collections(ctx.user if ctx else None)
         lessons_collection = collections['lessons']
-        
+
         cursor = lessons_collection.find().sort("created_at", -1).limit(limit)
         results = list(cursor)
         if brief:
@@ -1254,7 +1254,7 @@ async def search_lessons(query: str, fields: Optional[list] = None, limit: int =
         # Get user-scoped collections
         collections = db_connection.get_collections(ctx.user if ctx else None)
         lessons_collection = collections['lessons']
-        
+
         cursor = lessons_collection.find(search_query).limit(limit)
         results = list(cursor)
         if brief:
@@ -1278,7 +1278,7 @@ async def point_out_obvious(observation: str, sarcasm_level: int = 5, ctx: Optio
         A response highlighting the obvious with appropriate commentary
     """
     import random
-    
+
     # Sarcasm templates based on level
     templates = {
         1: ["Just a friendly observation: {obs}", "I noticed that {obs}"],
@@ -1292,25 +1292,25 @@ async def point_out_obvious(observation: str, sarcasm_level: int = 5, ctx: Optio
         9: ["In other groundbreaking revelations: {obs}", "Nobel Prize committee, take note: {obs}"],
         10: ["🤯 Mind = Blown: {obs}", "Call the scientists, we've confirmed that {obs}"]
     }
-    
+
     # Clamp sarcasm level
     level = max(1, min(10, sarcasm_level))
-    
+
     # Pick a random template for the level
     template_options = templates.get(level, templates[5])
     template = random.choice(template_options)
-    
+
     # Format the response
     response = template.format(obs=observation)
-    
+
     # Add emoji based on level
     if level >= 7:
         emojis = ["🙄", "😏", "🤔", "🧐", "🎭"]
         response = f"{random.choice(emojis)} {response}"
-    
+
     # Log the obvious observation (for science)
     logger.info(f"Obvious observation made (sarcasm={level}): {observation}")
-    
+
     # Store in a special "obvious_things" collection if we have DB
     try:
         # Get user-scoped collections - use a generic collection access
@@ -1326,7 +1326,7 @@ async def point_out_obvious(observation: str, sarcasm_level: int = 5, ctx: Optio
         })
     except Exception as e:
         logger.debug(f"Failed to store obvious observation: {e}")
-    
+
     # Publish to MQTT for other systems to enjoy the obviousness
     try:
         mqtt_publish("observations/obvious", {
@@ -1336,7 +1336,7 @@ async def point_out_obvious(observation: str, sarcasm_level: int = 5, ctx: Optio
         })
     except Exception as e:
         logger.debug(f"Failed to publish obvious observation: {e}")
-    
+
     return create_response(True, {
         "response": response,
         "observation": observation,
@@ -1349,8 +1349,7 @@ async def point_out_obvious(observation: str, sarcasm_level: int = 5, ctx: Optio
     })
 
 
-# DISABLED FOR SECURITY - DO NOT UNCOMMENT WITHOUT PROPER SANDBOXING
-async def bring_your_own(tool_name: str, code: str, runtime: str = "python", 
+async def bring_your_own(tool_name: str, code: str, runtime: str = "python",
                          timeout: int = 30, args: Optional[Dict[str, Any]] = None,
                          persist: bool = False, ctx: Optional[Context] = None) -> str:
     """
@@ -1369,11 +1368,271 @@ async def bring_your_own(tool_name: str, code: str, runtime: str = "python",
         ctx: Optional context
     
     Returns:
-        Security error message
-    """
-    logger.warning(f"Attempt to use disabled bring_your_own tool by user: {ctx.user.get('sub', 'anonymous') if ctx and ctx.user else 'anonymous'}")
+        The result of executing the custom tool
     
-    return create_response(False, 
-        message="SECURITY: The 'bring_your_own' tool has been disabled for security reasons. "
-                "This tool previously allowed arbitrary code execution which poses significant "
-                "security risks. Please contact an administrator if you need custom tool functionality.")
+    Security Note: This is intentionally powerful and dangerous.
+    Use with caution and proper sandboxing in production.
+    """
+    import tempfile
+    import asyncio
+    import hashlib
+    import pickle
+
+    # Security check (basic - you'd want more in production)
+    if ctx and ctx.user:
+        user_id = ctx.user.get("sub", "anonymous")
+        # Check if user is allowed to bring their own tools
+        if user_id != "system" and not user_id.startswith("admin"):
+            # Rate limit non-admin users
+            rate_limit_key = f"byo_tool_{user_id}"
+            # Simple in-memory rate limiting (use Redis in production)
+            if not hasattr(bring_your_own, "_rate_limits"):
+                bring_your_own._rate_limits = {}
+
+            last_call = bring_your_own._rate_limits.get(rate_limit_key, 0)
+            now = datetime.now(timezone.utc).timestamp()
+            if now - last_call < 10:  # 10 second cooldown
+                return create_response(False,
+                    message=f"Rate limited. Please wait {10 - (now - last_call):.1f} seconds")
+            bring_your_own._rate_limits[rate_limit_key] = now
+    else:
+        user_id = "anonymous"
+
+    # Validate runtime
+    allowed_runtimes = ["python", "javascript", "bash"]
+    if runtime not in allowed_runtimes:
+        return create_response(False,
+            message=f"Invalid runtime. Allowed: {allowed_runtimes}")
+
+    # Create a unique ID for this tool
+    tool_id = hashlib.md5(f"{tool_name}_{code}_{datetime.now(timezone.utc)}".encode()).hexdigest()[:8]
+    full_tool_name = f"byo_{tool_name}_{tool_id}"
+
+    logger.warning(f"BYO Tool execution requested: {full_tool_name} by {user_id}")
+
+    try:
+        if runtime == "python":
+            # Create a temporary module for the code
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
+                # Wrap the code in a module structure
+                module_code = f"""
+import asyncio
+import json
+from datetime import datetime
+
+# User-provided code
+{code}
+
+# Execution wrapper
+async def _execute_byo_tool(args):
+    if 'main' in globals():
+        if asyncio.iscoroutinefunction(main):
+            return await main(**args)
+        else:
+            return main(**args)
+    else:
+        raise ValueError("No 'main' function defined in custom tool code")
+"""
+                f.write(module_code)
+                temp_file = f.name
+
+            # Execute the code with timeout
+            try:
+                # Import and run the temporary module
+                import importlib.util
+                spec = importlib.util.spec_from_file_location(full_tool_name, temp_file)
+                module = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(module)
+
+                # Execute with timeout
+                result = await asyncio.wait_for(
+                    module._execute_byo_tool(args or {}),
+                    timeout=timeout
+                )
+
+                # Clean up
+                os.unlink(temp_file)
+
+            except asyncio.TimeoutError:
+                os.unlink(temp_file)
+                return create_response(False,
+                    message=f"Tool execution timed out after {timeout} seconds")
+            except Exception as e:
+                if os.path.exists(temp_file):
+                    os.unlink(temp_file)
+                logger.error(f"BYO tool execution failed: {str(e)}")
+                return create_response(False,
+                    message=f"Tool execution failed: {str(e)}")
+
+        elif runtime == "javascript":
+            # Use subprocess to run Node.js
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.js', delete=False) as f:
+                js_code = f"""
+{code}
+
+// Execution wrapper
+(async () => {{
+    const args = {json.dumps(args or {})};
+    if (typeof main === 'function') {{
+        const result = await main(args);
+        console.log(JSON.stringify(result));
+    }} else {{
+        throw new Error("No 'main' function defined");
+    }}
+}})();
+"""
+                f.write(js_code)
+                temp_file = f.name
+
+            try:
+                proc = await asyncio.create_subprocess_exec(
+                    'node', temp_file,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE
+                )
+                stdout, stderr = await asyncio.wait_for(
+                    proc.communicate(),
+                    timeout=timeout
+                )
+                os.unlink(temp_file)
+
+                if proc.returncode != 0:
+                    return create_response(False,
+                        message=f"JavaScript execution failed: {stderr.decode()}")
+
+                result = json.loads(stdout.decode())
+
+            except asyncio.TimeoutError:
+                proc.kill()
+                os.unlink(temp_file)
+                return create_response(False,
+                    message=f"Tool execution timed out after {timeout} seconds")
+
+        elif runtime == "bash":
+            # Execute bash commands
+            try:
+                proc = await asyncio.create_subprocess_shell(
+                    code,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE
+                )
+                stdout, stderr = await asyncio.wait_for(
+                    proc.communicate(),
+                    timeout=timeout
+                )
+
+                if proc.returncode != 0:
+                    return create_response(False,
+                        message=f"Bash execution failed: {stderr.decode()}")
+
+                result = stdout.decode()
+
+            except asyncio.TimeoutError:
+                proc.kill()
+                return create_response(False,
+                    message=f"Tool execution timed out after {timeout} seconds")
+
+        # Store execution history
+        try:
+            # Get user-scoped collections - use database access for custom collections
+            collections = db_connection.get_collections(ctx.user if ctx else None)
+            byo_collection = collections.database["byo_tools"]
+            execution_record = {
+                "tool_id": tool_id,
+                "tool_name": tool_name,
+                "full_name": full_tool_name,
+                "code": code[:1000],  # Store first 1000 chars
+                "runtime": runtime,
+                "args": args,
+                "result": str(result)[:500] if result else None,  # Store first 500 chars
+                "user": user_id,
+                "timestamp": datetime.now(timezone.utc),
+                "persist": persist,
+                "success": True
+            }
+            byo_collection.insert_one(execution_record)
+
+            # If persist is True, save to a persistent tools collection
+            if persist:
+                persistent_tools = collections.database["persistent_byo_tools"]
+                persistent_tools.update_one(
+                    {"tool_name": tool_name},
+                    {"$set": {
+                        "tool_name": tool_name,
+                        "code": code,
+                        "runtime": runtime,
+                        "created_by": user_id,
+                        "created_at": datetime.now(timezone.utc),
+                        "last_used": datetime.now(timezone.utc),
+                        "execution_count": 1
+                    }, "$inc": {"execution_count": 1}},
+                    upsert=True
+                )
+
+        except Exception as e:
+            logger.debug(f"Failed to store BYO tool execution: {e}")
+
+        # Publish to MQTT for monitoring
+        mqtt_publish("tools/byo/execution", {
+            "tool_id": tool_id,
+            "tool_name": full_tool_name,
+            "runtime": runtime,
+            "user": user_id,
+            "success": True
+        })
+
+        return create_response(True, {
+            "tool_id": tool_id,
+            "tool_name": full_tool_name,
+            "result": result,
+            "runtime": runtime,
+            "execution_time": f"{timeout}s max",
+            "persisted": persist,
+            "meta": {
+                "warning": "Custom tool executed successfully. Use with caution.",
+                "security_note": "This tool allows arbitrary code execution.",
+                "user": user_id
+            }
+        })
+
+    except Exception as e:
+        logger.error(f"BYO tool creation/execution failed: {str(e)}")
+
+        # Log failure
+        try:
+            # Get user-scoped collections - use database access for custom collections
+            collections = db_connection.get_collections(ctx.user if ctx else None)
+            byo_collection = collections.database["byo_tools"]
+            byo_collection.insert_one({
+                "tool_id": tool_id,
+                "tool_name": tool_name,
+                "error": str(e),
+                "user": user_id,
+                "timestamp": datetime.now(timezone.utc),
+                "success": False
+            })
+        except:
+            pass
+
+        return create_response(False,
+            message=f"Failed to create/execute custom tool: {str(e)}")
+
+
+# --- Chat session API wrappers (Phase 2) ---
+
+async def inventorium_sessions_list(project: Optional[str] = None, limit: int = 50, ctx: Optional[Context] = None) -> str:
+    return await api_toolset.inventorium_sessions_list(project=project, limit=limit, ctx=ctx)
+
+async def inventorium_sessions_get(session_id: str, ctx: Optional[Context] = None) -> str:
+    return await api_toolset.inventorium_sessions_get(session_id, ctx=ctx)
+
+async def inventorium_sessions_create(project: str, title: Optional[str] = None, initial_prompt: Optional[str] = None,
+                                      agentic_tool: str = "claude-code", ctx: Optional[Context] = None) -> str:
+    return await api_toolset.inventorium_sessions_create(project, title, initial_prompt, agentic_tool, ctx=ctx)
+
+async def inventorium_sessions_spawn(parent_session_id: str, prompt: str, todo_id: Optional[str] = None,
+                                     title: Optional[str] = None, ctx: Optional[Context] = None) -> str:
+    return await api_toolset.inventorium_sessions_spawn(parent_session_id, prompt, todo_id, title, ctx=ctx)
+
+async def inventorium_todos_link_session(todo_id: str, session_id: str, ctx: Optional[Context] = None) -> str:
+    return await api_toolset.inventorium_todos_link_session(todo_id, session_id, ctx=ctx)

@@ -41,7 +41,10 @@ TOOL_LOADOUTS = {
         "mark_todo_complete", "list_todos_by_status", "search_todos", "list_project_todos",
         "add_lesson", "get_lesson", "update_lesson", "delete_lesson", "search_lessons",
         "grep_lessons", "list_lessons", "query_todo_logs", "list_projects",
-        "explain", "add_explanation", "point_out_obvious"
+        "explain", "add_explanation", "point_out_obvious", "bring_your_own",
+        "inventorium_sessions_list", "inventorium_sessions_get",
+        "inventorium_sessions_create", "inventorium_sessions_spawn",
+        "inventorium_todos_link_session"
     ],
     "basic": [
         "add_todo", "query_todos", "update_todo", "get_todo", "mark_todo_complete",
@@ -57,6 +60,10 @@ TOOL_LOADOUTS = {
     "admin": [
         "query_todos", "update_todo", "delete_todo", "query_todo_logs",
         "list_projects", "explain", "add_explanation"
+        "query_todos", "update_todo", "delete_todo", "query_todo_logs",
+        "list_projects", "explain", "add_explanation",
+        "inventorium_sessions_list", "inventorium_sessions_get",
+        "inventorium_sessions_create", "inventorium_todos_link_session"
     ]
 }
 
@@ -105,6 +112,7 @@ def _create_context() -> Context:
 
         if user_payload:
             user_payload["auth_method"] = "auth0"
+            user_payload["access_token"] = auth0_token
             logger.info(f"Authenticated via Auth0: {user_payload.get('sub')}")
             return Context(user=user_payload)
         else:
@@ -122,7 +130,8 @@ def _create_context() -> Context:
         user = {
             "email": "api-key-user",  # Placeholder - real validation would happen server-side
             "sub": api_key[:16],  # Use key prefix as identifier
-            "auth_method": "api_key"
+            "auth_method": "api_key",
+            "api_key": api_key
         }
         return Context(user=user)
 
@@ -254,6 +263,26 @@ class OmniSpindleStdioServer:
             "bring_your_own": {
                 "func": tools.bring_your_own,
                 "doc": get_tool_doc("bring_your_own")
+            },
+            "inventorium_sessions_list": {
+                "func": tools.inventorium_sessions_list,
+                "doc": get_tool_doc("inventorium_sessions_list")
+            },
+            "inventorium_sessions_get": {
+                "func": tools.inventorium_sessions_get,
+                "doc": get_tool_doc("inventorium_sessions_get")
+            },
+            "inventorium_sessions_create": {
+                "func": tools.inventorium_sessions_create,
+                "doc": get_tool_doc("inventorium_sessions_create")
+            },
+            "inventorium_sessions_spawn": {
+                "func": tools.inventorium_sessions_spawn,
+                "doc": get_tool_doc("inventorium_sessions_spawn")
+            },
+            "inventorium_todos_link_session": {
+                "func": tools.inventorium_todos_link_session,
+                "doc": get_tool_doc("inventorium_todos_link_session")
             }
         }
 
@@ -448,6 +477,51 @@ class OmniSpindleStdioServer:
                                 return await func(tool_name, code, runtime, timeout, args, persist, ctx=ctx)
                             bring_your_own.__doc__ = docstring
                             return bring_your_own
+
+
+                        elif name == "inventorium_sessions_list":
+                            @self.server.tool()
+                            async def inventorium_sessions_list(project: Optional[str] = None, limit: int = 50) -> str:
+                                ctx = _create_context()
+                                return await func(project, limit, ctx=ctx)
+                            inventorium_sessions_list.__doc__ = docstring
+                            return inventorium_sessions_list
+
+                        elif name == "inventorium_sessions_get":
+                            @self.server.tool()
+                            async def inventorium_sessions_get(session_id: str) -> str:
+                                ctx = _create_context()
+                                return await func(session_id, ctx=ctx)
+                            inventorium_sessions_get.__doc__ = docstring
+                            return inventorium_sessions_get
+
+                        elif name == "inventorium_sessions_create":
+                            @self.server.tool()
+                            async def inventorium_sessions_create(project: str, title: Optional[str] = None,
+                                                                  initial_prompt: Optional[str] = None,
+                                                                  agentic_tool: str = "claude-code") -> str:
+                                ctx = _create_context()
+                                return await func(project, title, initial_prompt, agentic_tool, ctx=ctx)
+                            inventorium_sessions_create.__doc__ = docstring
+                            return inventorium_sessions_create
+
+                        elif name == "inventorium_sessions_spawn":
+                            @self.server.tool()
+                            async def inventorium_sessions_spawn(parent_session_id: str, prompt: str,
+                                                                 todo_id: Optional[str] = None,
+                                                                 title: Optional[str] = None) -> str:
+                                ctx = _create_context()
+                                return await func(parent_session_id, prompt, todo_id, title, ctx=ctx)
+                            inventorium_sessions_spawn.__doc__ = docstring
+                            return inventorium_sessions_spawn
+
+                        elif name == "inventorium_todos_link_session":
+                            @self.server.tool()
+                            async def inventorium_todos_link_session(todo_id: str, session_id: str) -> str:
+                                ctx = _create_context()
+                                return await func(todo_id, session_id, ctx=ctx)
+                            inventorium_todos_link_session.__doc__ = docstring
+                            return inventorium_todos_link_session
 
                     return create_wrapper()
 

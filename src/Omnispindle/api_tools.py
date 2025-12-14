@@ -36,6 +36,13 @@ def _get_auth_from_context(ctx: Optional[Context]) -> tuple[Optional[str], Optio
     
     return auth_token, api_key
 
+def _require_api_auth(ctx: Optional[Context]) -> tuple[Optional[str], Optional[str]]:
+    """Ensure API-backed tools have credentials."""
+    auth_token, api_key = _get_auth_from_context(ctx)
+    if not auth_token and not api_key:
+        raise RuntimeError("Authentication required. Configure AUTH0_TOKEN or MCP_API_KEY for Omnispindle MCP tools.")
+    return auth_token, api_key
+
 def _convert_api_todo_to_mcp_format(api_todo: dict) -> dict:
     """
     Convert API todo format to MCP format for backward compatibility
@@ -339,6 +346,111 @@ async def list_projects(include_details: Union[bool, str] = False, madness_root:
         logger.error(f"Failed to get projects via API: {str(e)}")
         # Fallback to hardcoded projects
         return create_response(True, {"projects": FALLBACK_VALID_PROJECTS})
+
+async def inventorium_sessions_list(project: Optional[str] = None, limit: int = 50, ctx: Optional[Context] = None) -> str:
+    """List chat sessions scoped to the authenticated user."""
+    try:
+        auth_token, api_key = _require_api_auth(ctx)
+        async with MadnessAPIClient(auth_token=auth_token, api_key=api_key) as client:
+            response = await client.list_chat_sessions(project=project, limit=limit)
+        if not response.success:
+            return create_response(False, message=response.error or "Failed to list chat sessions")
+        data = response.data or {}
+        count = data.get("count", len(data.get("sessions", [])))
+        return create_response(True, data, message=f"Fetched {count} chat sessions")
+    except Exception as e:
+        logger.error(f"Failed to list chat sessions: {str(e)}")
+        return create_response(False, message=f"API error: {str(e)}")
+
+async def inventorium_sessions_get(session_id: str, ctx: Optional[Context] = None) -> str:
+    """Load a specific chat session by ID."""
+    try:
+        auth_token, api_key = _require_api_auth(ctx)
+        async with MadnessAPIClient(auth_token=auth_token, api_key=api_key) as client:
+            response = await client.get_chat_session(session_id)
+        if not response.success:
+            return create_response(False, message=response.error or f"Session {session_id} not found")
+        return create_response(True, response.data, message="Session loaded")
+    except Exception as e:
+        logger.error(f"Failed to fetch chat session {session_id}: {str(e)}")
+        return create_response(False, message=f"API error: {str(e)}")
+
+async def inventorium_sessions_create(project: str, title: Optional[str] = None, initial_prompt: Optional[str] = None,
+                                      agentic_tool: str = "claude-code", ctx: Optional[Context] = None) -> str:
+    """Create a new chat session and optionally seed it with a prompt."""
+    try:
+        auth_token, api_key = _require_api_auth(ctx)
+        payload: Dict[str, Any] = {
+            "project": project,
+            "agentic_tool": agentic_tool,
+        }
+        if title:
+            payload["title"] = title
+        if initial_prompt:
+            payload["initial_prompt"] = initial_prompt
+
+        async with MadnessAPIClient(auth_token=auth_token, api_key=api_key) as client:
+            response = await client.create_chat_session(payload)
+        if not response.success:
+            return create_response(False, message=response.error or "Failed to create chat session")
+        session = response.data.get("session") if isinstance(response.data, dict) else response.data
+        return create_response(True, session, message="Chat session created")
+    except Exception as e:
+        logger.error(f"Failed to create chat session: {str(e)}")
+        return create_response(False, message=f"API error: {str(e)}")
+
+async def inventorium_sessions_spawn(parent_session_id: str, prompt: str, todo_id: Optional[str] = None,
+                                     title: Optional[str] = None, ctx: Optional[Context] = None) -> str:
+    """Spawn a child session (Phase 2 genealogy stub)."""
+    try:
+        auth_token, api_key = _require_api_auth(ctx)
+        async with MadnessAPIClient(auth_token=auth_token, api_key=api_key) as client:
+            parent_response = await client.get_chat_session(parent_session_id)
+            if not parent_response.success:
+                return create_response(False, message=parent_response.error or "Parent session not found")
+
+            parent_session = parent_response.data or {}
+            payload: Dict[str, Any] = {
+                "project": parent_session.get("project"),
+                "agentic_tool": parent_session.get("agentic_tool", "claude-code"),
+                "parent_session_id": parent_session_id,
+                "forked_from_session_id": parent_session_id,
+                "initial_prompt": prompt,
+            }
+            payload["title"] = title or f"Child of {parent_session.get('title') or parent_session.get('short_id')}"
+            if todo_id:
+                payload["linked_todo_ids"] = [todo_id]
+
+            spawn_response = await client.create_chat_session(payload)
+        if not spawn_response.success:
+            return create_response(False, message=spawn_response.error or "Failed to spawn session")
+        session = spawn_response.data.get("session") if isinstance(spawn_response.data, dict) else spawn_response.data
+        return create_response(True, session, message="Child session spawned")
+    except Exception as e:
+        logger.error(f"Failed to spawn chat session: {str(e)}")
+        return create_response(False, message=f"API error: {str(e)}")
+
+async def inventorium_todos_link_session(todo_id: str, session_id: str, ctx: Optional[Context] = None) -> str:
+    """Link an Omnispindle todo to a chat session."""
+    try:
+        auth_token, api_key = _require_api_auth(ctx)
+        async with MadnessAPIClient(auth_token=auth_token, api_key=api_key) as client:
+            session_resp = await client.get_chat_session(session_id)
+            if not session_resp.success:
+                return create_response(False, message=session_resp.error or f"Session {session_id} not found")
+            session = session_resp.data or {}
+            current_links = session.get("linked_todo_ids", [])
+            if todo_id in current_links:
+                return create_response(True, session, message="Todo already linked to session")
+            updates = {"linked_todo_ids": current_links + [todo_id]}
+            update_resp = await client.update_chat_session(session_id, updates)
+
+        if not update_resp.success:
+            return create_response(False, message=update_resp.error or "Failed to link todo to session")
+        return create_response(True, update_resp.data.get("session", update_resp.data), message="Todo linked to session")
+    except Exception as e:
+        logger.error(f"Failed to link todo {todo_id} to session {session_id}: {str(e)}")
+        return create_response(False, message=f"API error: {str(e)}")
 
 # Placeholder functions for non-todo operations that aren't yet available via API
 # These maintain backward compatibility while we transition
