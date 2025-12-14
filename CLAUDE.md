@@ -24,7 +24,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Updated all hardcoded IPs to use environment variables
 
 **CLI Commands Available** (after `pip install omnispindle`):
-- `omnispindle` - Web server for authenticated endpoints  
+- `omnispindle` - Web server for authenticated endpoints
 - `omnispindle-server` - Alias for web server
 - `omnispindle-stdio` - MCP stdio server for Claude Desktop
 
@@ -35,7 +35,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 # Install from PyPI
 pip install omnispindle
 
-# Run MCP stdio server 
+# Run MCP stdio server
 omnispindle-stdio
 
 # Run web server
@@ -80,7 +80,7 @@ python -m twine check dist/*
 # Test PyPI
 python -m twine upload --repository testpypi dist/*
 
-# Production PyPI  
+# Production PyPI
 python -m twine upload dist/*
 ```
 
@@ -111,8 +111,8 @@ python -m twine upload dist/*
 **🔐 Authentication Layer**:
 - **Zero-Config Auth**: Automatic Auth0 device flow with browser authentication
 - **JWT Tokens**: Primary authentication method via Auth0
-- **API Keys**: Alternative authentication for programmatic access
-- **User Context Isolation**: All data scoped to authenticated user
+- **API Keys**: Alternative authentication for programmatic access (not implemented yet)
+- **User Context Isolation**: All data scoped to authenticated user 
 
 **📊 Data Layer**:
 - **Primary**: madnessinteractive.cc/api (centralized, secure, multi-user)
@@ -175,7 +175,7 @@ The server exposes standardized MCP tools that AI agents can call:
 
 **Available Modes** (set via `OMNISPINDLE_MODE`):
 - `hybrid` (default) - API-first with local database fallback
-- `api` - HTTP API calls only to madnessinteractive.cc/api 
+- `api` - HTTP API calls only to madnessinteractive.cc/api
 - `local` - Direct MongoDB connections only (legacy mode)
 - `auto` - Automatically choose best performing mode
 
@@ -213,7 +213,7 @@ The server exposes standardized MCP tools that AI agents can call:
 - `MQTT_HOST` / `MQTT_PORT` - MQTT broker settings
 - `AI_API_ENDPOINT` / `AI_MODEL` - AI integration (optional)
 
-**MCP Integration**: 
+**MCP Integration**:
 
 For Claude Desktop stdio transport, add to your `claude_desktop_config.json`:
 
@@ -241,7 +241,7 @@ For Claude Desktop stdio transport, add to your `claude_desktop_config.json`:
 {
   "mcpServers": {
     "omnispindle": {
-      "command": "python", 
+      "command": "python",
       "args": ["-m", "src.Omnispindle.stdio_server"],
       "cwd": "/path/to/Omnispindle",
       "env": {
