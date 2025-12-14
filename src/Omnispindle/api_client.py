@@ -228,7 +228,9 @@ class MadnessAPIClient:
         }
         if metadata:
             payload["metadata"] = metadata
-            
+
+        logger.info(f"🐛 API client create_todo payload: {payload}")
+
         return await self._make_request("POST", "/todos", json=payload)
 
     async def update_todo(self, todo_id: str, updates: Dict[str, Any]) -> APIResponse:

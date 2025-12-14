@@ -81,22 +81,25 @@ def _handle_api_response(api_response: APIResponse) -> str:
     
     return create_response(True, api_response.data)
 
-async def add_todo(description: str, project: str, priority: str = "Medium", 
-                  target_agent: str = "user", metadata: Optional[Dict[str, Any]] = None, 
+async def add_todo(description: str, project: str, priority: str = "Medium",
+                  target_agent: str = "user", metadata: Optional[Dict[str, Any]] = None,
                   ctx: Optional[Context] = None) -> str:
     """
     Creates a task in the specified project with the given priority and target agent.
     Returns a compact representation of the created todo with an ID for reference.
     """
     try:
+        logger.info(f"🐛 add_todo called with metadata: {metadata}")
         auth_token, api_key = _get_auth_from_context(ctx)
-        
+
         # Add target_agent to metadata if provided
         if not metadata:
             metadata = {}
         if target_agent and target_agent != "user":
             metadata["target_agent"] = target_agent
-        
+
+        logger.info(f"🐛 add_todo sending to API with metadata: {metadata}")
+
         async with MadnessAPIClient(auth_token=auth_token, api_key=api_key) as client:
             api_response = await client.create_todo(
                 description=description,
