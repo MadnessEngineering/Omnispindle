@@ -24,7 +24,7 @@ from .auth_utils import verify_auth0_token, get_jwks, AUTH_CONFIG
 from fastmcp import FastMCP
 from .context import Context
 from . import tools
-from .documentation_manager import get_tool_doc
+from .documentation_manager import get_tool_doc, build_tool_docstring
 
 # Configure logging to stderr so it doesn't interfere with stdio protocol
 logging.basicConfig(
@@ -352,7 +352,13 @@ class OmniSpindleStdioServer:
                                               target_agent: str = "user", metadata: Optional[Dict[str, Any]] = None) -> str:
                                 ctx = _create_context()
                                 return await func(description, project, priority, target_agent, metadata, ctx=ctx)
-                            add_todo.__doc__ = docstring
+                            add_todo.__doc__ = build_tool_docstring("add_todo", {
+                                "description": "Task description",
+                                "project": "Project name",
+                                "priority": "Critical|High|Medium|Low",
+                                "target_agent": "user|AI name",
+                                "metadata": "{key: value} pairs"
+                            })
                             return add_todo
 
                         elif name == "query_todos":
@@ -362,7 +368,12 @@ class OmniSpindleStdioServer:
                                                  limit: int = 100, ctx: Optional[str] = None) -> str:
                                 context = _create_context()
                                 return await func(filter, projection, limit, ctx=context)
-                            query_todos.__doc__ = docstring
+                            query_todos.__doc__ = build_tool_docstring("query_todos", {
+                                "filter": "{status: 'pending', project: 'name'}",
+                                "projection": "{field: 1} to include",
+                                "limit": "Max results",
+                                "ctx": "Additional context"
+                            })
                             return query_todos
 
                         elif name == "update_todo":
@@ -370,7 +381,10 @@ class OmniSpindleStdioServer:
                             async def update_todo(todo_id: str, updates: dict) -> str:
                                 ctx = _create_context()
                                 return await func(todo_id, updates, ctx=ctx)
-                            update_todo.__doc__ = docstring
+                            update_todo.__doc__ = build_tool_docstring("update_todo", {
+                                "todo_id": "Todo ID",
+                                "updates": "{field: new_value}"
+                            })
                             return update_todo
 
                         elif name == "delete_todo":
@@ -386,7 +400,9 @@ class OmniSpindleStdioServer:
                             async def get_todo(todo_id: str) -> str:
                                 ctx = _create_context()
                                 return await func(todo_id, ctx=ctx)
-                            get_todo.__doc__ = docstring
+                            get_todo.__doc__ = build_tool_docstring("get_todo", {
+                                "todo_id": "Todo ID"
+                            })
                             return get_todo
 
                         elif name == "mark_todo_complete":
@@ -394,7 +410,10 @@ class OmniSpindleStdioServer:
                             async def mark_todo_complete(todo_id: str, comment: Optional[str] = None) -> str:
                                 ctx = _create_context()
                                 return await func(todo_id, comment, ctx=ctx)
-                            mark_todo_complete.__doc__ = docstring
+                            mark_todo_complete.__doc__ = build_tool_docstring("mark_todo_complete", {
+                                "todo_id": "Todo ID",
+                                "comment": "Optional completion comment"
+                            })
                             return mark_todo_complete
 
                         elif name == "list_todos_by_status":
@@ -402,7 +421,10 @@ class OmniSpindleStdioServer:
                             async def list_todos_by_status(status: str, limit: int = 100) -> str:
                                 ctx = _create_context()
                                 return await func(status, limit, ctx=ctx)
-                            list_todos_by_status.__doc__ = docstring
+                            list_todos_by_status.__doc__ = build_tool_docstring("list_todos_by_status", {
+                                "status": "pending|completed|initial|blocked|in_progress",
+                                "limit": "Max results"
+                            })
                             return list_todos_by_status
 
                         elif name == "search_todos":
@@ -419,7 +441,10 @@ class OmniSpindleStdioServer:
                             async def list_project_todos(project: str, limit: int = 5) -> str:
                                 ctx = _create_context()
                                 return await func(project, limit, ctx=ctx)
-                            list_project_todos.__doc__ = docstring
+                            list_project_todos.__doc__ = build_tool_docstring("list_project_todos", {
+                                "project": "Project name",
+                                "limit": "Max results"
+                            })
                             return list_project_todos
 
                         elif name == "add_lesson":

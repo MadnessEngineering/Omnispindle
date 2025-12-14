@@ -386,3 +386,24 @@ def get_tool_doc(tool_name: str) -> str:
 def get_param_hint(tool_name: str) -> Optional[str]:
     """Convenience function to get parameter hints."""
     return get_documentation_manager().get_parameter_hint(tool_name)
+
+def build_tool_docstring(tool_name: str, param_descriptions: dict = None) -> str:
+    """
+    Build a complete docstring for FastMCP with tool description and parameter descriptions.
+
+    Args:
+        tool_name: Name of the tool
+        param_descriptions: Dict of {param_name: description}
+
+    Returns:
+        Formatted docstring with Args: section for FastMCP
+    """
+    doc = get_tool_doc(tool_name)
+
+    if param_descriptions:
+        args_section = "\n\nArgs:\n"
+        for param, desc in param_descriptions.items():
+            args_section += f"    {param}: {desc}\n"
+        doc = doc + args_section
+
+    return doc
