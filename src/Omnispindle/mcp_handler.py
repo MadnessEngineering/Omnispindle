@@ -109,6 +109,79 @@ async def mcp_handler(request: Request, get_current_user: Callable[[], Coroutine
                     }
                 },
                 {
+                    "name": "add_lesson",
+                    "description": "Add a new lesson to the knowledge base",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "language": {"type": "string", "description": "Programming language or technology"},
+                            "topic": {"type": "string", "description": "Topic or subject"},
+                            "lesson_learned": {"type": "string", "description": "The lesson content"},
+                            "tags": {"type": "array", "items": {"type": "string"}, "description": "Optional tags"}
+                        },
+                        "required": ["language", "topic", "lesson_learned"]
+                    }
+                },
+                {
+                    "name": "get_lesson",
+                    "description": "Get a specific lesson by ID",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "lesson_id": {"type": "string", "description": "Lesson ID"}
+                        },
+                        "required": ["lesson_id"]
+                    }
+                },
+                {
+                    "name": "update_lesson",
+                    "description": "Update an existing lesson",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "lesson_id": {"type": "string", "description": "Lesson ID"},
+                            "updates": {"type": "object", "description": "Fields to update"}
+                        },
+                        "required": ["lesson_id", "updates"]
+                    }
+                },
+                {
+                    "name": "delete_lesson",
+                    "description": "Delete a lesson by ID",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "lesson_id": {"type": "string", "description": "Lesson ID"}
+                        },
+                        "required": ["lesson_id"]
+                    }
+                },
+                {
+                    "name": "search_lessons",
+                    "description": "Search lessons by text query",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "query": {"type": "string", "description": "Search query"},
+                            "fields": {"type": "array", "items": {"type": "string"}, "description": "Fields to search"},
+                            "limit": {"type": "number", "description": "Result limit"}
+                        },
+                        "required": ["query"]
+                    }
+                },
+                {
+                    "name": "grep_lessons",
+                    "description": "Pattern match lessons content",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "pattern": {"type": "string", "description": "Pattern to match"},
+                            "limit": {"type": "number", "description": "Result limit"}
+                        },
+                        "required": ["pattern"]
+                    }
+                },
+                {
                     "name": "inventorium_sessions_list",
                     "description": "List chat sessions for the authenticated user",
                     "inputSchema": {
@@ -206,6 +279,12 @@ async def mcp_handler(request: Request, get_current_user: Callable[[], Coroutine
                 "list_project_todos": tools.list_project_todos,
                 "search_todos": tools.search_todos,
                 "list_projects": tools.list_projects,
+                "add_lesson": tools.add_lesson,
+                "get_lesson": tools.get_lesson,
+                "update_lesson": tools.update_lesson,
+                "delete_lesson": tools.delete_lesson,
+                "search_lessons": tools.search_lessons,
+                "grep_lessons": tools.grep_lessons,
                 "inventorium_sessions_list": tools.inventorium_sessions_list,
                 "inventorium_sessions_get": tools.inventorium_sessions_get,
                 "inventorium_sessions_create": tools.inventorium_sessions_create,
