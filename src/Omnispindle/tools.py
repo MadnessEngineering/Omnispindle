@@ -389,6 +389,8 @@ async def add_todo(description: str, project: str, priority: str = "Medium", tar
     Creates a task in the specified project with the given priority and target agent.
     Returns a compact representation of the created todo with an ID for reference.
     """
+    logger.info(f"🐛 tools.add_todo called with metadata type={type(metadata)}, value={metadata}")
+
     # Check for read-only mode (unauthenticated demo users)
     if _is_read_only_user(ctx):
         return create_response(False, message="Demo mode: Todo creation is disabled. Please authenticate to create todos.")
@@ -400,6 +402,7 @@ async def add_todo(description: str, project: str, priority: str = "Medium", tar
 
     # Validate metadata against schema if provided
     validated_metadata = {}
+    logger.info(f"🐛 tools.add_todo before validation: metadata={metadata}")
     if metadata:
         try:
             validated_metadata_obj = validate_todo_metadata(metadata)
