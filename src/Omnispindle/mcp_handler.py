@@ -69,7 +69,9 @@ async def mcp_handler(request: Request, get_current_user: Callable[[], Coroutine
                         "properties": {
                             "description": {"type": "string", "description": "Todo description"},
                             "project": {"type": "string", "description": "Project name"},
-                            "priority": {"type": "string", "description": "Priority level"}
+                            "priority": {"type": "string", "description": "Priority level (High, Medium, Low)"},
+                            "target_agent": {"type": "string", "description": "Target agent for the todo (default: user)"},
+                            "metadata": {"type": "object", "description": "Additional metadata as key-value pairs"}
                         },
                         "required": ["description", "project"]
                     }
