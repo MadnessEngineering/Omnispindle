@@ -149,12 +149,61 @@ class Omnispindle:
                 from .mcp_handler import mcp_handler
                 return await mcp_handler(request, lambda: get_current_user_from_query(token))
 
-            # Legacy SSE endpoint (deprecated - use /mcp instead)
+            # SSE endpoint for MCP connections
+            @app.get("/api/mcp/sse")
+            async def mcp_sse_endpoint(request: Request, user: dict = Depends(get_current_user)):
+                from .sse_handler import sse_handler
+                from .tools import handle_tool_call, ToolCall
+                import json
+
+                async def mcp_event_generator(request: Request):
+                    """Generator for MCP tool calls over SSE"""
+                    try:
+                        # Send initial connection event
+                        yield {
+                            "event": "connected",
+                            "data": json.dumps({
+                                "status": "connected",
+                                "user": user.get("email", "unknown"),
+                                "timestamp": str(asyncio.get_event_loop().time())
+                            })
+                        }
+
+                        # Keep connection alive and wait for tool calls
+                        # In a real implementation, this would listen for incoming tool calls
+                        # For now, we'll send a heartbeat every 30 seconds
+                        while True:
+                            if await request.is_disconnected():
+                                break
+
+                            yield {
+                                "event": "heartbeat",
+                                "data": json.dumps({
+                                    "status": "alive",
+                                    "timestamp": str(asyncio.get_event_loop().time())
+                                })
+                            }
+
+                            await asyncio.sleep(30)
+
+                    except asyncio.CancelledError:
+                        logger.info("SSE connection cancelled")
+                        break
+                    except Exception as e:
+                        logger.error(f"Error in SSE generator: {e}")
+                        yield {
+                            "event": "error",
+                            "data": json.dumps({"error": str(e)})
+                        }
+
+                return sse_handler.sse_response(request, mcp_event_generator, send_timeout=60)
+
+            # Legacy SSE endpoint (deprecated - use /api/mcp/sse instead)
             @app.get("/sse")
             async def sse_endpoint(req: Request, user: dict = Depends(get_current_user)):
                 from starlette.responses import JSONResponse
                 return JSONResponse(
-                    {"error": "SSE endpoint deprecated", "message": "Use /mcp endpoint instead"},
+                    {"error": "SSE endpoint deprecated", "message": "Use /api/mcp/sse endpoint instead"},
                     status_code=410  # Gone
                 )
 
