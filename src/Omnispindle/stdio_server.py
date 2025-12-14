@@ -14,8 +14,9 @@ import asyncio
 import logging
 import os
 import sys
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Annotated
 
+from pydantic import Field
 from jose import jwt
 from jose.exceptions import JWTError
 
@@ -348,43 +349,40 @@ class OmniSpindleStdioServer:
                     def create_wrapper():
                         if name == "add_todo":
                             @self.server.tool()
-                            async def add_todo(description: str, project: str, priority: str = "Medium",
-                                              target_agent: str = "user", metadata: Optional[Dict[str, Any]] = None) -> str:
+                            async def add_todo(
+                                description: Annotated[str, Field(description="Task description")],
+                                project: Annotated[str, Field(description="Project name")],
+                                priority: Annotated[str, Field(description="Critical|High|Medium|Low")] = "Medium",
+                                target_agent: Annotated[str, Field(description="user|AI name")] = "user",
+                                metadata: Annotated[Optional[Dict[str, Any]], Field(description="{key: value} pairs")] = None
+                            ) -> str:
+                                """Create task. Returns ID and project stats."""
                                 ctx = _create_context()
                                 return await func(description, project, priority, target_agent, metadata, ctx=ctx)
-                            add_todo.__doc__ = build_tool_docstring("add_todo", {
-                                "description": "Task description",
-                                "project": "Project name",
-                                "priority": "Critical|High|Medium|Low",
-                                "target_agent": "user|AI name",
-                                "metadata": "{key: value} pairs"
-                            })
                             return add_todo
 
                         elif name == "query_todos":
                             @self.server.tool()
-                            async def query_todos(filter: Optional[Dict[str, Any]] = None,
-                                                 projection: Optional[Dict[str, Any]] = None,
-                                                 limit: int = 100, ctx: Optional[str] = None) -> str:
+                            async def query_todos(
+                                filter: Annotated[Optional[Dict[str, Any]], Field(description="{status: 'pending', project: 'name'}")] = None,
+                                projection: Annotated[Optional[Dict[str, Any]], Field(description="{field: 1} to include")] = None,
+                                limit: Annotated[int, Field(description="Max results")] = 100,
+                                ctx: Annotated[Optional[str], Field(description="Additional context")] = None
+                            ) -> str:
+                                """Query with MongoDB filters. Ex: {status: 'pending', project: 'name'}"""
                                 context = _create_context()
                                 return await func(filter, projection, limit, ctx=context)
-                            query_todos.__doc__ = build_tool_docstring("query_todos", {
-                                "filter": "{status: 'pending', project: 'name'}",
-                                "projection": "{field: 1} to include",
-                                "limit": "Max results",
-                                "ctx": "Additional context"
-                            })
                             return query_todos
 
                         elif name == "update_todo":
                             @self.server.tool()
-                            async def update_todo(todo_id: str, updates: dict) -> str:
+                            async def update_todo(
+                                todo_id: Annotated[str, Field(description="Todo ID")],
+                                updates: Annotated[dict, Field(description="{field: new_value}")]
+                            ) -> str:
+                                """Update todo. Fields: description, priority, status, metadata."""
                                 ctx = _create_context()
                                 return await func(todo_id, updates, ctx=ctx)
-                            update_todo.__doc__ = build_tool_docstring("update_todo", {
-                                "todo_id": "Todo ID",
-                                "updates": "{field: new_value}"
-                            })
                             return update_todo
 
                         elif name == "delete_todo":
@@ -397,34 +395,34 @@ class OmniSpindleStdioServer:
 
                         elif name == "get_todo":
                             @self.server.tool()
-                            async def get_todo(todo_id: str) -> str:
+                            async def get_todo(
+                                todo_id: Annotated[str, Field(description="Todo ID")]
+                            ) -> str:
+                                """Get todo by ID"""
                                 ctx = _create_context()
                                 return await func(todo_id, ctx=ctx)
-                            get_todo.__doc__ = build_tool_docstring("get_todo", {
-                                "todo_id": "Todo ID"
-                            })
                             return get_todo
 
                         elif name == "mark_todo_complete":
                             @self.server.tool()
-                            async def mark_todo_complete(todo_id: str, comment: Optional[str] = None) -> str:
+                            async def mark_todo_complete(
+                                todo_id: Annotated[str, Field(description="Todo ID")],
+                                comment: Annotated[Optional[str], Field(description="Optional completion comment")] = None
+                            ) -> str:
+                                """Mark completed. Optional comment."""
                                 ctx = _create_context()
                                 return await func(todo_id, comment, ctx=ctx)
-                            mark_todo_complete.__doc__ = build_tool_docstring("mark_todo_complete", {
-                                "todo_id": "Todo ID",
-                                "comment": "Optional completion comment"
-                            })
                             return mark_todo_complete
 
                         elif name == "list_todos_by_status":
                             @self.server.tool()
-                            async def list_todos_by_status(status: str, limit: int = 100) -> str:
+                            async def list_todos_by_status(
+                                status: Annotated[str, Field(description="pending|completed|initial|blocked|in_progress")],
+                                limit: Annotated[int, Field(description="Max results")] = 100
+                            ) -> str:
+                                """List by status: pending|completed|initial|blocked|in_progress"""
                                 ctx = _create_context()
                                 return await func(status, limit, ctx=ctx)
-                            list_todos_by_status.__doc__ = build_tool_docstring("list_todos_by_status", {
-                                "status": "pending|completed|initial|blocked|in_progress",
-                                "limit": "Max results"
-                            })
                             return list_todos_by_status
 
                         elif name == "search_todos":
@@ -438,13 +436,13 @@ class OmniSpindleStdioServer:
 
                         elif name == "list_project_todos":
                             @self.server.tool()
-                            async def list_project_todos(project: str, limit: int = 5) -> str:
+                            async def list_project_todos(
+                                project: Annotated[str, Field(description="Project name")],
+                                limit: Annotated[int, Field(description="Max results")] = 5
+                            ) -> str:
+                                """List recent pending todos for project"""
                                 ctx = _create_context()
                                 return await func(project, limit, ctx=ctx)
-                            list_project_todos.__doc__ = build_tool_docstring("list_project_todos", {
-                                "project": "Project name",
-                                "limit": "Max results"
-                            })
                             return list_project_todos
 
                         elif name == "add_lesson":
