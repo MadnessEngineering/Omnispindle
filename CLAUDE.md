@@ -35,13 +35,18 @@ It supports a dashboard
 **MCP Server (`src/Omnispindle/`)**:
 - `stdio_server.py` - Primary MCP server using FastMCP with stdio transport
 - `__init__.py` - FastAPI web server for authenticated endpoints
-- `tools.py` - Implementation of all MCP tools for todo/lesson management
-- `database.py` - MongoDB connection and operations
+- `tools.py` - Local database implementation of all MCP tools (legacy mode)
+- `api_tools.py` - API-based implementation of MCP tools
+- `hybrid_tools.py` - Hybrid mode with API-first, database fallback
+- `api_client.py` - HTTP client for madnessinteractive.cc/api
+- `database.py` - MongoDB connection and operations (local mode only)
 - `auth.py` - Authentication middleware for web endpoints
 - `middleware.py` - Custom middleware for error handling and logging
 
 **Data Layer**:
-- MongoDB for persistent storage (todos, lessons, audit logs)
+- **API Mode**: HTTP calls to madnessinteractive.cc/api (recommended)
+- **Local Mode**: Direct MongoDB connections for todos, lessons, audit logs
+- **Hybrid Mode**: API-first with local fallback for reliability
 - Collections: todos, lessons, explanations, todo_logs
 - MQTT for real-time messaging and cross-system coordination
 
@@ -95,18 +100,53 @@ The server exposes standardized MCP tools that AI agents can call:
 
 **Valid Projects**: See `VALID_PROJECTS` list in `tools.py` - includes madness_interactive, omnispindle, swarmonomicon, todomill_projectorium, etc.
 
+### Operation Modes
+
+**Available Modes** (set via `OMNISPINDLE_MODE`):
+- `hybrid` (default) - API-first with local database fallback
+- `api` - HTTP API calls only to madnessinteractive.cc/api 
+- `local` - Direct MongoDB connections only (legacy mode)
+- `auto` - Automatically choose best performing mode
+
+**API Authentication**:
+- JWT tokens from Auth0 device flow (preferred)
+- API keys from madnessinteractive.cc/api
+- Automatic token refresh and error handling
+- Graceful degradation when authentication fails
+
+**Benefits of API Mode**:
+- Simplified authentication (handled by API)
+- Database access centralized behind API security
+- Consistent user isolation across all clients
+- No direct MongoDB dependency needed
+- Better monitoring and logging via API layer
+
 ### Configuration
 
 **Environment Variables**:
+
+*Operation Mode Configuration*:
+- `OMNISPINDLE_MODE` - Operation mode: `hybrid`, `api`, `local`, `auto` (default: `hybrid`)
+- `OMNISPINDLE_TOOL_LOADOUT` - Tool loadout configuration (see Tool Loadouts below)
+- `OMNISPINDLE_FALLBACK_ENABLED` - Enable fallback in hybrid mode (default: `true`)
+- `OMNISPINDLE_API_TIMEOUT` - API request timeout in seconds (default: `10.0`)
+
+*API Authentication*:
+- `MADNESS_API_URL` - API base URL (default: `https://madnessinteractive.cc/api`)
+- `MADNESS_AUTH_TOKEN` - JWT token from Auth0 device flow
+- `MADNESS_API_KEY` - API key from madnessinteractive.cc
+
+*Local Database (for local/hybrid modes)*:
 - `MONGODB_URI` - MongoDB connection string
 - `MONGODB_DB` - Database name (default: swarmonomicon)
 - `MQTT_HOST` / `MQTT_PORT` - MQTT broker settings
 - `AI_API_ENDPOINT` / `AI_MODEL` - AI integration (optional)
-- `OMNISPINDLE_TOOL_LOADOUT` - Tool loadout configuration (see Tool Loadouts below)
 
 **MCP Integration**: 
 
 For Claude Desktop stdio transport, add to your `claude_desktop_config.json`:
+
+*API Mode (Recommended)*:
 ```json
 {
   "mcpServers": {
@@ -115,7 +155,49 @@ For Claude Desktop stdio transport, add to your `claude_desktop_config.json`:
       "args": ["-m", "src.Omnispindle.stdio_server"],
       "cwd": "/path/to/Omnispindle",
       "env": {
-        "OMNISPINDLE_TOOL_LOADOUT": "basic"
+        "OMNISPINDLE_MODE": "api",
+        "OMNISPINDLE_TOOL_LOADOUT": "basic",
+        "MADNESS_AUTH_TOKEN": "your_jwt_token_here",
+        "MCP_USER_EMAIL": "user@example.com"
+      }
+    }
+  }
+}
+```
+
+*Hybrid Mode (API + Local Fallback)*:
+```json
+{
+  "mcpServers": {
+    "omnispindle": {
+      "command": "python", 
+      "args": ["-m", "src.Omnispindle.stdio_server"],
+      "cwd": "/path/to/Omnispindle",
+      "env": {
+        "OMNISPINDLE_MODE": "hybrid",
+        "OMNISPINDLE_TOOL_LOADOUT": "basic",
+        "MADNESS_AUTH_TOKEN": "your_jwt_token_here",
+        "MONGODB_URI": "mongodb://localhost:27017",
+        "MCP_USER_EMAIL": "user@example.com"
+      }
+    }
+  }
+}
+```
+
+*Local Mode (Direct Database)*:
+```json
+{
+  "mcpServers": {
+    "omnispindle": {
+      "command": "python",
+      "args": ["-m", "src.Omnispindle.stdio_server"],
+      "cwd": "/path/to/Omnispindle",
+      "env": {
+        "OMNISPINDLE_MODE": "local",
+        "OMNISPINDLE_TOOL_LOADOUT": "basic",
+        "MONGODB_URI": "mongodb://localhost:27017",
+        "MCP_USER_EMAIL": "user@example.com"
       }
     }
   }
@@ -133,6 +215,18 @@ No setup required! The system automatically:
 If you need manual token setup:
 ```bash
 python -m src.Omnispindle.token_exchange
+```
+
+**Testing API Integration**:
+```bash
+# Test the API client directly
+python test_api_client.py
+
+# Run with authentication
+MADNESS_AUTH_TOKEN="your_token" python test_api_client.py
+
+# Test specific mode
+OMNISPINDLE_MODE="api" python test_api_client.py
 ```
 
 ### Development Patterns
@@ -157,6 +251,7 @@ Omnispindle supports variable tool loadouts to reduce token usage for AI agents.
 - `minimal` - Core functionality only (4 tools): add_todo, query_todos, get_todo, mark_todo_complete
 - `lessons` - Knowledge management focus (7 tools): add_lesson, get_lesson, update_lesson, delete_lesson, search_lessons, grep_lessons, list_lessons
 - `admin` - Administrative tools (6 tools): query_todos, update_todo, delete_todo, query_todo_logs, list_projects, explain, add_explanation
+- `hybrid_test` - Testing hybrid functionality (6 tools): add_todo, query_todos, get_todo, mark_todo_complete, get_hybrid_status, test_api_connectivity
 
 **Usage**:
 ```bash

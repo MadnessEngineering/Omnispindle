@@ -13,6 +13,8 @@ from .context import Context
 from .middleware import ConnectionErrorsMiddleware, NoneTypeResponseMiddleware, EnhancedLoggingMiddleware
 from .patches import apply_patches
 from . import tools
+from . import hybrid_tools
+from .hybrid_tools import OmnispindleMode
 
 # --- Initializations ---
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -41,8 +43,12 @@ TOOL_LOADOUTS = {
         "grep_lessons", "list_lessons"
     ],
     "admin": [
-        "query_todos", "update_todo", "delete_todo", "query_todo_logs", 
+        "query_todos", "update_todo", "delete_todo", "query_todo_logs",
         "list_projects", "explain", "add_explanation"
+    ],
+    "hybrid_test": [
+        "add_todo", "query_todos", "get_todo", "mark_todo_complete",
+        "get_hybrid_status", "test_api_connectivity"
     ]
 }
 
@@ -114,13 +120,22 @@ class Omnispindle:
         return app
 
     def _register_default_tools(self):
-        """Registers tools based on OMNISPINDLE_TOOL_LOADOUT env var."""
-        
+        """Registers tools based on OMNISPINDLE_TOOL_LOADOUT and OMNISPINDLE_MODE env vars."""
+
         loadout = os.getenv("OMNISPINDLE_TOOL_LOADOUT", "full").lower()
         if loadout not in TOOL_LOADOUTS:
             logger.warning(f"Unknown loadout '{loadout}', using 'full'")
             loadout = "full"
-        
+
+        # Determine which tools module to use based on mode
+        mode = os.getenv("OMNISPINDLE_MODE", "hybrid").lower()
+        if mode in ["hybrid", "api", "auto"]:
+            tools_module = hybrid_tools
+            logger.info(f"Using hybrid/API tools module in '{mode}' mode")
+        else:
+            tools_module = tools
+            logger.info(f"Using local tools module in '{mode}' mode")
+
         enabled = TOOL_LOADOUTS[loadout]
         logger.info(f"Loading '{loadout}' loadout: {enabled}")
 
@@ -147,20 +162,21 @@ class Omnispindle:
             "explain": (tools.explain_tool, "Provides a detailed explanation for a project or concept. For projects, it dynamically generates a summary with recent activity."),
             "add_explanation": (tools.add_explanation, "Add a new static explanation to the knowledge base."),
             "point_out_obvious": (tools.point_out_obvious, "Points out something obvious to the human user with humor."),
+            "bring_your_own": (tools.bring_your_own, "Temporarily hijack the MCP server to run custom tool code.")
         }
 
         # Register enabled tools
         for tool_name in enabled:
             if tool_name in tool_registry:
                 func, doc = tool_registry[tool_name]
-                
+
                 # Create closure to capture func properly
                 def make_wrapper(f, docstring):
                     async def wrapper(*args, ctx: Optional[Context] = None, **kwargs):
                         return await f(*args, ctx=ctx, **kwargs)
                     wrapper.__doc__ = docstring
                     return wrapper
-                
+
                 self.tool(tool_name)(make_wrapper(func, doc))
 
 # --- Server Instantiation ---
