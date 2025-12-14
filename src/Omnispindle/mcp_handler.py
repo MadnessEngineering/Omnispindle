@@ -256,6 +256,10 @@ async def mcp_handler(request: Request, get_current_user: Callable[[], Coroutine
             tool_name = params.get("name")
             tool_arguments = params.get("arguments", {}) or {}
 
+            logger.info(f"🐛 MCP Handler - tool_name: {tool_name}")
+            logger.info(f"🐛 MCP Handler - tool_arguments keys: {list(tool_arguments.keys())}")
+            logger.info(f"🐛 MCP Handler - full tool_arguments: {tool_arguments}")
+
             # Never allow client-provided ctx to collide with server ctx
             if "ctx" in tool_arguments:
                 logger.warning("Stripping client-provided ctx from tool arguments to avoid conflicts")
