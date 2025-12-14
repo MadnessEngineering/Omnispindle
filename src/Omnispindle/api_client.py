@@ -287,6 +287,27 @@ class MadnessAPIClient:
         """Append a message to a chat session."""
         return await self._make_request("POST", f"/chat-sessions/{session_id}/messages", json=message)
 
+    async def fork_chat_session(self, session_id: str, payload: Dict[str, Any]) -> APIResponse:
+        """Fork a chat session to explore alternative paths."""
+        return await self._make_request("POST", f"/chat-sessions/{session_id}/fork", json=payload)
+
+    async def spawn_chat_session(self, session_id: str, payload: Dict[str, Any]) -> APIResponse:
+        """Spawn a delegated child chat session."""
+        return await self._make_request("POST", f"/chat-sessions/{session_id}/spawn", json=payload)
+
+    async def get_chat_session_genealogy(self, session_id: str) -> APIResponse:
+        """Get genealogy details for a specific session."""
+        return await self._make_request("GET", f"/chat-sessions/{session_id}/genealogy")
+
+    async def get_chat_session_tree(self, project: Optional[str] = None, limit: int = 200) -> APIResponse:
+        """Fetch session tree for the authenticated user."""
+        params: Dict[str, Any] = {}
+        if project:
+            params["project"] = project
+        if limit:
+            params["limit"] = limit
+        return await self._make_request("GET", "/chat-sessions/tree", params=params or None)
+
 # Factory function for creating API client instances
 def create_api_client(auth_token: str = None, api_key: str = None) -> MadnessAPIClient:
     """Factory function to create API client with authentication"""

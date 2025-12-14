@@ -44,7 +44,8 @@ TOOL_LOADOUTS = {
         "explain", "add_explanation", "point_out_obvious", "bring_your_own",
         "inventorium_sessions_list", "inventorium_sessions_get",
         "inventorium_sessions_create", "inventorium_sessions_spawn",
-        "inventorium_todos_link_session"
+        "inventorium_sessions_fork", "inventorium_sessions_genealogy",
+        "inventorium_sessions_tree", "inventorium_todos_link_session"
     ],
     "basic": [
         "add_todo", "query_todos", "update_todo", "get_todo", "mark_todo_complete",
@@ -63,10 +64,49 @@ TOOL_LOADOUTS = {
         "query_todos", "update_todo", "delete_todo", "query_todo_logs",
         "list_projects", "explain", "add_explanation",
         "inventorium_sessions_list", "inventorium_sessions_get",
-        "inventorium_sessions_create", "inventorium_todos_link_session"
+        "inventorium_sessions_create", "inventorium_sessions_fork",
+        "inventorium_sessions_genealogy", "inventorium_sessions_tree",
+        "inventorium_todos_link_session"
     ]
 }
 
+
+async def verify_auth0_token(token: str) -> Optional[Dict[str, Any]]:
+    """Verifies an Auth0 token and returns the payload."""
+    try:
+        unverified_header = jwt.get_unverified_header(token)
+        jwks = get_jwks()
+        rsa_key = {}
+        for key in jwks["keys"]:
+            if key["kid"] == unverified_header["kid"]:
+                rsa_key = {
+                    "kty": key["kty"],
+                    "kid": key["kid"],
+                    "use": key["use"],
+                    "n": key["n"],
+                    "e": key["e"],
+                }
+                break
+
+        if not rsa_key:
+            logger.error("Unable to find appropriate key in JWKS")
+            return None
+
+        payload = jwt.decode(
+            token,
+            rsa_key,
+            algorithms=["RS256"],
+            audience=AUTH_CONFIG.audience,
+            issuer=f"https://{AUTH_CONFIG.domain}/",
+        )
+        return payload
+
+    except JWTError as e:
+        logger.error(f"JWT Error: {e}")
+        return None
+    except Exception as e:
+        logger.error(f"An unexpected error occurred during token verification: {e}")
+        return None
 
 
 def _create_context() -> Context:
@@ -283,6 +323,18 @@ class OmniSpindleStdioServer:
             "inventorium_todos_link_session": {
                 "func": tools.inventorium_todos_link_session,
                 "doc": get_tool_doc("inventorium_todos_link_session")
+            },
+            "inventorium_sessions_fork": {
+                "func": tools.inventorium_sessions_fork,
+                "doc": get_tool_doc("inventorium_sessions_fork")
+            },
+            "inventorium_sessions_genealogy": {
+                "func": tools.inventorium_sessions_genealogy,
+                "doc": get_tool_doc("inventorium_sessions_genealogy")
+            },
+            "inventorium_sessions_tree": {
+                "func": tools.inventorium_sessions_tree,
+                "doc": get_tool_doc("inventorium_sessions_tree")
             }
         }
 
@@ -522,6 +574,33 @@ class OmniSpindleStdioServer:
                                 return await func(todo_id, session_id, ctx=ctx)
                             inventorium_todos_link_session.__doc__ = docstring
                             return inventorium_todos_link_session
+
+                        elif name == "inventorium_sessions_fork":
+                            @self.server.tool()
+                            async def inventorium_sessions_fork(session_id: str, title: Optional[str] = None,
+                                                                include_messages: bool = True,
+                                                                inherit_todos: bool = True,
+                                                                initial_status: Optional[str] = None) -> str:
+                                ctx = _create_context()
+                                return await func(session_id, title, include_messages, inherit_todos, initial_status, ctx=ctx)
+                            inventorium_sessions_fork.__doc__ = docstring
+                            return inventorium_sessions_fork
+
+                        elif name == "inventorium_sessions_genealogy":
+                            @self.server.tool()
+                            async def inventorium_sessions_genealogy(session_id: str) -> str:
+                                ctx = _create_context()
+                                return await func(session_id, ctx=ctx)
+                            inventorium_sessions_genealogy.__doc__ = docstring
+                            return inventorium_sessions_genealogy
+
+                        elif name == "inventorium_sessions_tree":
+                            @self.server.tool()
+                            async def inventorium_sessions_tree(project: Optional[str] = None, limit: int = 200) -> str:
+                                ctx = _create_context()
+                                return await func(project, limit, ctx=ctx)
+                            inventorium_sessions_tree.__doc__ = docstring
+                            return inventorium_sessions_tree
 
                     return create_wrapper()
 

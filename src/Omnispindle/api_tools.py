@@ -452,6 +452,57 @@ async def inventorium_todos_link_session(todo_id: str, session_id: str, ctx: Opt
         logger.error(f"Failed to link todo {todo_id} to session {session_id}: {str(e)}")
         return create_response(False, message=f"API error: {str(e)}")
 
+async def inventorium_sessions_fork(session_id: str, title: Optional[str] = None, include_messages: bool = True,
+                                    inherit_todos: bool = True, initial_status: Optional[str] = None,
+                                    ctx: Optional[Context] = None) -> str:
+    """Fork an existing session to explore alternate ideas."""
+    try:
+        auth_token, api_key = _require_api_auth(ctx)
+        payload: Dict[str, Any] = {
+            "include_messages": include_messages,
+            "inherit_todos": inherit_todos,
+        }
+        if title:
+            payload["title"] = title
+        if initial_status:
+            payload["initial_status"] = initial_status
+
+        async with MadnessAPIClient(auth_token=auth_token, api_key=api_key) as client:
+            response = await client.fork_chat_session(session_id, payload)
+        if not response.success:
+            return create_response(False, message=response.error or "Failed to fork session")
+        return create_response(True, response.data.get("session", response.data), message="Session forked")
+    except Exception as e:
+        logger.error(f"Failed to fork session {session_id}: {str(e)}")
+        return create_response(False, message=f"API error: {str(e)}")
+
+async def inventorium_sessions_genealogy(session_id: str, ctx: Optional[Context] = None) -> str:
+    """Retrieve genealogy (parents/children) for a session."""
+    try:
+        auth_token, api_key = _require_api_auth(ctx)
+        async with MadnessAPIClient(auth_token=auth_token, api_key=api_key) as client:
+            response = await client.get_chat_session_genealogy(session_id)
+        if not response.success:
+            return create_response(False, message=response.error or "Failed to load genealogy")
+        return create_response(True, response.data, message="Genealogy fetched")
+    except Exception as e:
+        logger.error(f"Failed to fetch genealogy for {session_id}: {str(e)}")
+        return create_response(False, message=f"API error: {str(e)}")
+
+async def inventorium_sessions_tree(project: Optional[str] = None, limit: int = 200,
+                                    ctx: Optional[Context] = None) -> str:
+    """Fetch the full session tree for a project."""
+    try:
+        auth_token, api_key = _require_api_auth(ctx)
+        async with MadnessAPIClient(auth_token=auth_token, api_key=api_key) as client:
+            response = await client.get_chat_session_tree(project=project, limit=limit)
+        if not response.success:
+            return create_response(False, message=response.error or "Failed to fetch session tree")
+        return create_response(True, response.data, message="Session tree loaded")
+    except Exception as e:
+        logger.error(f"Failed to fetch session tree: {str(e)}")
+        return create_response(False, message=f"API error: {str(e)}")
+
 # Placeholder functions for non-todo operations that aren't yet available via API
 # These maintain backward compatibility while we transition
 

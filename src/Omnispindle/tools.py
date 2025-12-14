@@ -1636,3 +1636,14 @@ async def inventorium_sessions_spawn(parent_session_id: str, prompt: str, todo_i
 
 async def inventorium_todos_link_session(todo_id: str, session_id: str, ctx: Optional[Context] = None) -> str:
     return await api_toolset.inventorium_todos_link_session(todo_id, session_id, ctx=ctx)
+
+async def inventorium_sessions_fork(session_id: str, title: Optional[str] = None, include_messages: bool = True,
+                                    inherit_todos: bool = True, initial_status: Optional[str] = None,
+                                    ctx: Optional[Context] = None) -> str:
+    return await api_toolset.inventorium_sessions_fork(session_id, title, include_messages, inherit_todos, initial_status, ctx=ctx)
+
+async def inventorium_sessions_genealogy(session_id: str, ctx: Optional[Context] = None) -> str:
+    return await api_toolset.inventorium_sessions_genealogy(session_id, ctx=ctx)
+
+async def inventorium_sessions_tree(project: Optional[str] = None, limit: int = 200, ctx: Optional[Context] = None) -> str:
+    return await api_toolset.inventorium_sessions_tree(project, limit, ctx=ctx)

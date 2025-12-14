@@ -312,6 +312,27 @@ Special formats:
         "basic": "Add a todo_id to a chat session's linked_todo_ids list (idempotent).",
         "admin": "Link a todo to a session and update todo metadata with linked_session_ids for cross referencing.",
         "full": "Link an Omnispindle todo to a chat session. Parameters: todo_id, session_id. Adds todo to session.linked_todo_ids (no duplicates) and updates todo metadata with linked_session_ids for downstream tooling."
+    },
+
+    "inventorium_sessions_fork": {
+        "minimal": "Fork session",
+        "basic": "Clone a session to explore alternate strategies (optionally copy history and todos).",
+        "admin": "Fork a session with control over transcripts, todos, and status. Records genealogy.forked_from_session_id and updates parent children list.",
+        "full": "Fork a session to branch into a new idea. Parameters include session_id, optional title, include_messages (default true), inherit_todos (default true), and initial_status to set the new branch state. Returns the new session with updated genealogy."
+    },
+
+    "inventorium_sessions_genealogy": {
+        "minimal": "Session genealogy",
+        "basic": "Load parents and children for a session (breadcrumb + spawn list).",
+        "admin": "Fetch genealogy tree centered on the session, including ancestor chain, direct children, and metadata for UI rendering.",
+        "full": "Retrieve genealogy for a session: base session info, ordered parents, and direct children (forks + spawns). Useful for visual trees and navigation."
+    },
+
+    "inventorium_sessions_tree": {
+        "minimal": "Session tree",
+        "basic": "Load all session roots and their descendants for a project.",
+        "admin": "Build a genealogy tree by project (or all) limited to N sessions, including child arrays for each node.",
+        "full": "Fetch the full session tree (roots + nested children) for the authenticated user, optionally filtered by project. Useful for UI tree renderers."
     }
 }
 
@@ -379,6 +400,28 @@ PARAMETER_HINTS = {
     "inventorium_todos_link_session": {
         "basic": "todo_id + session_id required. Idempotent add.",
         "full": "Parameters: todo_id (str) - Omnispindle todo; session_id (str) - chat session UUID. Adds todo to session.linked_todo_ids and todo.metadata.linked_session_ids."
+    },
+
+    "inventorium_sessions_fork": {
+        "basic": "session_id required. Optional title, include_messages, inherit_todos.",
+        "full": """Parameters:
+- session_id (str, required): Session UUID to fork
+- title (str, optional): Name for the new branch
+- include_messages (bool, optional): Copy transcript (default true)
+- inherit_todos (bool, optional): Copy linked todos (default true)
+- initial_status (str, optional): idle|running|completed|failed"""
+    },
+
+    "inventorium_sessions_genealogy": {
+        "basic": "session_id required. Returns parents/children arrays.",
+        "full": "Parameters: session_id (str, required). Response includes session, parents[], children[]."
+    },
+
+    "inventorium_sessions_tree": {
+        "basic": "Optional project filter, limit (default 200).",
+        "full": """Parameters:
+- project (str, optional): Filter by project slug (default all)
+- limit (int, optional): Max sessions to load (default 200)."""
     }
 }
 
