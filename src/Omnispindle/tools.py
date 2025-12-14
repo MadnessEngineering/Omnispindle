@@ -342,15 +342,39 @@ def get_all_projects(ctx=None):
         logging.error(f"Failed to get projects from database: {str(e)}")
         return []
 
-def validate_project_name(project: str) -> str:
+def validate_project_name(project: str, ctx: Optional[Context] = None) -> str:
+    """
+    Validate project name against personal database first, then shared, then hardcoded list.
+    This allows users to have their own projects while still accessing shared projects.
+    """
     # Normalize project name for validation
     project_lower = project.lower()
 
-    # Check if the normalized project name is in the list of valid projects
-    if project_lower in [p.lower() for p in VALID_PROJECTS]:
-        return project_lower  # Return the lowercase version for consistency
+    # Check personal database first (if authenticated)
+    if ctx and ctx.user and ctx.user.get('sub'):
+        try:
+            user_projects = get_all_projects(ctx)
+            user_project_names = [p.get('name', p.get('id', '')).lower() for p in user_projects]
+            if project_lower in user_project_names:
+                return project_lower
+        except Exception as e:
+            logger.debug(f"Could not check personal projects: {str(e)}")
 
-    # Default to "madness_interactive" if not found
+    # Check shared database as fallback
+    try:
+        shared_projects = get_all_projects(None)
+        shared_project_names = [p.get('name', p.get('id', '')).lower() for p in shared_projects]
+        if project_lower in shared_project_names:
+            return project_lower
+    except Exception as e:
+        logger.debug(f"Could not check shared projects: {str(e)}")
+
+    # Check hardcoded list as final fallback
+    if project_lower in [p.lower() for p in VALID_PROJECTS]:
+        return project_lower
+
+    # Default to "madness_interactive" if not found anywhere
+    logger.warning(f"Project '{project}' not found in any database, defaulting to 'madness_interactive'")
     return "madness_interactive"
 
 def _is_read_only_user(ctx: Optional[Context]) -> bool:
@@ -371,6 +395,8 @@ async def add_todo(description: str, project: str, priority: str = "Medium", tar
 
     todo_id = str(uuid.uuid4())
     validated_project = validate_project_name(project)
+
+    validated_project = validate_project_name(project, ctx)
 
     # Validate metadata against schema if provided
     validated_metadata = {}
@@ -1138,9 +1164,29 @@ async def query_todo_logs(filter_type: str = 'all', project: str = 'all',
 async def list_projects(include_details: Union[bool, str] = False, madness_root: str = "/Users/d.edens/lab/madness_interactive", ctx: Optional[Context] = None) -> str:
     """
     List all valid projects from the centralized project management system.
+    Prioritizes personal database for authenticated users, shows shared for demos.
     """
-    # This tool now directly returns the hardcoded list of valid projects
-    return create_response(True, {"projects": VALID_PROJECTS})
+    try:
+        # For authenticated users, show only personal projects
+        if ctx and ctx.user and ctx.user.get('sub'):
+            user_projects = get_all_projects(ctx)
+            if user_projects:
+                project_names = [p.get('name', p.get('id', '')) for p in user_projects]
+                return create_response(True, {"projects": project_names, "source": "personal"})
+
+        # For unauthenticated users (demo mode), show shared projects
+        shared_projects = get_all_projects(None)
+        if shared_projects:
+            project_names = [p.get('name', p.get('id', '')) for p in shared_projects]
+            return create_response(True, {"projects": project_names, "source": "shared"})
+
+        # Final fallback to hardcoded list if database is empty
+        return create_response(True, {"projects": VALID_PROJECTS, "source": "fallback"})
+
+    except Exception as e:
+        logger.error(f"Failed to list projects: {str(e)}")
+        # Fallback to hardcoded list on error
+        return create_response(True, {"projects": VALID_PROJECTS, "source": "fallback"})
 
 async def add_explanation(topic: str, content: str, kind: str = "concept", author: str = "system", ctx: Optional[Context] = None) -> str:
     """
