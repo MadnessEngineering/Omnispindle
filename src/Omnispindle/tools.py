@@ -813,7 +813,23 @@ async def search_todos(query: str, fields: Optional[list] = None, limit: int = 1
     search_query = {
         "$or": [{field: {"$regex": query, "$options": "i"}} for field in fields]
     }
-    return await query_todos(filter=search_query, limit=limit, ctx=ctx)
+
+    user_id = ctx.user.get('sub') if ctx and ctx.user else 'anonymous'
+    logger.info(f"search_todos called by {user_id}: query='{query}', fields={fields}, limit={limit}")
+    logger.debug(f"MongoDB query: {search_query}")
+
+    result = await query_todos(filter=search_query, limit=limit, ctx=ctx)
+
+    # Parse result to log count
+    try:
+        import json
+        result_data = json.loads(result)
+        item_count = len(result_data.get('data', {}).get('items', [])) if result_data.get('success') else 0
+        logger.info(f"search_todos returned {item_count} results for query '{query}'")
+    except:
+        pass
+
+    return result
 
 
 async def query_todos_by_metadata(metadata_filters: Dict[str, Any],
@@ -1062,14 +1078,22 @@ async def grep_lessons(pattern: str, limit: int = 20, ctx: Optional[Context] = N
         collections = db_connection.get_collections(ctx.user if ctx else None)
         lessons_collection = collections['lessons']
 
+        user_id = ctx.user.get('sub') if ctx and ctx.user else 'anonymous'
+        db_name = lessons_collection.database.name
+        logger.info(f"grep_lessons called by {user_id}: pattern='{pattern}', limit={limit}, db={db_name}")
+
         search_query = {
             "$or": [
                 {"topic": {"$regex": pattern, "$options": "i"}},
                 {"lesson_learned": {"$regex": pattern, "$options": "i"}}
             ]
         }
+        logger.debug(f"MongoDB query: {search_query}")
+
         cursor = lessons_collection.find(search_query).limit(limit)
         results = list(cursor)
+
+        logger.info(f"grep_lessons returned {len(results)} results for pattern '{pattern}'")
         return create_response(True, {"items": results})
     except Exception as e:
         logger.error(f"Failed to grep lessons: {str(e)}")
@@ -1282,8 +1306,15 @@ async def list_lessons(limit: int = 100, brief: bool = False, ctx: Optional[Cont
         collections = db_connection.get_collections(ctx.user if ctx else None)
         lessons_collection = collections['lessons']
 
+        user_id = ctx.user.get('sub') if ctx and ctx.user else 'anonymous'
+        db_name = lessons_collection.database.name
+        logger.info(f"list_lessons called by {user_id}: limit={limit}, brief={brief}, db={db_name}")
+
         cursor = lessons_collection.find().sort("created_at", -1).limit(limit)
         results = list(cursor)
+
+        logger.info(f"list_lessons returned {len(results)} total lessons")
+
         if brief:
             results = [{"id": r["id"], "topic": r["topic"], "language": r["language"]} for r in results]
         return create_response(True, {"items": results})
@@ -1305,8 +1336,16 @@ async def search_lessons(query: str, fields: Optional[list] = None, limit: int =
         collections = db_connection.get_collections(ctx.user if ctx else None)
         lessons_collection = collections['lessons']
 
+        user_id = ctx.user.get('sub') if ctx and ctx.user else 'anonymous'
+        db_name = lessons_collection.database.name
+        logger.info(f"search_lessons called by {user_id}: query='{query}', fields={fields}, limit={limit}, brief={brief}, db={db_name}")
+        logger.debug(f"MongoDB query: {search_query}")
+
         cursor = lessons_collection.find(search_query).limit(limit)
         results = list(cursor)
+
+        logger.info(f"search_lessons returned {len(results)} results for query '{query}'")
+
         if brief:
             results = [{"id": r["id"], "topic": r["topic"], "language": r["language"]} for r in results]
         return create_response(True, {"items": results})
