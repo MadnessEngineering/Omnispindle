@@ -18,6 +18,7 @@ from .utils import create_response, mqtt_publish, _format_duration
 from .todo_log_service import log_todo_create, log_todo_update, log_todo_delete, log_todo_complete
 from .schemas.todo_metadata_schema import validate_todo_metadata, validate_todo, TodoMetadata
 from .query_handlers import enhance_todo_query, build_metadata_aggregation, get_query_enhancer
+from . import api_tools
 
 # Load environment variables
 load_dotenv()
@@ -714,8 +715,8 @@ async def list_todos_by_status(status: str, limit: int = 100, ctx: Optional[Cont
     """
     List todos filtered by their status.
     """
-    if status.lower() not in ['pending', 'completed', 'initial']:
-        return create_response(False, message="Invalid status. Must be one of 'pending', 'completed', 'initial'.")
+    if status.lower() not in ['pending', 'completed', 'initial', 'blocked', 'in_progress']:
+        return create_response(False, message="Invalid status. Must be one of 'pending', 'completed', 'initial', 'blocked', 'in_progress'.")
     return await query_todos(filter={"status": status.lower()}, limit=limit, ctx=ctx)
 
 async def add_lesson(language: str, topic: str, lesson_learned: str, tags: Optional[list] = None, ctx: Optional[Context] = None) -> str:
@@ -1670,29 +1671,29 @@ async def _execute_byo_tool(args):
 # --- Chat session API wrappers (Phase 2) ---
 
 async def inventorium_sessions_list(project: Optional[str] = None, limit: int = 50, ctx: Optional[Context] = None) -> str:
-    return await api_toolset.inventorium_sessions_list(project=project, limit=limit, ctx=ctx)
+    return await api_tools.inventorium_sessions_list(project=project, limit=limit, ctx=ctx)
 
 async def inventorium_sessions_get(session_id: str, ctx: Optional[Context] = None) -> str:
-    return await api_toolset.inventorium_sessions_get(session_id, ctx=ctx)
+    return await api_tools.inventorium_sessions_get(session_id, ctx=ctx)
 
 async def inventorium_sessions_create(project: str, title: Optional[str] = None, initial_prompt: Optional[str] = None,
                                       agentic_tool: str = "claude-code", ctx: Optional[Context] = None) -> str:
-    return await api_toolset.inventorium_sessions_create(project, title, initial_prompt, agentic_tool, ctx=ctx)
+    return await api_tools.inventorium_sessions_create(project, title, initial_prompt, agentic_tool, ctx=ctx)
 
 async def inventorium_sessions_spawn(parent_session_id: str, prompt: str, todo_id: Optional[str] = None,
                                      title: Optional[str] = None, ctx: Optional[Context] = None) -> str:
-    return await api_toolset.inventorium_sessions_spawn(parent_session_id, prompt, todo_id, title, ctx=ctx)
+    return await api_tools.inventorium_sessions_spawn(parent_session_id, prompt, todo_id, title, ctx=ctx)
 
 async def inventorium_todos_link_session(todo_id: str, session_id: str, ctx: Optional[Context] = None) -> str:
-    return await api_toolset.inventorium_todos_link_session(todo_id, session_id, ctx=ctx)
+    return await api_tools.inventorium_todos_link_session(todo_id, session_id, ctx=ctx)
 
 async def inventorium_sessions_fork(session_id: str, title: Optional[str] = None, include_messages: bool = True,
                                     inherit_todos: bool = True, initial_status: Optional[str] = None,
                                     ctx: Optional[Context] = None) -> str:
-    return await api_toolset.inventorium_sessions_fork(session_id, title, include_messages, inherit_todos, initial_status, ctx=ctx)
+    return await api_tools.inventorium_sessions_fork(session_id, title, include_messages, inherit_todos, initial_status, ctx=ctx)
 
 async def inventorium_sessions_genealogy(session_id: str, ctx: Optional[Context] = None) -> str:
-    return await api_toolset.inventorium_sessions_genealogy(session_id, ctx=ctx)
+    return await api_tools.inventorium_sessions_genealogy(session_id, ctx=ctx)
 
 async def inventorium_sessions_tree(project: Optional[str] = None, limit: int = 200, ctx: Optional[Context] = None) -> str:
-    return await api_toolset.inventorium_sessions_tree(project, limit, ctx=ctx)
+    return await api_tools.inventorium_sessions_tree(project, limit, ctx=ctx)
