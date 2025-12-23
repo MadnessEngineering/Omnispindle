@@ -483,7 +483,7 @@ async def query_todos(filter: Optional[Dict[str, Any]] = None, projection: Optio
             todos_collection = collections['todos']
             database_source = "shared (read-only demo)"
 
-        cursor = todos_collection.find(filter or {}, projection).limit(limit)
+        cursor = todos_collection.find(filter or {}, projection).sort("created_at", -1).limit(limit)
         results = list(cursor)
 
         logger.info(f"Query returned {len(results)} todos from {database_source} database")
