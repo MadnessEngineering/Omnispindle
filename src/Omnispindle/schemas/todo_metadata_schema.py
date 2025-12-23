@@ -4,7 +4,7 @@ Based on the Inventorium standardization requirements.
 """
 
 from typing import Optional, List, Dict, Any, Union
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, validator, ConfigDict
 from enum import Enum
 
 
@@ -35,11 +35,13 @@ class ComplexityLevel(str, Enum):
 class TodoMetadata(BaseModel):
     """
     Standardized metadata schema for todos.
-    
+
     This schema enforces the standardized metadata structure agreed upon
     between Omnispindle and Inventorium for consistent todo management.
     """
-    
+
+    model_config = ConfigDict(extra="allow")  # Allow arbitrary custom fields
+
     # Technical Context (optional)
     files: Optional[List[str]] = Field(default=None, description="Array of file paths related to this todo")
     components: Optional[List[str]] = Field(default=None, description="Component names (e.g., ComponentName1, ComponentName2)")
