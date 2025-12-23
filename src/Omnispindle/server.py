@@ -49,7 +49,7 @@ from .middleware import (
     NoneTypeResponseMiddleware,
     create_asgi_error_handler
 )
-# from .auth import get_current_user, get_current_user_from_query, AUTH_CONFIG  # Removed - old SSE server not used
+from .auth import get_current_user, get_current_user_from_query, AUTH_CONFIG  # Re-enabled for MCP endpoints
 from fastapi import Depends, Request
 from .todo_log_service import start_service
 from .database import db_connection
