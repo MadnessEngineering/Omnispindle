@@ -28,24 +28,30 @@ class MongoJSONEncoder(json.JSONEncoder):
 
 def create_response(success: bool, data: Any = None, message: str = None, return_context: bool = True) -> str:
     """Create a standardized JSON response with context-rich but efficient information for AI agents"""
-    response = {
-        "success": success,
-    }
+    # Determine entity type early to check if we should put ID first
+    entity_type = None
+    entity_id = None
+
+    if data is not None and isinstance(data, dict):
+        if "todo_id" in data:
+            entity_type = "todo"
+            entity_id = data["todo_id"]
+        elif "lesson_id" in data:
+            entity_type = "lesson"
+            entity_id = data["lesson_id"]
+
+    # Build response with ID first when success=true and we have an entity ID
+    response = {}
+
+    if success and entity_id:
+        # Put ID first for easy copying in UI
+        response[f"{entity_type}_id"] = entity_id
+        response["success"] = success
+    else:
+        response["success"] = success
 
     # Only add agent_context when it provides value
     if data is not None:
-        # Determine entity type early to avoid redundant checks
-        entity_type = None
-        entity_id = None
-
-        if isinstance(data, dict):
-            if "todo_id" in data:
-                entity_type = "todo"
-                entity_id = data["todo_id"]
-            elif "lesson_id" in data:
-                entity_type = "lesson"
-                entity_id = data["lesson_id"]
-
         # Only add minimal agent_context with actually useful information
         if return_context and (entity_type or _should_add_context(data)):
             response["agent_context"] = {
