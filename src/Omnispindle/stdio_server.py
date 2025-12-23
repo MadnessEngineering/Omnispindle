@@ -14,6 +14,8 @@ import asyncio
 import logging
 import os
 import sys
+import time
+import hashlib
 from typing import Dict, Any, Optional, Annotated
 
 from pydantic import Field
@@ -34,6 +36,11 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+# Auth result caching to avoid thread blocking on every tool call
+# Cache format: {token_hash: (payload, expiry_time)}
+_auth_cache: Dict[str, tuple[Dict[str, Any], float]] = {}
+_auth_cache_ttl = 300  # 5 minutes TTL for auth results
 
 # Tool loadout configurations - same as FastAPI server
 TOOL_LOADOUTS = {
@@ -137,10 +144,24 @@ def _create_context() -> Context:
             pass
 
     if auth0_token:
+        # Performance optimization: Cache auth results to avoid thread blocking on every call
+        token_hash = hashlib.sha256(auth0_token.encode()).hexdigest()
+        now = time.time()
+
+        # Check cache first
+        if token_hash in _auth_cache:
+            cached_payload, expiry_time = _auth_cache[token_hash]
+            if now < expiry_time:
+                cache_age = now - (expiry_time - _auth_cache_ttl)
+                logger.debug(f"⚡ Using cached auth result (age: {cache_age:.1f}s)")
+                cached_payload["auth_method"] = "auth0"
+                cached_payload["access_token"] = auth0_token
+                return Context(user=cached_payload)
+            else:
+                logger.debug("🔄 Auth cache expired, re-verifying token")
+
+        # Cache miss or expired - verify token
         logger.info("🔐 Found AUTH0_TOKEN, attempting verification...")
-        # Note: This is a blocking call in an async context.
-        # For stdio server, this is acceptable as it runs once at the start
-        # of each tool call.
         user_payload = {}
 
         async def verify_token_async():
@@ -149,12 +170,18 @@ def _create_context() -> Context:
             if payload:
                 user_payload.update(payload)
 
+        start_time = time.time()
         run_async_in_thread(verify_token_async())
+        verify_time = time.time() - start_time
 
         if user_payload:
+            # Cache the result
+            expiry_time = now + _auth_cache_ttl
+            _auth_cache[token_hash] = (user_payload.copy(), expiry_time)
+            logger.info(f"✅ Auth0 verified in {verify_time:.3f}s, cached for {_auth_cache_ttl}s: {user_payload.get('sub')}")
+
             user_payload["auth_method"] = "auth0"
             user_payload["access_token"] = auth0_token
-            logger.info(f"Authenticated via Auth0: {user_payload.get('sub')}")
             return Context(user=user_payload)
         else:
             logger.error("Auth0 token verification failed. Falling back.")
