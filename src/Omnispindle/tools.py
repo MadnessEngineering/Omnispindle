@@ -18,6 +18,7 @@ from .utils import create_response, mqtt_publish, _format_duration
 from .todo_log_service import log_todo_create, log_todo_update, log_todo_delete, log_todo_complete
 from .schemas.todo_metadata_schema import validate_todo_metadata, validate_todo, TodoMetadata
 from .query_handlers import enhance_todo_query, build_metadata_aggregation, get_query_enhancer
+from .git_integration import enrich_metadata_with_git
 from . import api_tools
 
 # Load environment variables
@@ -415,6 +416,9 @@ async def add_todo(description: str, project: str, priority: str = "Medium", tar
             validated_metadata = metadata.copy() if metadata else {}
             validated_metadata["_validation_warning"] = f"Schema validation failed: {str(e)}"
 
+    # Enrich metadata with git context (branch, commit_hash) if available
+    validated_metadata = enrich_metadata_with_git(validated_metadata)
+
     todo = {
         "id": todo_id,
         "description": description,
@@ -695,6 +699,13 @@ async def mark_todo_complete(todo_id: str, comment: Optional[str] = None, ctx: O
             updates["metadata.completion_comment"] = comment
             user_email = ctx.user.get("email", "anonymous") if ctx and ctx.user else "anonymous"
             updates["metadata.completed_by"] = user_email
+
+        # Add git context on completion (branch and commit hash at completion time)
+        git_metadata = enrich_metadata_with_git()
+        if "branch" in git_metadata:
+            updates["metadata.completion_branch"] = git_metadata["branch"]
+        if "commit_hash" in git_metadata:
+            updates["metadata.completion_commit_hash"] = git_metadata["commit_hash"]
 
         # Complete the todo in the database where it was found
         result = todos_collection.update_one({"id": todo_id}, {"$set": updates})
