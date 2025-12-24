@@ -58,7 +58,27 @@ async def mcp_handler(request: Request, get_current_user: Callable[[], Coroutine
         logger.info(f"🔗 MCP Request: {method} from user {user.get('email', 'unknown')}")
 
         # Handle different MCP methods
-        if method == "tools/list":
+        if method == "initialize":
+            # Return server capabilities for MCP protocol initialization
+            return JSONResponse(
+                content={
+                    "jsonrpc": "2.0",
+                    "id": request_id,
+                    "result": {
+                        "protocolVersion": "2024-11-05",
+                        "serverInfo": {
+                            "name": "Omnispindle",
+                            "version": "1.0.0"
+                        },
+                        "capabilities": {
+                            "tools": {},
+                            "prompts": {},
+                            "resources": {}
+                        }
+                    }
+                }
+            )
+        elif method == "tools/list":
             # Return list of available tools
             tools = [
                 {
