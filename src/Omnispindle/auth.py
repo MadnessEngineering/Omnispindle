@@ -9,7 +9,7 @@ import os
 import asyncio
 
 import httpx
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordBearer, SecurityScopes
 from jose import jwt
 from jose.exceptions import JWTError
@@ -117,11 +117,28 @@ def get_jwks():
         raise
 
 
-async def get_current_user(security_scopes: SecurityScopes, token: str = Depends(oauth2_scheme)) -> Optional[dict]:
+async def get_current_user(
+    security_scopes: SecurityScopes,
+    request: Request,
+    token: str = Depends(oauth2_scheme)
+) -> Optional[dict]:
     """
     Dependency to get the current user from Auth0 JWT or API key.
     Falls back to API key verification if JWT validation fails.
+
+    Also supports X-User-Context header for pre-authenticated requests from backend proxy.
     """
+    # Check for pre-authenticated user context from backend proxy
+    user_context_header = request.headers.get("X-User-Context")
+    if user_context_header:
+        try:
+            user_info = json.loads(user_context_header)
+            logger.info(f"✅ Using pre-authenticated user context for {user_info.get('email', 'unknown')}")
+            return user_info
+        except json.JSONDecodeError as e:
+            logger.warning(f"Failed to parse X-User-Context header: {e}")
+            # Fall through to normal authentication
+
     if token is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
