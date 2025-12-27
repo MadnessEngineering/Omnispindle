@@ -152,7 +152,7 @@ The following helper scripts are included:
 
 1. **Docker Compose Not Found**
 
-   If you get errors about docker-compose not being found, make sure you have Docker Compose installed. You can use either the standalone `docker-compose` command or the Docker Compose plugin (`docker compose`).
+   If you get errors about docker compose not being found, make sure you have Docker Compose installed. Modern Docker includes the `docker compose` plugin by default. If using an older version, you can install the standalone `docker-compose` command, but the plugin syntax is recommended.
 
 2. **Port Conflicts**
 
