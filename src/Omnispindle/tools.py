@@ -27,6 +27,36 @@ load_dotenv()
 # Get the logger
 logger = logging.getLogger(__name__)
 
+# Helper function for deep merging metadata
+def deep_merge_metadata(existing: dict, updates: dict) -> dict:
+    """
+    Deep merge metadata updates with existing metadata.
+    Preserves existing fields that aren't being updated.
+
+    Args:
+        existing: Existing metadata dict
+        updates: New metadata updates to merge
+
+    Returns:
+        Merged metadata dict
+    """
+    if not existing:
+        return updates.copy() if updates else {}
+    if not updates:
+        return existing.copy() if existing else {}
+
+    merged = existing.copy()
+
+    for key, value in updates.items():
+        if key in merged and isinstance(merged[key], dict) and isinstance(value, dict):
+            # Recursively merge nested dicts
+            merged[key] = deep_merge_metadata(merged[key], value)
+        else:
+            # Replace/add the value
+            merged[key] = value
+
+    return merged
+
 # Cache constants
 TAGS_CACHE_KEY = "all_lesson_tags"
 TAGS_CACHE_EXPIRY = 43200  # Cache expiry in seconds (12 hours)
@@ -499,6 +529,7 @@ async def query_todos(filter: Optional[Dict[str, Any]] = None, projection: Optio
 async def update_todo(todo_id: str, updates: dict, ctx: Optional[Context] = None) -> str:
     """
     Update a todo with the provided changes.
+    Metadata updates are MERGED with existing metadata instead of replacing it.
     """
     # Check for read-only mode (unauthenticated demo users)
     if _is_read_only_user(ctx):
@@ -507,17 +538,7 @@ async def update_todo(todo_id: str, updates: dict, ctx: Optional[Context] = None
     if "updated_at" not in updates:
         updates["updated_at"] = int(datetime.now(timezone.utc).timestamp())
 
-    # Validate metadata if being updated
-    if "metadata" in updates and updates["metadata"] is not None:
-        try:
-            validated_metadata_obj = validate_todo_metadata(updates["metadata"])
-            updates["metadata"] = validated_metadata_obj.model_dump(exclude_none=True)
-            logger.info(f"Metadata validated successfully for todo update {todo_id}")
-        except Exception as e:
-            logger.warning(f"Metadata validation failed for todo update {todo_id}: {str(e)}")
-            # For backward compatibility, keep raw metadata with validation warning
-            if isinstance(updates["metadata"], dict):
-                updates["metadata"]["_validation_warning"] = f"Schema validation failed: {str(e)}"
+    # NOTE: Metadata validation moved to AFTER fetching existing todo for proper merging
     try:
         user_context = ctx.user if ctx else None
         searched_databases = []
@@ -553,6 +574,23 @@ async def update_todo(todo_id: str, updates: dict, ctx: Optional[Context] = None
         if not existing_todo:
             searched_locations = " and ".join(searched_databases)
             return create_response(False, message=f"Todo {todo_id} not found. Searched in: {searched_locations}")
+
+        # 🔧 MERGE metadata with existing instead of replacing
+        if "metadata" in updates and updates["metadata"] is not None:
+            existing_metadata = existing_todo.get("metadata", {})
+            merged_metadata = deep_merge_metadata(existing_metadata, updates["metadata"])
+
+            # Validate the merged metadata
+            try:
+                validated_metadata_obj = validate_todo_metadata(merged_metadata)
+                updates["metadata"] = validated_metadata_obj.model_dump(exclude_none=True)
+                logger.info(f"Metadata merged and validated for todo {todo_id}: {len(existing_metadata)} existing fields + {len(updates['metadata'])} updates")
+            except Exception as e:
+                logger.warning(f"Metadata validation failed for merged metadata in todo {todo_id}: {str(e)}")
+                # For backward compatibility, keep merged metadata with validation warning
+                if isinstance(merged_metadata, dict):
+                    merged_metadata["_validation_warning"] = f"Schema validation failed: {str(e)}"
+                updates["metadata"] = merged_metadata
 
         # Update the todo in the database where it was found
         result = todos_collection.update_one({"id": todo_id}, {"$set": updates})
