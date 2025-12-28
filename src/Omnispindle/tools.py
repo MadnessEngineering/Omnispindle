@@ -416,9 +416,20 @@ def _is_read_only_user(ctx: Optional[Context]) -> bool:
     """
     return not ctx or not ctx.user or not ctx.user.get('sub')
 
-async def add_todo(description: str, project: str, priority: str = "Medium", target_agent: str = "user", metadata: Optional[Dict[str, Any]] = None, ctx: Optional[Context] = None) -> str:
+async def add_todo(description: str, project: str, priority: str = "Medium", target_agent: str = "user", notes: str = "", ticket: str = "", metadata: Optional[Dict[str, Any]] = None, ctx: Optional[Context] = None) -> str:
     """
     Creates a task in the specified project with the given priority and target agent.
+
+    Args:
+        description: Task description
+        project: Project name
+        priority: Priority level (default: "Medium")
+        target_agent: Who should work on this (default: "user")
+        notes: User-facing notes/context about the todo (default: "")
+        ticket: External ticket reference (default: "")
+        metadata: Optional structured metadata (tags, files, etc.)
+        ctx: Context with user information
+
     Returns a compact representation of the created todo with an ID for reference.
     """
     logger.info(f"🐛 tools.add_todo called with metadata type={type(metadata)}, value={metadata}")
@@ -457,6 +468,8 @@ async def add_todo(description: str, project: str, priority: str = "Medium", tar
         "status": "pending",
         "target_agent": target_agent,
         "created_at": int(datetime.now(timezone.utc).timestamp()),
+        "notes": notes,  # ✅ User-facing notes field
+        "ticket": ticket,  # ✅ External ticket reference
         "metadata": validated_metadata
     }
     try:

@@ -83,14 +83,16 @@ async def mcp_handler(request: Request, get_current_user: Callable[[], Coroutine
             tools = [
                 {
                     "name": "add_todo",
-                    "description": "Create todo",
+                    "description": "Create todo. Returns ID and project stats.",
                     "inputSchema": {
                         "type": "object",
                         "properties": {
-                            "description": {"type": "string"},
-                            "project": {"type": "string"},
+                            "description": {"type": "string", "description": "Task description"},
+                            "project": {"type": "string", "description": "Project name"},
                             "priority": {"type": "string", "description": "High|Medium|Low"},
-                            "target_agent": {"type": "string"},
+                            "target_agent": {"type": "string", "description": "user|AI name"},
+                            "notes": {"type": "string", "description": "User-facing notes/context (optional)"},
+                            "ticket": {"type": "string", "description": "External ticket reference (optional)"},
                             "metadata": {"type": "object", "description": "{key: value} pairs"}
                         },
                         "required": ["description", "project"]
