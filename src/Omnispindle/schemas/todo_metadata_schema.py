@@ -4,7 +4,7 @@ Based on the Inventorium standardization requirements.
 """
 
 from typing import Optional, List, Dict, Any, Union
-from pydantic import BaseModel, Field, validator, ConfigDict
+from pydantic import BaseModel, Field, field_validator, ConfigDict
 from enum import Enum
 
 
@@ -73,14 +73,16 @@ class TodoMetadata(BaseModel):
     completed_by: Optional[str] = Field(default=None, description="Email or agent ID of completer")
     completion_comment: Optional[str] = Field(default=None, description="Comments on completion")
     
-    @validator('files', 'components', 'deliverables', 'acceptance_criteria', 'tags', 'blockers')
+    @field_validator('files', 'components', 'deliverables', 'acceptance_criteria', 'tags', 'blockers')
+    @classmethod
     def validate_arrays(cls, v):
         """Ensure arrays don't contain empty strings."""
         if v is not None:
             return [item for item in v if item and item.strip()]
         return v
     
-    @validator('confidence')
+    @field_validator('confidence')
+    @classmethod
     def validate_confidence(cls, v):
         """Validate confidence is between 1-5."""
         if v is not None and (v < 1 or v > 5):
@@ -114,14 +116,16 @@ class TodoSchema(BaseModel):
     # Standardized metadata
     metadata: Optional[TodoMetadata] = Field(default_factory=dict, description="Structured metadata")
     
-    @validator('description')
+    @field_validator('description')
+    @classmethod
     def validate_description(cls, v):
         """Ensure description is not empty."""
         if not v or not v.strip():
             raise ValueError('description cannot be empty')
         return v.strip()
     
-    @validator('project')
+    @field_validator('project')
+    @classmethod
     def validate_project(cls, v):
         """Validate project name format."""
         if not v or not v.strip():
