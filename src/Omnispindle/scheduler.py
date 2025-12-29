@@ -266,7 +266,7 @@ class TodoScheduler:
                     "message": "Todo not found"
                 }
 
-        priority = todo.get("priority", "medium")
+        priority = todo.get("priority", "Medium")
         description = todo.get("description", "")
 
         # Get estimated completion time from AI assistant if available
@@ -351,7 +351,7 @@ class TodoScheduler:
                     "message": "Todo not found"
                 }
 
-        priority = todo.get("priority", "medium")
+        priority = todo.get("priority", "Medium")
 
         # Parse date if provided, otherwise use tomorrow
         try:
@@ -411,7 +411,7 @@ class TodoScheduler:
             reason = f"historically productive time on {calendar.day_name[weekday]}s"
         else:
             # Without patterns, suggest morning for high priority, afternoon for others
-            if priority == "high":
+            if priority == "High":
                 # Morning slot
                 slot_start = start_datetime + timedelta(hours=1)  # 1 hour after start
                 reason = "high priority tasks are best done in the morning"
@@ -495,10 +495,10 @@ class TodoScheduler:
         available_minutes = (end_datetime - start_datetime).seconds // 60
 
         # Sort pending todos by priority
-        priority_rank = {"high": 0, "medium": 1, "low": 2, "initial": 1}
+        priority_rank = {"High": 0, "Medium": 1, "Low": 2, "initial": 1}
         sorted_todos = sorted(
             self.pending_todos,
-            key=lambda x: priority_rank.get(x.get("priority", "medium"), 999)
+            key=lambda x: priority_rank.get(x.get("priority", "Medium"), 999)
         )
 
         # Limit to a reasonable number of tasks per day
@@ -512,7 +512,7 @@ class TodoScheduler:
 
         for todo in selected_todos:
             todo_id = todo.get("id")
-            priority = todo.get("priority", "medium")
+            priority = todo.get("priority", "Medium")
             description = todo.get("description", "")
 
             # Determine task duration
