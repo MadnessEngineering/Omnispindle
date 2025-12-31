@@ -1,4 +1,6 @@
+
 # Environment and credentials
+.claude_temp/last_tool_use_id.txt
 .env*
 .env.local
 .env.production
