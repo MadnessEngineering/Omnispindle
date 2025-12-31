@@ -35,12 +35,14 @@ TOOL_SCHEMAS = {
     },
     "query_todos": {
         "name": "query_todos",
-        "description": "Query todos",
+        "description": "Query todos with pagination. Excludes completed items by default.",
         "inputSchema": {
             "type": "object",
             "properties": {
                 "filter": {"type": "object", "description": "{project: 'name', status: 'pending'|'completed'}"},
-                "limit": {"type": "number"}
+                "limit": {"type": "number", "description": "Max results (default: 100)"},
+                "offset": {"type": "number", "description": "Skip N results for pagination (default: 0)"},
+                "exclude_completed": {"type": "boolean", "description": "Exclude completed items (default: true)"}
             }
         }
     },
@@ -92,12 +94,13 @@ TOOL_SCHEMAS = {
     },
     "list_todos_by_status": {
         "name": "list_todos_by_status",
-        "description": "List todos by status",
+        "description": "List todos by status with pagination",
         "inputSchema": {
             "type": "object",
             "properties": {
-                "status": {"type": "string"},
-                "limit": {"type": "number"}
+                "status": {"type": "string", "description": "pending|completed|initial|blocked|in_progress"},
+                "limit": {"type": "number", "description": "Max results (default: 100)"},
+                "offset": {"type": "number", "description": "Skip N results for pagination (default: 0)"}
             },
             "required": ["status"]
         }
@@ -116,12 +119,13 @@ TOOL_SCHEMAS = {
     },
     "list_project_todos": {
         "name": "list_project_todos",
-        "description": "List recent todos for project",
+        "description": "List recent pending todos for project with pagination",
         "inputSchema": {
             "type": "object",
             "properties": {
-                "project": {"type": "string"},
-                "limit": {"type": "number"}
+                "project": {"type": "string", "description": "Project name"},
+                "limit": {"type": "number", "description": "Max results (default: 5)"},
+                "offset": {"type": "number", "description": "Skip N results for pagination (default: 0)"}
             },
             "required": ["project"]
         }

@@ -361,11 +361,13 @@ class OmniSpindleStdioServer:
                                 filter: Annotated[Optional[Dict[str, Any]], Field(description="{status: 'pending', project: 'name'}")] = None,
                                 projection: Annotated[Optional[Dict[str, Any]], Field(description="{field: 1} to include")] = None,
                                 limit: Annotated[int, Field(description="Max results")] = 100,
+                                offset: Annotated[int, Field(description="Skip N results for pagination")] = 0,
+                                exclude_completed: Annotated[bool, Field(description="Exclude completed items")] = True,
                                 ctx: Annotated[Optional[str], Field(description="Additional context")] = None
                             ) -> str:
-                                """Query with MongoDB filters. Ex: {status: 'pending', project: 'name'}"""
+                                """Query with MongoDB filters. Excludes completed items by default. Use offset for pagination."""
                                 context = _create_context()
-                                return await func(filter, projection, limit, ctx=context)
+                                return await func(filter, projection, limit, offset, exclude_completed, ctx=context)
                             return query_todos
 
                         elif name == "update_todo":
@@ -414,11 +416,12 @@ class OmniSpindleStdioServer:
                             @self.server.tool()
                             async def list_todos_by_status(
                                 status: Annotated[str, Field(description="pending|completed|initial|blocked|in_progress")],
-                                limit: Annotated[int, Field(description="Max results")] = 100
+                                limit: Annotated[int, Field(description="Max results")] = 100,
+                                offset: Annotated[int, Field(description="Skip N results for pagination")] = 0
                             ) -> str:
-                                """List by status: pending|completed|initial|blocked|in_progress"""
+                                """List by status with pagination: pending|completed|initial|blocked|in_progress"""
                                 ctx = _create_context()
-                                return await func(status, limit, ctx=ctx)
+                                return await func(status, limit, offset, ctx=ctx)
                             return list_todos_by_status
 
                         elif name == "search_todos":
@@ -438,11 +441,12 @@ class OmniSpindleStdioServer:
                             @self.server.tool()
                             async def list_project_todos(
                                 project: Annotated[str, Field(description="Project name")],
-                                limit: Annotated[int, Field(description="Max results")] = 5
+                                limit: Annotated[int, Field(description="Max results")] = 5,
+                                offset: Annotated[int, Field(description="Skip N results for pagination")] = 0
                             ) -> str:
-                                """List recent pending todos for project"""
+                                """List recent pending todos for project with pagination"""
                                 ctx = _create_context()
-                                return await func(project, limit, ctx=ctx)
+                                return await func(project, limit, offset, ctx=ctx)
                             return list_project_todos
 
                         elif name == "add_lesson":

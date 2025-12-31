@@ -193,10 +193,10 @@ if "add_todo" in selected_tools:
 
 if "query_todos" in selected_tools:
     @mcp.tool()
-    async def query_todos(filter: Optional[Dict[str, Any]] = None, projection: Optional[Dict[str, Any]] = None, limit: int = 100, ctx: MCPContext = None):
-        """Query todos with flexible filtering options from user's database."""
+    async def query_todos(filter: Optional[Dict[str, Any]] = None, projection: Optional[Dict[str, Any]] = None, limit: int = 100, offset: int = 0, exclude_completed: bool = True, ctx: MCPContext = None):
+        """Query todos with flexible filtering options from user's database. Excludes completed items by default."""
         auth_ctx = await get_authenticated_context_from_mcp(ctx)
-        return await tools.query_todos(filter, projection, limit, auth_ctx)
+        return await tools.query_todos(filter, projection, limit, offset, exclude_completed, auth_ctx)
 
 if "get_todo" in selected_tools:
     @mcp.tool()
@@ -221,17 +221,17 @@ if "update_todo" in selected_tools:
 
 if "list_todos_by_status" in selected_tools:
     @mcp.tool()
-    async def list_todos_by_status(status: str, limit: int = 100, ctx: MCPContext = None):
-        """List todos filtered by status."""
+    async def list_todos_by_status(status: str, limit: int = 100, offset: int = 0, ctx: MCPContext = None):
+        """List todos filtered by status with pagination."""
         auth_ctx = await get_authenticated_context_from_mcp(ctx)
-        return await tools.list_todos_by_status(status, limit, auth_ctx)
+        return await tools.list_todos_by_status(status, limit, offset, auth_ctx)
 
 if "list_project_todos" in selected_tools:
     @mcp.tool()
-    async def list_project_todos(project: str, limit: int = 5, ctx: MCPContext = None):
-        """List recent todos for a specific project."""
+    async def list_project_todos(project: str, limit: int = 5, offset: int = 0, ctx: MCPContext = None):
+        """List recent todos for a specific project with pagination."""
         auth_ctx = await get_authenticated_context_from_mcp(ctx)
-        return await tools.list_project_todos(project, limit, auth_ctx)
+        return await tools.list_project_todos(project, limit, offset, auth_ctx)
 
 # ADDED: Missing CRUD tools for remote parity
 if "delete_todo" in selected_tools:

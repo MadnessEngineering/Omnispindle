@@ -510,11 +510,13 @@ async def add_todo(description: str, project: str, priority: str = "Medium", tar
         logger.error(f"Failed to create todo: {str(e)}")
         return create_response(False, message=str(e))
 
-async def query_todos(filter: Optional[Dict[str, Any]] = None, projection: Optional[Dict[str, Any]] = None, limit: int = 100, ctx: Optional[Context] = None) -> str:
+async def query_todos(filter: Optional[Dict[str, Any]] = None, projection: Optional[Dict[str, Any]] = None, limit: int = 100, offset: int = 0, exclude_completed: bool = True, ctx: Optional[Context] = None) -> str:
     """
-    Query todos with flexible filtering options.
+    Query todos with flexible filtering options and pagination.
     - Authenticated users: returns their personal todos
     - Unauthenticated users: returns shared database todos (read-only demo mode)
+    - By default, excludes completed items (set exclude_completed=False to include them)
+    - Supports pagination via offset parameter
     """
     try:
         user_context = ctx.user if ctx else None
@@ -530,11 +532,18 @@ async def query_todos(filter: Optional[Dict[str, Any]] = None, projection: Optio
             todos_collection = collections['todos']
             database_source = "shared (read-only demo)"
 
-        cursor = todos_collection.find(filter or {}, projection).sort("created_at", -1).limit(limit)
+        # Build query filter
+        query_filter = filter.copy() if filter else {}
+
+        # Exclude completed items by default unless explicitly included in filter
+        if exclude_completed and "status" not in query_filter:
+            query_filter["status"] = {"$ne": "completed"}
+
+        cursor = todos_collection.find(query_filter, projection).sort("created_at", -1).skip(offset).limit(limit)
         results = list(cursor)
 
-        logger.info(f"Query returned {len(results)} todos from {database_source} database")
-        return create_response(True, {"items": results, "database_source": database_source})
+        logger.info(f"Query returned {len(results)} todos from {database_source} database (offset={offset}, limit={limit}, exclude_completed={exclude_completed})")
+        return create_response(True, {"items": results, "database_source": database_source, "offset": offset, "limit": limit, "count": len(results)})
     except Exception as e:
         logger.error(f"Failed to query todos: {str(e)}")
         return create_response(False, message=str(e))
@@ -773,13 +782,14 @@ async def mark_todo_complete(todo_id: str, comment: Optional[str] = None, ctx: O
         return create_response(False, message=str(e))
 
 
-async def list_todos_by_status(status: str, limit: int = 100, ctx: Optional[Context] = None) -> str:
+async def list_todos_by_status(status: str, limit: int = 100, offset: int = 0, ctx: Optional[Context] = None) -> str:
     """
-    List todos filtered by their status.
+    List todos filtered by their status with pagination support.
     """
     if status.lower() not in ['pending', 'completed', 'initial', 'blocked', 'in_progress']:
         return create_response(False, message="Invalid status. Must be one of 'pending', 'completed', 'initial', 'blocked', 'in_progress'.")
-    return await query_todos(filter={"status": status.lower()}, limit=limit, ctx=ctx)
+    # When querying by status, don't apply the default completed filter
+    return await query_todos(filter={"status": status.lower()}, limit=limit, offset=offset, exclude_completed=False, ctx=ctx)
 
 async def add_lesson(language: str, topic: str, lesson_learned: str, tags: Optional[list] = None, ctx: Optional[Context] = None) -> str:
     """
@@ -1161,13 +1171,16 @@ async def grep_lessons(pattern: str, limit: int = 20, ctx: Optional[Context] = N
         logger.error(f"Failed to grep lessons: {str(e)}")
         return create_response(False, message=str(e))
 
-async def list_project_todos(project: str, limit: int = 5, ctx: Optional[Context] = None) -> str:
+async def list_project_todos(project: str, limit: int = 5, offset: int = 0, ctx: Optional[Context] = None) -> str:
     """
-    List recent active todos for a specific project.
+    List recent active todos for a specific project with pagination support.
+    Only returns pending todos by default.
     """
     return await query_todos(
         filter={"project": project.lower(), "status": "pending"},
         limit=limit,
+        offset=offset,
+        exclude_completed=False,  # Already filtering to pending
         ctx=ctx
     )
 
