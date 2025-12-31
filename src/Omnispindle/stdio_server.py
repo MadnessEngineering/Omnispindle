@@ -346,11 +346,13 @@ class OmniSpindleStdioServer:
                                 project: Annotated[str, Field(description="Project name")],
                                 priority: Annotated[str, Field(description="Critical|High|Medium|Low")] = "Medium",
                                 target_agent: Annotated[str, Field(description="user|AI name")] = "user",
+                                notes: Annotated[str, Field(description="User-facing notes/context (optional)")] = "",
+                                ticket: Annotated[str, Field(description="External ticket reference (optional)")] = "",
                                 metadata: Annotated[Optional[Dict[str, Any]], Field(description="{key: value} pairs")] = None
                             ) -> str:
                                 """Create task. Returns ID and project stats."""
                                 ctx = _create_context()
-                                return await func(description, project, priority, target_agent, metadata, ctx=ctx)
+                                return await func(description, project, priority, target_agent, notes, ticket, metadata, ctx=ctx)
                             return add_todo
 
                         elif name == "query_todos":

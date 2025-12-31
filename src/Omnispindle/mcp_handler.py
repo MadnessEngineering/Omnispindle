@@ -89,7 +89,7 @@ async def mcp_handler(request: Request, get_current_user: Callable[[], Coroutine
                         "properties": {
                             "description": {"type": "string", "description": "Task description"},
                             "project": {"type": "string", "description": "Project name"},
-                            "priority": {"type": "string", "description": "High|Medium|Low"},
+                            "priority": {"type": "string", "description": "Critical|High|Medium|Low"},
                             "target_agent": {"type": "string", "description": "user|AI name"},
                             "notes": {"type": "string", "description": "User-facing notes/context (optional)"},
                             "ticket": {"type": "string", "description": "External ticket reference (optional)"},

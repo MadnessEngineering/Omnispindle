@@ -186,10 +186,10 @@ logger.info(f"Loading '{loadout_name}' loadout (remote mode, {len(selected_tools
 # Register specific tools manually for HTTP transport compatibility
 if "add_todo" in selected_tools:
     @mcp.tool()
-    async def add_todo(description: str, project: str, priority: str = "Medium", target_agent: str = "user", metadata: Optional[Dict[str, Any]] = None, ctx: MCPContext = None):
+    async def add_todo(description: str, project: str, priority: str = "Medium", target_agent: str = "user", notes: str = "", ticket: str = "", metadata: Optional[Dict[str, Any]] = None, ctx: MCPContext = None):
         """Creates a task in the specified project with the given priority and target agent."""
         auth_ctx = await get_authenticated_context_from_mcp(ctx)
-        return await tools.add_todo(description, project, priority, target_agent, metadata, auth_ctx)
+        return await tools.add_todo(description, project, priority, target_agent, notes, ticket, metadata, auth_ctx)
 
 if "query_todos" in selected_tools:
     @mcp.tool()
