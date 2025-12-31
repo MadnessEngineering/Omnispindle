@@ -13,6 +13,7 @@ from enum import Enum
 class DocumentationLevel(str, Enum):
     """Documentation detail levels corresponding to tool loadouts."""
     MINIMAL = "minimal"      # Tool name + core function only
+    COMPACT = "compact"      # Ultra-compact for token optimization (~100 tokens/tool)
     BASIC = "basic"          # Ultra-concise docs (1 line + essential params)
     LESSONS = "lessons"      # Knowledge management focus
     ADMIN = "admin"          # Administrative context
@@ -41,11 +42,14 @@ class DocumentationManager:
         """Map loadout to documentation level."""
         mapping = {
             "minimal": DocumentationLevel.MINIMAL,
+            "lightweight": DocumentationLevel.COMPACT,  # Token-optimized
             "basic": DocumentationLevel.BASIC,
             "lessons": DocumentationLevel.BASIC,  # Use basic level for lessons loadout
             "admin": DocumentationLevel.ADMIN,
             "full": DocumentationLevel.FULL,
-            "hybrid_test": DocumentationLevel.BASIC
+            "hybrid_test": DocumentationLevel.BASIC,
+            "write_only": DocumentationLevel.BASIC,  # New loadouts use basic
+            "read_only": DocumentationLevel.BASIC
         }
         return mapping.get(self.loadout, DocumentationLevel.FULL)
     

@@ -29,31 +29,8 @@ logger = logging.getLogger(__name__)
 apply_patches()
 load_dotenv()
 
-# Tool loadout configurations
-TOOL_LOADOUTS = {
-    "full": [
-        "add_todo", "query_todos", "update_todo", "delete_todo", "get_todo",
-        "mark_todo_complete", "list_todos_by_status", "search_todos", "list_project_todos",
-        "add_lesson", "get_lesson", "update_lesson", "delete_lesson", "search_lessons",
-        "grep_lessons", "list_lessons", "query_todo_logs", "list_projects",
-        "explain", "add_explanation", "point_out_obvious"
-    ],
-    "basic": [
-        "add_todo", "query_todos", "update_todo", "get_todo", "mark_todo_complete",
-        "list_todos_by_status", "list_project_todos"
-    ],
-    "minimal": [
-        "add_todo", "query_todos", "get_todo", "mark_todo_complete"
-    ],
-    "lessons": [
-        "add_lesson", "get_lesson", "update_lesson", "delete_lesson", "search_lessons",
-        "grep_lessons", "list_lessons"
-    ],
-    "admin": [
-        "query_todos", "update_todo", "delete_todo", "query_todo_logs",
-        "list_projects", "explain", "add_explanation"
-    ]
-}
+# Import shared loadout definitions
+from .tool_loadouts import get_loadout
 
 # Global variable to store current request headers (not ideal but might work)
 _current_request_headers = {}
@@ -201,14 +178,10 @@ async def get_authenticated_context(request_headers: Optional[Dict[str, str]] = 
     return Context(user=user_payload)
 
 
-# Get tool loadout from environment
+# Get tool loadout from environment (remote mode - filters local-only tools)
 loadout_name = os.getenv("OMNISPINDLE_TOOL_LOADOUT", "full")
-if loadout_name not in TOOL_LOADOUTS:
-    logger.warning(f"Unknown loadout '{loadout_name}', using 'full'")
-    loadout_name = "full"
-
-selected_tools = TOOL_LOADOUTS[loadout_name]
-logger.info(f"Loading '{loadout_name}' loadout: {selected_tools}")
+selected_tools = get_loadout(loadout_name, mode="remote")
+logger.info(f"Loading '{loadout_name}' loadout (remote mode, {len(selected_tools)} tools): {selected_tools}")
 
 # Register specific tools manually for HTTP transport compatibility
 if "add_todo" in selected_tools:
@@ -260,8 +233,72 @@ if "list_project_todos" in selected_tools:
         auth_ctx = await get_authenticated_context_from_mcp(ctx)
         return await tools.list_project_todos(project, limit, auth_ctx)
 
-# Count all registered tools
-registered_tools = [t for t in selected_tools if t in ['add_todo', 'query_todos', 'get_todo', 'mark_todo_complete', 'update_todo', 'list_todos_by_status', 'list_project_todos']]
-logger.info(f"Registered {len(registered_tools)} tools for HTTP transport: {registered_tools}")
+# ADDED: Missing CRUD tools for remote parity
+if "delete_todo" in selected_tools:
+    @mcp.tool()
+    async def delete_todo(todo_id: str, ctx: MCPContext = None):
+        """Delete a todo item by its ID."""
+        auth_ctx = await get_authenticated_context_from_mcp(ctx)
+        return await tools.delete_todo(todo_id, auth_ctx)
+
+if "search_todos" in selected_tools:
+    @mcp.tool()
+    async def search_todos(query: str, limit: int = 100, ctx: MCPContext = None):
+        """Search todos by text query."""
+        auth_ctx = await get_authenticated_context_from_mcp(ctx)
+        return await tools.search_todos(query, limit, auth_ctx)
+
+# ADDED: Lesson management tools
+if "add_lesson" in selected_tools:
+    @mcp.tool()
+    async def add_lesson(language: str, topic: str, lesson_learned: str, tags: Optional[list] = None, ctx: MCPContext = None):
+        """Add a lesson learned."""
+        auth_ctx = await get_authenticated_context_from_mcp(ctx)
+        return await tools.add_lesson(language, topic, lesson_learned, tags, auth_ctx)
+
+if "get_lesson" in selected_tools:
+    @mcp.tool()
+    async def get_lesson(lesson_id: str, ctx: MCPContext = None):
+        """Get a specific lesson by ID."""
+        auth_ctx = await get_authenticated_context_from_mcp(ctx)
+        return await tools.get_lesson(lesson_id, auth_ctx)
+
+if "update_lesson" in selected_tools:
+    @mcp.tool()
+    async def update_lesson(lesson_id: str, updates: Dict[str, Any], ctx: MCPContext = None):
+        """Update an existing lesson."""
+        auth_ctx = await get_authenticated_context_from_mcp(ctx)
+        return await tools.update_lesson(lesson_id, updates, auth_ctx)
+
+if "delete_lesson" in selected_tools:
+    @mcp.tool()
+    async def delete_lesson(lesson_id: str, ctx: MCPContext = None):
+        """Delete a lesson by ID."""
+        auth_ctx = await get_authenticated_context_from_mcp(ctx)
+        return await tools.delete_lesson(lesson_id, auth_ctx)
+
+if "search_lessons" in selected_tools:
+    @mcp.tool()
+    async def search_lessons(query: str, fields: Optional[list] = None, limit: int = 50, ctx: MCPContext = None):
+        """Search lessons by text query."""
+        auth_ctx = await get_authenticated_context_from_mcp(ctx)
+        return await tools.search_lessons(query, fields, limit, auth_ctx)
+
+if "grep_lessons" in selected_tools:
+    @mcp.tool()
+    async def grep_lessons(pattern: str, limit: int = 50, ctx: MCPContext = None):
+        """Search lessons using regex pattern."""
+        auth_ctx = await get_authenticated_context_from_mcp(ctx)
+        return await tools.grep_lessons(pattern, limit, auth_ctx)
+
+if "list_lessons" in selected_tools:
+    @mcp.tool()
+    async def list_lessons(limit: int = 50, ctx: MCPContext = None):
+        """List all lessons."""
+        auth_ctx = await get_authenticated_context_from_mcp(ctx)
+        return await tools.list_lessons(limit, auth_ctx)
+
+# Log all registered tools
+logger.info(f"Registered {len([t for t in selected_tools])} tools for HTTP transport (remote mode)")
 
 # The mcp instance is now ready for fastmcp run command

@@ -43,40 +43,8 @@ _auth_cache: Dict[str, tuple[Dict[str, Any], float]] = {}
 _auth_cache_ttl = 300  # 5 minutes TTL for auth results
 
 # Tool loadout configurations - same as FastAPI server
-TOOL_LOADOUTS = {
-    "full": [
-        "add_todo", "query_todos", "update_todo", "delete_todo", "get_todo",
-        "mark_todo_complete", "list_todos_by_status", "search_todos", "list_project_todos",
-        "add_lesson", "get_lesson", "update_lesson", "delete_lesson", "search_lessons",
-        "grep_lessons", "list_lessons", "query_todo_logs", "list_projects",
-        "explain", "add_explanation", "point_out_obvious", "bring_your_own",
-        "inventorium_sessions_list", "inventorium_sessions_get",
-        "inventorium_sessions_create", "inventorium_sessions_spawn",
-        "inventorium_sessions_fork", "inventorium_sessions_genealogy",
-        "inventorium_sessions_tree", "inventorium_todos_link_session"
-    ],
-    "basic": [
-        "add_todo", "query_todos", "update_todo", "get_todo", "mark_todo_complete",
-        "list_todos_by_status", "list_project_todos"
-    ],
-    "minimal": [
-        "add_todo", "query_todos", "get_todo", "mark_todo_complete"
-    ],
-    "lessons": [
-        "add_lesson", "get_lesson", "update_lesson", "delete_lesson", "search_lessons",
-        "grep_lessons", "list_lessons"
-    ],
-    "admin": [
-        "query_todos", "update_todo", "delete_todo", "query_todo_logs",
-        "list_projects", "explain", "add_explanation"
-        "query_todos", "update_todo", "delete_todo", "query_todo_logs",
-        "list_projects", "explain", "add_explanation",
-        "inventorium_sessions_list", "inventorium_sessions_get",
-        "inventorium_sessions_create", "inventorium_sessions_fork",
-        "inventorium_sessions_genealogy", "inventorium_sessions_tree",
-        "inventorium_todos_link_session"
-    ]
-}
+# Import shared loadout definitions
+from .tool_loadouts import get_loadout, get_all_loadouts
 
 
 async def verify_auth0_token(token: str) -> Optional[Dict[str, Any]]:
@@ -235,12 +203,9 @@ class OmniSpindleStdioServer:
         """Register tools based on OMNISPINDLE_TOOL_LOADOUT env var."""
 
         loadout = os.getenv("OMNISPINDLE_TOOL_LOADOUT", "full").lower()
-        if loadout not in TOOL_LOADOUTS:
-            logger.warning(f"Unknown loadout '{loadout}', using 'full'")
-            loadout = "full"
-
-        enabled = TOOL_LOADOUTS[loadout]
-        logger.info(f"Loading '{loadout}' loadout: {enabled}")
+        # Validate loadout (get_loadout handles invalid names by defaulting to 'full')
+        enabled = get_loadout(loadout, mode="local")
+        logger.info(f"Loading '{loadout}' loadout (local mode, {len(enabled)} tools): {enabled}")
 
         # Tool registry with loadout-aware documentation
         tool_registry = {
