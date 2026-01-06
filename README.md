@@ -12,7 +12,7 @@ We contain multitudes. Also todos.
 - AI agents can manage todos, capture lessons, search knowledge bases
 - Full audit logging because trust issues are valid
 - Project-aware context so your agent knows where it is
-- Configurable tool loadouts (4 to 22 tools) to save tokens
+- Configurable tool loadouts (4 to 30 tools, pick your poison)
 - Zero-config Auth0 authentication (browser opens, you login, done)
 
 **The interesting (ambitious) parts:**
@@ -94,26 +94,26 @@ For more details, see the [MCP Client Auth Guide](./docs/MCP_CLIENT_AUTH.md).
 
 ## Architecture
 
-Omnispindle v1.0.0 features a modern API-first architecture:
+Omnispindle v1.0.0: where "just a todo app" went wonderfully wrong.
 
-### 🏗 Core Components
-- **FastMCP Server** - High-performance MCP implementation with stdio/HTTP transports
-- **API-First Design** - HTTP calls to `madnessinteractive.cc/api` (recommended)
-- **Hybrid Mode** - API-first with local database fallback for reliability
-- **Zero-Config Auth** - Automatic Auth0 device flow authentication
-- **Tool Loadouts** - Configurable tool sets to reduce AI agent token usage
+### 🏗 What's Inside
+- **FastMCP Server** - Talks stdio and HTTP (your AI's new best friend)
+- **API-First Design** - HTTP calls to `madnessinteractive.cc/api` (works great)
+- **Hybrid Mode** - API-first with MongoDB parachute (just in case)
+- **Zero-Config Auth** - Browser pops open, you login, magic happens
+- **Tool Loadouts** - 4 to 30 tools depending on your token budget
 
 ### 🔄 Operation Modes
-- **`api`** - HTTP API calls only (recommended for production)
-- **`hybrid`** - API-first with MongoDB fallback (default)
-- **`local`** - Direct MongoDB connections (legacy mode)
-- **`auto`** - Automatically choose best performing mode
+- **`api`** - HTTP API calls only (cloud-native, no database required)
+- **`hybrid`** - API-first with MongoDB safety net (default, plays it safe)
+- **`local`** - Direct MongoDB connections (old school, still works)
+- **`auto`** - Picks the fastest option (let the system decide)
 
 ### 🔐 Authentication & Security
-- **Auth0 Integration** - JWT tokens from device flow authentication
-- **API Key Support** - Alternative authentication method
-- **User Isolation** - All data scoped to authenticated user context
-- **Git-secrets Protection** - Automated credential scanning and prevention
+- **Auth0 Integration** - JWT tokens via device flow (browser handles it)
+- **API Key Support** - For when you want long-lived tokens
+- **User Isolation** - Your todos stay yours (database-level separation)
+- **Git-secrets Protection** - Catches credentials before they hit GitHub
 
 ## Configuration
 
@@ -174,11 +174,11 @@ python -c "from src.Omnispindle.stdio_server import OmniSpindleStdioServer; prin
 
 ### STDIO Server Setup
 
-For use with Claude Desktop, the `stdio` server is recommended. It supports secure authentication via Auth0 tokens.
+The `stdio` server is how Claude Desktop talks to Omnispindle. Zero-config auth means you literally just run it.
 
-1.  **Authentication** (Optional): The server supports zero-config auth (browser opens automatically). To manually configure a token, follow the [MCP Client Auth Guide](./docs/MCP_CLIENT_AUTH.md).
+1.  **Authentication**: Browser opens, you login, done. (Want manual token setup? See the [MCP Client Auth Guide](./docs/MCP_CLIENT_AUTH.md))
 
-2.  **Configure Claude Desktop**: Update your `claude_desktop_config.json`:
+2.  **Configure Claude Desktop**: Add this to your `claude_desktop_config.json`:
 
 ```json
 {
@@ -195,7 +195,7 @@ For use with Claude Desktop, the `stdio` server is recommended. It supports secu
 }
 ```
 
-This is now the preferred and most secure way to use Omnispindle with local MCP clients.
+That's it. Browser auth, local server, AI agents with todo superpowers.
 
 ## Privacy & Security
 
@@ -212,15 +212,15 @@ This is a working system for our ecosystem. For yours, you'll need to make it yo
 
 ## Philosophy
 
-Most people build todo apps with 5 features and call it a day. We built one with 22 MCP tools, three operation modes, zero-config OAuth, and a roadmap involving Minecraft-adjacent technology.
+Most people build todo apps with 5 features and call it a day. We built one with 30 MCP tools, three operation modes, zero-config OAuth, and a roadmap involving Minecraft-adjacent technology.
 
 This is either exactly the right amount of complexity or way too much. Time will tell.
 
 **What works now:**
-- Todo management for AI agents (solid)
-- Knowledge capture across projects (very useful)
-- Zero-setup authentication (surprisingly smooth)
-- API-first architecture with MongoDB fallbacks (probably overkill, definitely reliable)
+- Todo management for AI agents (rock solid)
+- Knowledge capture across projects (actually useful)
+- Zero-setup authentication (shockingly smooth)
+- API-first architecture with MongoDB parachute (overkill? maybe. reliable? absolutely.)
 
 **What's coming:**
 - Teaching kids prompt engineering through Terraria (ambitious)
