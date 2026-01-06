@@ -160,20 +160,17 @@ Part of the Madness Interactive ecosystem (yes, we named it that):
 pytest tests/
 
 # Start STDIO MCP server (for Claude Desktop)
-python stdio_main.py
-
-# Start HTTP MCP server (for remote access)
-python -m src.Omnispindle
+python -m src.Omnispindle.stdio_server
 
 # Check tool registration
 python -c "from src.Omnispindle.stdio_server import OmniSpindleStdioServer; print(len(OmniSpindleStdioServer().server._tools))"
 ```
 
-## Production Deployment
+## Usage with Claude Desktop
 
-### Local STDIO (Claude Desktop)
+### STDIO Server Setup
 
-For local development and use with clients like Claude Desktop, the `stdio` server is recommended. It supports secure authentication via Auth0 tokens.
+For use with Claude Desktop, the `stdio` server is recommended. It supports secure authentication via Auth0 tokens.
 
 1.  **Get Your Auth0 Token**: Follow the instructions in the [MCP Client Auth Guide](./docs/MCP_CLIENT_AUTH.md).
 
