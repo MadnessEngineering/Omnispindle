@@ -1,27 +1,32 @@
 # Omnispindle
 
-**FastMCP-based task and knowledge management system for AI agents**
+**A todo system that went too deep**
 
-Omnispindle is the coordination layer of the Madness Interactive ecosystem. It provides standardized MCP tools for todo management, lesson capture, and cross-project coordination that AI agents can use to actually get work done.
+Started as "let's give Claude some memory." Ended up as a multi-mode, API-first, zero-config-auth MCP server with MongoDB fallbacks, MQTT messaging, tool loadouts, and plans for Terraria integration.
 
-## What it does
+We contain multitudes. Also todos.
 
-**For AI Agents:**
-- Add, query, update, and complete todos with full audit logging
-- Capture and search lessons learned across projects
-- Access project-aware context and explanations
-- Coordinate work across the Madness Interactive ecosystem
+## What it actually does
 
-**For Humans:**
-- Visual dashboard through [Inventorium](https://github.com/MadnessEngineering/Inventorium)
-- Real-time updates via MQTT
-- Claude Desktop integration via MCP
-- Project-aware working directories
+**The boring (useful) parts:**
+- AI agents can manage todos, capture lessons, search knowledge bases
+- Full audit logging because trust issues are valid
+- Project-aware context so your agent knows where it is
+- Configurable tool loadouts (4 to 22 tools) to save tokens
+- Zero-config Auth0 authentication (browser opens, you login, done)
 
-**For the Future:**
-- Terraria mod integration (tools as inventory items - yes, really)
+**The interesting (ambitious) parts:**
+- Three operation modes: API-first, hybrid with fallbacks, or pure local
+- MQTT for real-time cross-system coordination
+- Visual dashboard via [Inventorium](https://github.com/MadnessEngineering/Inventorium)
+- Integration with the Madness Interactive ecosystem
+
+**The weird (future) parts:**
+- Terraria mod where AI tools are actual inventory items
 - SwarmDesk 3D workspace coordination
-- Game-like AI context management for all skill levels
+- Teaching kids prompt engineering through video games
+
+First we manage todos properly. Then we get weird with it.
 
 ## Installation
 
@@ -143,10 +148,10 @@ Configure `OMNISPINDLE_TOOL_LOADOUT` to control available functionality:
 
 ## Integration
 
-Part of the Madness Interactive ecosystem:
-- **Inventorium** - Web dashboard and 3D workspace
-- **SwarmDesk** - Project-specific AI environments
-- **Terraria Integration** - Game-based AI interaction (coming soon)
+Part of the Madness Interactive ecosystem (yes, we named it that):
+- **Inventorium** - Web dashboard and 3D workspace for humans who like GUIs
+- **SwarmDesk** - Project-specific AI environments (think context switching, but spatial)
+- **Terraria Integration** - Tools as inventory items (because why not)
 
 ## Development
 
@@ -215,28 +220,36 @@ Configure MCP client:
 
 ## Privacy & Security
 
-**This repository contains sensitive configurations:**
-- Auth0 client credentials and domain settings
-- Database connection strings and API endpoints
-- MCP tool implementations with business logic
-- Infrastructure as Code with account identifiers
+**Fair warning:** This repo has our Auth0 configs, database strings, and infrastructure-as-code with real account IDs. It's open source for learning and forking, not for deploying as-is to production.
 
-**For production use:**
-- Fork this repository for your own organization
-- Update all authentication providers and credentials
-- Configure your own domain and SSL certificates
-- Review and modify tool permissions as needed
+**If you're actually using this:**
+1. Fork it
+2. Change all the auth providers and credentials
+3. Point it at your own domains and databases
+4. Review the tool permissions (we're pretty permissive)
+5. Don't blame us if you deploy our configs to prod
 
-**Not recommended for public deployment without modification.**
+This is a working system for our ecosystem. For yours, you'll need to make it your own.
 
 ## Philosophy
 
-We build tools that make AI agents actually useful for real work. Simple interfaces, robust backends, and enough ambition to make it interesting.
+Most people build todo apps with 5 features and call it a day. We built one with 22 MCP tools, three operation modes, zero-config OAuth, and a roadmap involving Minecraft-adjacent technology.
 
-The todo management works today. The Terraria integration will make your kids better at prompt engineering than most adults. The 3D workspace will make remote work feel like science fiction.
+This is either exactly the right amount of complexity or way too much. Time will tell.
 
-But first: get your todos managed properly.
+**What works now:**
+- Todo management for AI agents (solid)
+- Knowledge capture across projects (very useful)
+- Zero-setup authentication (surprisingly smooth)
+- API-first architecture with MongoDB fallbacks (probably overkill, definitely reliable)
+
+**What's coming:**
+- Teaching kids prompt engineering through Terraria (ambitious)
+- 3D workspace coordination (science fiction vibes)
+- Making AI context management feel like inventory management (weird, might work)
+
+The complexity serves a purpose: AI agents need real tools for real work. We just happen to think "real work" shouldn't be boring.
 
 ---
 
-*"Simple tools for complex minds, complex tools for simple minds"*
+*"Over-engineered? Maybe. Under-ambitious? Never."*
