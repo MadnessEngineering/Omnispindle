@@ -171,9 +171,9 @@ python -c "from src.Omnispindle.stdio_server import OmniSpindleStdioServer; prin
 
 ## Production Deployment
 
-### Option 1: Local STDIO (Claude Desktop)
+### Local STDIO (Claude Desktop)
 
-For local development and use with clients like Claude Desktop, the `stdio` server is recommended. It now supports secure authentication via Auth0 tokens.
+For local development and use with clients like Claude Desktop, the `stdio` server is recommended. It supports secure authentication via Auth0 tokens.
 
 1.  **Get Your Auth0 Token**: Follow the instructions in the [MCP Client Auth Guide](./docs/MCP_CLIENT_AUTH.md).
 
@@ -196,27 +196,6 @@ For local development and use with clients like Claude Desktop, the `stdio` serv
 ```
 
 This is now the preferred and most secure way to use Omnispindle with local MCP clients.
-
-### Option 2: Remote HTTP (Cloudflare Protected)
-```bash
-# Start HTTP server
-python -m src.Omnispindle
-
-# Deploy infrastructure
-cd OmniTerraformer/
-./deploy.sh
-```
-Configure MCP client:
-```json
-{
-  "mcpServers": {
-    "omnispindle": {
-      "command": "mcp-remote",
-      "args": ["https://madnessinteractive.cc/mcp/"]
-    }
-  }
-}
-```
 
 ## Privacy & Security
 
