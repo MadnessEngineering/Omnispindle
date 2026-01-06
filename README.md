@@ -126,7 +126,8 @@ Omnispindle v1.0.0 features a modern API-first architecture:
 
 **Authentication**:
 - `MADNESS_API_URL` - API base URL (default: `https://madnessinteractive.cc/api`)
-- `MADNESS_AUTH_TOKEN` - JWT token from Auth0 device flow
+- `AUTH0_TOKEN` - JWT token from Auth0 device flow (for stdio/local MCP)
+- `MADNESS_AUTH_TOKEN` - Alternative token name (used by API client in api/hybrid modes)
 - `MADNESS_API_KEY` - API key alternative authentication
 - `MCP_USER_EMAIL` - User email for context isolation
 
@@ -139,11 +140,14 @@ Omnispindle v1.0.0 features a modern API-first architecture:
 
 Configure `OMNISPINDLE_TOOL_LOADOUT` to control available functionality:
 
-- **`full`** - All 22 tools available (default)
+- **`full`** - All 30 tools available (default)
 - **`basic`** - Essential todo management (7 tools)
 - **`minimal`** - Core functionality only (4 tools)
 - **`lessons`** - Knowledge management focus (7 tools)
-- **`admin`** - Administrative tools (6 tools)
+- **`admin`** - Administrative tools and session management (13 tools)
+- **`lightweight`** - Token-optimized core functionality (10 tools)
+- **`write_only`** - Create, update, delete operations only (6 tools)
+- **`read_only`** - Query and get operations only (8 tools)
 - **`hybrid_test`** - Testing hybrid functionality (6 tools)
 
 ## Integration
@@ -172,7 +176,7 @@ python -c "from src.Omnispindle.stdio_server import OmniSpindleStdioServer; prin
 
 For use with Claude Desktop, the `stdio` server is recommended. It supports secure authentication via Auth0 tokens.
 
-1.  **Get Your Auth0 Token**: Follow the instructions in the [MCP Client Auth Guide](./docs/MCP_CLIENT_AUTH.md).
+1.  **Authentication** (Optional): The server supports zero-config auth (browser opens automatically). To manually configure a token, follow the [MCP Client Auth Guide](./docs/MCP_CLIENT_AUTH.md).
 
 2.  **Configure Claude Desktop**: Update your `claude_desktop_config.json`:
 
@@ -184,7 +188,6 @@ For use with Claude Desktop, the `stdio` server is recommended. It supports secu
       "args": ["-m", "src.Omnispindle.stdio_server"],
       "cwd": "/path/to/Omnispindle",
       "env": {
-        "AUTH0_TOKEN": "your_auth0_token_here",
         "OMNISPINDLE_TOOL_LOADOUT": "basic"
       }
     }
