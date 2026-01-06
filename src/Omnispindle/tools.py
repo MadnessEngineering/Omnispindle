@@ -1366,10 +1366,10 @@ async def delete_explanation(topic: str, ctx: Optional[Context] = None) -> str:
 async def explain_tool(topic: str, brief: bool = False, ctx: Optional[Context] = None) -> str:
     """
     Provides a detailed explanation for a project or concept.
+    Uses get_explanation to retrieve stored explanations from the database.
     """
-    from . import explain as explain_module
-    explanation = await explain_module.explain(topic, brief)
-    return create_response(True, {"topic": topic, "explanation": explanation})
+    # Use the existing get_explanation function instead of importing non-existent module
+    return await get_explanation(topic, ctx)
 
 
 async def list_lessons(limit: int = 100, brief: bool = False, ctx: Optional[Context] = None) -> str:
