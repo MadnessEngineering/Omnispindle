@@ -2,9 +2,8 @@
 
 **A todo system that went too deep**
 
-Started as "let's give Claude some memory." Ended up as a multi-mode, API-first, zero-config-auth MCP server with MongoDB fallbacks, MQTT messaging, tool loadouts, and plans for Terraria integration.
+Omnispindle is the coordination layer of the Madness Interactive ecosystem. It provides standardized MCP tools for todo management, lesson capture, and cross-project coordination that AI agents can use to actually get work done.
 
-We contain multitudes. Also todos.
 
 ## What it actually does
 
@@ -18,7 +17,7 @@ We contain multitudes. Also todos.
 **The interesting (ambitious) parts:**
 - Three operation modes: API-first, hybrid with fallbacks, or pure local
 - MQTT for real-time cross-system coordination
-- Visual dashboard via [Inventorium](https://github.com/MadnessEngineering/Inventorium)
+- Visual dashboard via [Inventorium](./Inventorium_README.md)
 - Integration with the Madness Interactive ecosystem
 
 **The weird (future) parts:**
