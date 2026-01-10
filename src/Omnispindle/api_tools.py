@@ -271,8 +271,8 @@ async def mark_todo_complete(todo_id: str, comment: Optional[str] = None, ctx: O
             
             if not api_response.success:
                 return create_response(False, message=api_response.error or f"Failed to complete todo {todo_id}")
-            
-            return create_response(True, message=f"Todo {todo_id} marked as complete.")
+
+            return json.dumps({"id": todo_id})
             
     except Exception as e:
         logger.error(f"Failed to complete todo via API: {str(e)}")
