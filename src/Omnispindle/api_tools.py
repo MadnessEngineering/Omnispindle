@@ -14,6 +14,16 @@ from .utils import create_response
 
 logger = logging.getLogger(__name__)
 
+# Helper function to strip empty fields to save tokens
+def strip_empty_fields(obj):
+    """Recursively remove empty fields (None, empty strings, empty lists, empty dicts)"""
+    if isinstance(obj, dict):
+        return {k: strip_empty_fields(v) for k, v in obj.items()
+                if v not in (None, "", [], {})}
+    elif isinstance(obj, list):
+        return [strip_empty_fields(item) for item in obj if item not in (None, "", [], {})]
+    return obj
+
 # Project validation - will be fetched from API
 FALLBACK_VALID_PROJECTS = [
     "madness_interactive", "regressiontestkit", "omnispindle",
@@ -134,15 +144,9 @@ async def add_todo(description: str, project: str, priority: str = "Medium",
             
             # Convert to MCP format
             mcp_todo = _convert_api_todo_to_mcp_format(todo_data)
-            
-            # Create compact response similar to original
-            return create_response(True, {
-                "operation": "create",
-                "status": "success", 
-                "todo_id": mcp_todo["id"],
-                "description": description[:40] + ("..." if len(description) > 40 else ""),
-                "project": project
-            }, message=f"Todo '{description[:30]}...' created in '{project}'.")
+
+            # Return just the ID
+            return json.dumps({"id": mcp_todo["id"]})
             
     except Exception as e:
         logger.error(f"Failed to create todo via API: {str(e)}")
@@ -243,10 +247,13 @@ async def get_todo(todo_id: str, ctx: Optional[Context] = None) -> str:
             
             if not api_response.success:
                 return create_response(False, message=api_response.error or f"Todo with ID {todo_id} not found.")
-            
-            # Convert to MCP format
+
+            # Convert to MCP format and strip empty fields
             mcp_todo = _convert_api_todo_to_mcp_format(api_response.data)
-            return create_response(True, mcp_todo)
+            # Remove MongoDB _id if present
+            if '_id' in mcp_todo:
+                del mcp_todo['_id']
+            return json.dumps(strip_empty_fields(mcp_todo))
             
     except Exception as e:
         logger.error(f"Failed to get todo via API: {str(e)}")

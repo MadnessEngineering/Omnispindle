@@ -27,6 +27,16 @@ load_dotenv()
 # Get the logger
 logger = logging.getLogger(__name__)
 
+# Helper function to strip empty fields to save tokens
+def strip_empty_fields(obj):
+    """Recursively remove empty fields (None, empty strings, empty lists, empty dicts)"""
+    if isinstance(obj, dict):
+        return {k: strip_empty_fields(v) for k, v in obj.items()
+                if v not in (None, "", [], {})}
+    elif isinstance(obj, list):
+        return [strip_empty_fields(item) for item in obj if item not in (None, "", [], {})]
+    return obj
+
 # Helper function for deep merging metadata
 def deep_merge_metadata(existing: dict, updates: dict) -> dict:
     """
@@ -482,30 +492,7 @@ async def add_todo(description: str, project: str, priority: str = "Medium", tar
         logger.info(f"Todo created by {user_email} in user database: {todo_id}")
         await log_todo_create(todo_id, description, project, user_email, ctx.user if ctx else None)
 
-        # Get project todo counts from user's database
-        pipeline = [
-            {"$match": {"project": validated_project}},
-            {"$group": {"_id": "$status", "count": {"$sum": 1}}}
-        ]
-        counts = list(todos_collection.aggregate(pipeline))
-        project_counts = {
-            "pending": 0,
-            "completed": 0,
-        }
-        for status_count in counts:
-            if status_count["_id"] in project_counts:
-                project_counts[status_count["_id"]] = status_count["count"]
-
-        return create_response(True,
-            {
-                "operation": "create",
-                "status": "success",
-                "todo_id": todo_id,
-                "description": description[:40] + ("..." if len(description) > 40 else ""),
-                "project_counts": project_counts
-            },
-            message=f"Todo '{description[:30]}...' created in '{validated_project}'. Pending: {project_counts['pending']}, Completed: {project_counts['completed']}."
-        )
+        return json.dumps({"id": todo_id})
     except Exception as e:
         logger.error(f"Failed to create todo: {str(e)}")
         return create_response(False, message=str(e))
@@ -681,7 +668,10 @@ async def get_todo(todo_id: str, ctx: Optional[Context] = None) -> str:
             todo = user_todos_collection.find_one({"id": todo_id})
             if todo:
                 todo['source'] = 'user'
-                return create_response(True, todo)
+                # Remove MongoDB _id and strip empty fields
+                if '_id' in todo:
+                    del todo['_id']
+                return json.dumps(strip_empty_fields(todo))
 
         # If not found in user database (or no user database), try shared database
         shared_collections = db_connection.get_collections(None)  # None = shared database
@@ -692,7 +682,10 @@ async def get_todo(todo_id: str, ctx: Optional[Context] = None) -> str:
         todo = shared_todos_collection.find_one({"id": todo_id})
         if todo:
             todo['source'] = 'shared'
-            return create_response(True, todo)
+            # Remove MongoDB _id and strip empty fields
+            if '_id' in todo:
+                del todo['_id']
+            return json.dumps(strip_empty_fields(todo))
 
         # Not found in any database
         searched_locations = " and ".join(searched_databases)
