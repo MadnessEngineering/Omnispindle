@@ -614,7 +614,7 @@ async def update_todo(todo_id: str, updates: dict, ctx: Optional[Context] = None
                 if field != 'updated_at' and existing_todo.get(field) != value
             ]
             await log_todo_update(todo_id, description, project, changes, user_email, ctx.user if ctx else None)
-            return create_response(True, message=f"Todo {todo_id} updated successfully in {database_source} database")
+            return json.dumps({"id": todo_id})
         else:
             return create_response(False, message=f"Todo {todo_id} found but no changes made.")
     except Exception as e:

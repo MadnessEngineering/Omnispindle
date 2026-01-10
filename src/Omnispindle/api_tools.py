@@ -209,8 +209,8 @@ async def update_todo(todo_id: str, updates: dict, ctx: Optional[Context] = None
             
             if not api_response.success:
                 return create_response(False, message=api_response.error or f"Failed to update todo {todo_id}")
-            
-            return create_response(True, message=f"Todo {todo_id} updated successfully")
+
+            return json.dumps({"id": todo_id})
             
     except Exception as e:
         logger.error(f"Failed to update todo via API: {str(e)}")
