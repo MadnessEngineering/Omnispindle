@@ -1471,16 +1471,7 @@ async def point_out_obvious(observation: str, sarcasm_level: int = 5, ctx: Optio
     except Exception as e:
         logger.debug(f"Failed to publish obvious observation: {e}")
 
-    return create_response(True, {
-        "response": response,
-        "observation": observation,
-        "sarcasm_level": level,
-        "meta": {
-            "obviousness_score": min(100, level * 10),
-            "humor_attempted": True,
-            "captain_obvious_mode": level >= 5
-        }
-    })
+    return json.dumps({"response": response})
 
 
 async def bring_your_own(tool_name: str, code: str, runtime: str = "python",
