@@ -821,7 +821,9 @@ async def get_lesson(lesson_id: str, ctx: Optional[Context] = None) -> str:
 
         lesson = lessons_collection.find_one({"id": lesson_id})
         if lesson:
-            return create_response(True, lesson)
+            if '_id' in lesson:
+                del lesson['_id']
+            return json.dumps(strip_empty_fields(lesson))
         else:
             return create_response(False, message=f"Lesson with ID {lesson_id} not found.")
     except Exception as e:
@@ -1308,7 +1310,9 @@ async def get_explanation(topic: str, ctx: Optional[Context] = None) -> str:
 
         explanation = explanations_collection.find_one({"topic": topic})
         if explanation:
-            return create_response(True, explanation)
+            if '_id' in explanation:
+                del explanation['_id']
+            return json.dumps(strip_empty_fields(explanation))
         return create_response(False, message=f"Explanation for '{topic}' not found.")
     except Exception as e:
         logger.error(f"Failed to get explanation: {str(e)}")

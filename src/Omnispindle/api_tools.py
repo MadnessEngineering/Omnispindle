@@ -392,7 +392,10 @@ async def inventorium_sessions_get(session_id: str, ctx: Optional[Context] = Non
             response = await client.get_chat_session(session_id)
         if not response.success:
             return create_response(False, message=response.error or f"Session {session_id} not found")
-        return create_response(True, response.data, message="Session loaded")
+        session_data = response.data
+        if isinstance(session_data, dict) and '_id' in session_data:
+            del session_data['_id']
+        return json.dumps(strip_empty_fields(session_data))
     except Exception as e:
         logger.error(f"Failed to fetch chat session {session_id}: {str(e)}")
         return create_response(False, message=f"API error: {str(e)}")
