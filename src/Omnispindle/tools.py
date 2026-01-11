@@ -1109,17 +1109,9 @@ async def get_metadata_stats(project: Optional[str] = None,
             stats["phase_stats"] = [item for item in stats["phase_stats"] if item["_id"] is not None]
             stats["file_type_stats"] = [item for item in stats["file_type_stats"] if item["_id"] is not None]
 
-            return create_response(True, {
-                "project_filter": project,
-                "statistics": stats,
-                "generated_at": int(datetime.now(timezone.utc).timestamp())
-            })
+            return json.dumps(stats)
         else:
-            return create_response(True, {
-                "project_filter": project,
-                "statistics": {"message": "No todos found"},
-                "generated_at": int(datetime.now(timezone.utc).timestamp())
-            })
+            return json.dumps({"message": "No todos found"})
 
     except Exception as e:
         logger.error(f"Failed to get metadata stats: {str(e)}")
@@ -1217,24 +1209,16 @@ async def query_todo_logs(filter_type: str = 'all', project: str = 'all',
             end_index = start_index + page_size
             paginated_logs = all_logs[start_index:end_index]
 
-            combined_result = {
-                'logEntries': paginated_logs,
-                'totalCount': len(all_logs),
-                'page': page,
-                'pageSize': page_size,
-                'hasMore': len(all_logs) > end_index,
-                'projects': list(set([log.get('project') for log in all_logs if log.get('project')]))
-            }
-
             logger.info(f"Unified view: personal={len(personal_entries)}, shared={len(shared_entries)}, unique={len(all_logs)}")
-            return create_response(True, combined_result)
+            return json.dumps({"items": paginated_logs, "count": len(paginated_logs)})
 
         except Exception as e:
             logger.error(f"Failed to query unified todo logs: {str(e)}")
             # Fallback to user-specific logs only
             service = get_service_instance()
             logs = await service.get_logs(filter_type, project, page, page_size, ctx.user if ctx else None)
-            return create_response(True, logs)
+            log_entries = logs.get('logEntries', [])
+            return json.dumps({"items": log_entries, "count": len(log_entries)})
     else:
         # Regular view: single database based on user context
         service = get_service_instance()
@@ -1246,7 +1230,7 @@ async def query_todo_logs(filter_type: str = 'all', project: str = 'all',
         for log in log_entries:
             log['source'] = source
 
-        return create_response(True, logs)
+        return json.dumps({"items": log_entries, "count": len(log_entries)})
 
 async def list_projects(include_details: Union[bool, str] = False, madness_root: str = "/Users/d.edens/lab/madness_interactive", ctx: Optional[Context] = None) -> str:
     """
@@ -1259,21 +1243,21 @@ async def list_projects(include_details: Union[bool, str] = False, madness_root:
             user_projects = get_all_projects(ctx)
             if user_projects:
                 project_names = [p.get('name', p.get('id', '')) for p in user_projects]
-                return create_response(True, {"projects": project_names, "source": "personal"})
+                return json.dumps({"items": project_names, "count": len(project_names)})
 
         # For unauthenticated users (demo mode), show shared projects
         shared_projects = get_all_projects(None)
         if shared_projects:
             project_names = [p.get('name', p.get('id', '')) for p in shared_projects]
-            return create_response(True, {"projects": project_names, "source": "shared"})
+            return json.dumps({"items": project_names, "count": len(project_names)})
 
         # Final fallback to hardcoded list if database is empty
-        return create_response(True, {"projects": VALID_PROJECTS, "source": "fallback"})
+        return json.dumps({"items": VALID_PROJECTS, "count": len(VALID_PROJECTS)})
 
     except Exception as e:
         logger.error(f"Failed to list projects: {str(e)}")
         # Fallback to hardcoded list on error
-        return create_response(True, {"projects": VALID_PROJECTS, "source": "fallback"})
+        return json.dumps({"items": VALID_PROJECTS, "count": len(VALID_PROJECTS)})
 
 async def add_explanation(topic: str, content: str, kind: str = "concept", author: str = "system", ctx: Optional[Context] = None) -> str:
     """
