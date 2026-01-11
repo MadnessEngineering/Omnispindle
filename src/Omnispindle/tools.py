@@ -805,7 +805,7 @@ async def add_lesson(language: str, topic: str, lesson_learned: str, tags: Optio
         if tags:
             # Invalidate the tags cache when new tags are added
             invalidate_lesson_tags_cache(ctx)
-        return create_response(True, lesson)
+        return json.dumps({"id": lesson["id"]})
     except Exception as e:
         logger.error(f"Failed to add lesson: {str(e)}")
         return create_response(False, message=str(e))
@@ -1294,7 +1294,7 @@ async def add_explanation(topic: str, content: str, kind: str = "concept", autho
             {"$set": explanation},
             upsert=True
         )
-        return create_response(True, explanation, f"Explanation for '{topic}' added/updated.")
+        return json.dumps({"id": topic})
     except Exception as e:
         logger.error(f"Failed to add explanation: {str(e)}")
         return create_response(False, message=str(e))

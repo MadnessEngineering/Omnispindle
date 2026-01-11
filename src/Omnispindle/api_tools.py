@@ -416,7 +416,8 @@ async def inventorium_sessions_create(project: str, title: Optional[str] = None,
         if not response.success:
             return create_response(False, message=response.error or "Failed to create chat session")
         session = response.data.get("session") if isinstance(response.data, dict) else response.data
-        return create_response(True, session, message="Chat session created")
+        session_id = session.get("id") if isinstance(session, dict) else session
+        return json.dumps({"id": session_id})
     except Exception as e:
         logger.error(f"Failed to create chat session: {str(e)}")
         return create_response(False, message=f"API error: {str(e)}")
@@ -447,7 +448,8 @@ async def inventorium_sessions_spawn(parent_session_id: str, prompt: str, todo_i
         if not spawn_response.success:
             return create_response(False, message=spawn_response.error or "Failed to spawn session")
         session = spawn_response.data.get("session") if isinstance(spawn_response.data, dict) else spawn_response.data
-        return create_response(True, session, message="Child session spawned")
+        session_id = session.get("id") if isinstance(session, dict) else session
+        return json.dumps({"id": session_id})
     except Exception as e:
         logger.error(f"Failed to spawn chat session: {str(e)}")
         return create_response(False, message=f"API error: {str(e)}")
@@ -493,7 +495,9 @@ async def inventorium_sessions_fork(session_id: str, title: Optional[str] = None
             response = await client.fork_chat_session(session_id, payload)
         if not response.success:
             return create_response(False, message=response.error or "Failed to fork session")
-        return create_response(True, response.data.get("session", response.data), message="Session forked")
+        session = response.data.get("session", response.data)
+        session_id = session.get("id") if isinstance(session, dict) else session
+        return json.dumps({"id": session_id})
     except Exception as e:
         logger.error(f"Failed to fork session {session_id}: {str(e)}")
         return create_response(False, message=f"API error: {str(e)}")
