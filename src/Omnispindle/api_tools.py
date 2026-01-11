@@ -190,8 +190,8 @@ async def query_todos(filter: Optional[Dict[str, Any]] = None, projection: Optio
             
             # Convert each todo to MCP format
             mcp_todos = [_convert_api_todo_to_mcp_format(todo) for todo in todos_list]
-            
-            return create_response(True, {"items": mcp_todos})
+
+            return json.dumps({"items": mcp_todos, "count": len(mcp_todos)})
             
     except Exception as e:
         logger.error(f"Failed to query todos via API: {str(e)}")

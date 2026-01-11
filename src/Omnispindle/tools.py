@@ -530,7 +530,7 @@ async def query_todos(filter: Optional[Dict[str, Any]] = None, projection: Optio
         results = list(cursor)
 
         logger.info(f"Query returned {len(results)} todos from {database_source} database (offset={offset}, limit={limit}, exclude_completed={exclude_completed})")
-        return create_response(True, {"items": results, "database_source": database_source, "offset": offset, "limit": limit, "count": len(results)})
+        return json.dumps({"items": results, "count": len(results)})
     except Exception as e:
         logger.error(f"Failed to query todos: {str(e)}")
         return create_response(False, message=str(e))
@@ -937,12 +937,7 @@ async def query_todos_by_metadata(metadata_filters: Dict[str, Any],
         cursor = todos_collection.find(enhanced_filter).limit(limit).sort("created_at", -1)
         results = list(cursor)
 
-        return create_response(True, {
-            "items": results,
-            "count": len(results),
-            "metadata_filters_applied": list(metadata_filters.keys()),
-            "enhanced_query": enhanced_filter
-        })
+        return json.dumps({"items": results, "count": len(results)})
 
     except Exception as e:
         logger.error(f"Failed to query todos by metadata: {str(e)}")
@@ -1004,13 +999,7 @@ async def search_todos_advanced(query: str,
             cursor = todos_collection.find(combined_filter).limit(limit).sort("created_at", -1)
             results = list(cursor)
 
-        return create_response(True, {
-            "items": results,
-            "count": len(results),
-            "search_query": query,
-            "metadata_filters": metadata_filters or {},
-            "search_fields": fields
-        })
+        return json.dumps({"items": results, "count": len(results)})
 
     except Exception as e:
         logger.error(f"Failed to perform advanced todo search: {str(e)}")
@@ -1159,7 +1148,7 @@ async def grep_lessons(pattern: str, limit: int = 20, ctx: Optional[Context] = N
         results = list(cursor)
 
         logger.info(f"grep_lessons returned {len(results)} results for pattern '{pattern}'")
-        return create_response(True, {"items": results})
+        return json.dumps({"items": results, "count": len(results)})
     except Exception as e:
         logger.error(f"Failed to grep lessons: {str(e)}")
         return create_response(False, message=str(e))
@@ -1385,7 +1374,7 @@ async def list_lessons(limit: int = 100, brief: bool = False, ctx: Optional[Cont
 
         if brief:
             results = [{"id": r["id"], "topic": r["topic"], "language": r["language"]} for r in results]
-        return create_response(True, {"items": results})
+        return json.dumps({"items": results, "count": len(results)})
     except Exception as e:
         logger.error(f"Failed to list lessons: {str(e)}")
         return create_response(False, message=str(e))
@@ -1416,7 +1405,7 @@ async def search_lessons(query: str, fields: Optional[list] = None, limit: int =
 
         if brief:
             results = [{"id": r["id"], "topic": r["topic"], "language": r["language"]} for r in results]
-        return create_response(True, {"items": results})
+        return json.dumps({"items": results, "count": len(results)})
     except Exception as e:
         logger.error(f"Failed to search lessons: {str(e)}")
         return create_response(False, message=str(e))
