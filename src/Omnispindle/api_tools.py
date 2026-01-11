@@ -228,8 +228,8 @@ async def delete_todo(todo_id: str, ctx: Optional[Context] = None) -> str:
             
             if not api_response.success:
                 return create_response(False, message=api_response.error or f"Failed to delete todo {todo_id}")
-            
-            return create_response(True, message=f"Todo {todo_id} deleted successfully.")
+
+            return json.dumps({"id": todo_id})
             
     except Exception as e:
         logger.error(f"Failed to delete todo via API: {str(e)}")

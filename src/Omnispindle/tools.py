@@ -642,7 +642,7 @@ async def delete_todo(todo_id: str, ctx: Optional[Context] = None) -> str:
                                   existing_todo.get('project', 'Unknown'), user_email, ctx.user if ctx else None)
         result = todos_collection.delete_one({"id": todo_id})
         if result.deleted_count == 1:
-            return create_response(True, message=f"Todo {todo_id} deleted successfully.")
+            return json.dumps({"id": todo_id})
         else:
             return create_response(False, message=f"Todo {todo_id} not found.")
     except Exception as e:
@@ -844,7 +844,7 @@ async def update_lesson(lesson_id: str, updates: dict, ctx: Optional[Context] = 
             if 'tags' in updates:
                 # Invalidate the tags cache when tags are modified
                 invalidate_lesson_tags_cache(ctx)
-            return create_response(True, message=f"Lesson {lesson_id} updated.")
+            return json.dumps({"id": lesson_id})
         else:
             return create_response(False, message=f"Lesson {lesson_id} not found.")
     except Exception as e:
@@ -864,7 +864,7 @@ async def delete_lesson(lesson_id: str, ctx: Optional[Context] = None) -> str:
         if result.deleted_count == 1:
             # Invalidate the tags cache when lessons are deleted
             invalidate_lesson_tags_cache(ctx)
-            return create_response(True, message=f"Lesson {lesson_id} deleted.")
+            return json.dumps({"id": lesson_id})
         else:
             return create_response(False, message=f"Lesson {lesson_id} not found.")
     except Exception as e:
@@ -1327,7 +1327,7 @@ async def update_explanation(topic: str, updates: dict, ctx: Optional[Context] =
 
         result = explanations_collection.update_one({"topic": topic}, {"$set": updates})
         if result.modified_count:
-            return create_response(True, message="Explanation updated.")
+            return json.dumps({"id": topic})
         return create_response(False, message="Explanation not found or no changes made.")
     except Exception as e:
         logger.error(f"Failed to update explanation: {str(e)}")
@@ -1342,7 +1342,7 @@ async def delete_explanation(topic: str, ctx: Optional[Context] = None) -> str:
 
         result = explanations_collection.delete_one({"topic": topic})
         if result.deleted_count:
-            return create_response(True, message="Explanation deleted.")
+            return json.dumps({"id": topic})
         return create_response(False, message="Explanation not found.")
     except Exception as e:
         logger.error(f"Failed to delete explanation: {str(e)}")
