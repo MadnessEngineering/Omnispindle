@@ -494,7 +494,7 @@ async def mcp_handler(request: Request, get_current_user: Callable[[], Coroutine
                 # Admin/system tools
                 "query_todo_logs": tools.query_todo_logs,
                 "list_projects": tools.list_projects,
-                "explain": tools.explain,
+                "explain": tools.explain_tool,
                 "add_explanation": tools.add_explanation,
                 "point_out_obvious": tools.point_out_obvious,
                 # Inventorium session tools
