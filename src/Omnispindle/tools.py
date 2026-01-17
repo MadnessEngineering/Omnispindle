@@ -449,8 +449,6 @@ async def add_todo(description: str, project: str, priority: str = "Medium", tar
         return create_response(False, message="Demo mode: Todo creation is disabled. Please authenticate to create todos.")
 
     todo_id = str(uuid.uuid4())
-    validated_project = validate_project_name(project)
-
     validated_project = validate_project_name(project, ctx)
 
     # Validate metadata against schema if provided
@@ -1035,7 +1033,7 @@ async def get_metadata_stats(project: Optional[str] = None,
         # Base match filter
         match_filter = {}
         if project:
-            match_filter["project"] = project.lower()
+            match_filter["project"] = validate_project_name(project, ctx)
 
         # Aggregation pipeline for metadata stats
         pipeline = [
@@ -1153,7 +1151,7 @@ async def list_project_todos(project: str, limit: int = 5, offset: int = 0, ctx:
     Only returns pending todos by default.
     """
     return await query_todos(
-        filter={"project": project.lower(), "status": "pending"},
+        filter={"project": validate_project_name(project, ctx), "status": "pending"},
         limit=limit,
         offset=offset,
         exclude_completed=False,  # Already filtering to pending
