@@ -14,7 +14,7 @@ from .context import Context
 from pymongo import MongoClient
 
 from .database import db_connection
-from .utils import create_response, mqtt_publish, _format_duration
+from .utils import create_response, mqtt_publish, _format_duration, MongoJSONEncoder
 from .todo_log_service import log_todo_create, log_todo_update, log_todo_delete, log_todo_complete
 from .schemas.todo_metadata_schema import validate_todo_metadata, validate_todo, TodoMetadata
 from .query_handlers import enhance_todo_query, build_metadata_aggregation, get_query_enhancer
@@ -528,7 +528,7 @@ async def query_todos(filter: Optional[Dict[str, Any]] = None, projection: Optio
         results = list(cursor)
 
         logger.info(f"Query returned {len(results)} todos from {database_source} database (offset={offset}, limit={limit}, exclude_completed={exclude_completed})")
-        return json.dumps({"items": results, "count": len(results)})
+        return json.dumps({"items": results, "count": len(results)}, cls=MongoJSONEncoder)
     except Exception as e:
         logger.error(f"Failed to query todos: {str(e)}")
         return create_response(False, message=str(e))
@@ -937,7 +937,7 @@ async def query_todos_by_metadata(metadata_filters: Dict[str, Any],
         cursor = todos_collection.find(enhanced_filter).limit(limit).sort("created_at", -1)
         results = list(cursor)
 
-        return json.dumps({"items": results, "count": len(results)})
+        return json.dumps({"items": results, "count": len(results)}, cls=MongoJSONEncoder)
 
     except Exception as e:
         logger.error(f"Failed to query todos by metadata: {str(e)}")
@@ -999,7 +999,7 @@ async def search_todos_advanced(query: str,
             cursor = todos_collection.find(combined_filter).limit(limit).sort("created_at", -1)
             results = list(cursor)
 
-        return json.dumps({"items": results, "count": len(results)})
+        return json.dumps({"items": results, "count": len(results)}, cls=MongoJSONEncoder)
 
     except Exception as e:
         logger.error(f"Failed to perform advanced todo search: {str(e)}")
@@ -1140,7 +1140,7 @@ async def grep_lessons(pattern: str, limit: int = 20, ctx: Optional[Context] = N
         results = list(cursor)
 
         logger.info(f"grep_lessons returned {len(results)} results for pattern '{pattern}'")
-        return json.dumps({"items": results, "count": len(results)})
+        return json.dumps({"items": results, "count": len(results)}, cls=MongoJSONEncoder)
     except Exception as e:
         logger.error(f"Failed to grep lessons: {str(e)}")
         return create_response(False, message=str(e))
@@ -1360,7 +1360,7 @@ async def list_lessons(limit: int = 100, brief: bool = False, ctx: Optional[Cont
 
         if brief:
             results = [{"id": r["id"], "topic": r["topic"], "language": r["language"]} for r in results]
-        return json.dumps({"items": results, "count": len(results)})
+        return json.dumps({"items": results, "count": len(results)}, cls=MongoJSONEncoder)
     except Exception as e:
         logger.error(f"Failed to list lessons: {str(e)}")
         return create_response(False, message=str(e))
@@ -1391,7 +1391,7 @@ async def search_lessons(query: str, fields: Optional[list] = None, limit: int =
 
         if brief:
             results = [{"id": r["id"], "topic": r["topic"], "language": r["language"]} for r in results]
-        return json.dumps({"items": results, "count": len(results)})
+        return json.dumps({"items": results, "count": len(results)}, cls=MongoJSONEncoder)
     except Exception as e:
         logger.error(f"Failed to search lessons: {str(e)}")
         return create_response(False, message=str(e))
