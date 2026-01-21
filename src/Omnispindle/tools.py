@@ -384,15 +384,59 @@ def get_all_projects(ctx=None):
         logging.error(f"Failed to get projects from database: {str(e)}")
         return []
 
+def get_distinct_projects_from_todos(ctx=None):
+    """
+    Get distinct project names from the todos collection.
+    This is fast (uses MongoDB distinct() which is indexed) and returns
+    actual projects the user has created todos for.
+
+    Args:
+        ctx: Optional context for user-scoped collections
+
+    Returns:
+        List of unique project names from todos
+    """
+    try:
+        collections = db_connection.get_collections(ctx.user if ctx else None)
+        todos_collection = collections['todos']
+
+        # distinct() is an efficient indexed operation
+        project_names = todos_collection.distinct("project")
+
+        # Filter out None/empty values and return
+        return [p for p in project_names if p]
+    except Exception as e:
+        logging.error(f"Failed to get distinct projects from todos: {str(e)}")
+        return []
+
 def validate_project_name(project: str, ctx: Optional[Context] = None) -> str:
     """
-    Validate project name against personal database first, then shared, then hardcoded list.
-    This allows users to have their own projects while still accessing shared projects.
-    """
-    # Normalize project name for validation
-    project_lower = project.lower()
+    Validate and normalize project name. Accepts any non-empty project name
+    to allow users to create new projects dynamically.
 
-    # Check personal database first (if authenticated)
+    Validation order:
+    1. Check if exists in user's todos (already in use)
+    2. Check projects collection
+    3. Check hardcoded list
+    4. Accept as new project if non-empty (allows dynamic project creation)
+    """
+    # Normalize project name
+    project_lower = project.lower().strip()
+
+    # If empty, default to madness_interactive
+    if not project_lower:
+        return "madness_interactive"
+
+    # Check if project exists in user's todos (primary source of truth)
+    if ctx and ctx.user and ctx.user.get('sub'):
+        try:
+            todo_projects = get_distinct_projects_from_todos(ctx)
+            if project_lower in [p.lower() for p in todo_projects]:
+                return project_lower
+        except Exception as e:
+            logger.debug(f"Could not check todo projects: {str(e)}")
+
+    # Check personal projects collection (if authenticated)
     if ctx and ctx.user and ctx.user.get('sub'):
         try:
             user_projects = get_all_projects(ctx)
@@ -402,7 +446,7 @@ def validate_project_name(project: str, ctx: Optional[Context] = None) -> str:
         except Exception as e:
             logger.debug(f"Could not check personal projects: {str(e)}")
 
-    # Check shared database as fallback
+    # Check shared database
     try:
         shared_projects = get_all_projects(None)
         shared_project_names = [p.get('name', p.get('id', '')).lower() for p in shared_projects]
@@ -411,13 +455,13 @@ def validate_project_name(project: str, ctx: Optional[Context] = None) -> str:
     except Exception as e:
         logger.debug(f"Could not check shared projects: {str(e)}")
 
-    # Check hardcoded list as final fallback
+    # Check hardcoded list
     if project_lower in [p.lower() for p in VALID_PROJECTS]:
         return project_lower
 
-    # Default to "madness_interactive" if not found anywhere
-    logger.warning(f"Project '{project}' not found in any database, defaulting to 'madness_interactive'")
-    return "madness_interactive"
+    # Accept as new project - allows dynamic project creation
+    logger.info(f"Accepting new project name: '{project_lower}'")
+    return project_lower
 
 def _is_read_only_user(ctx: Optional[Context]) -> bool:
     """
@@ -1232,22 +1276,39 @@ async def query_todo_logs(filter_type: str = 'all', project: str = 'all',
 
 async def list_projects(include_details: Union[bool, str] = False, madness_root: str = "/Users/d.edens/lab/madness_interactive", ctx: Optional[Context] = None) -> str:
     """
-    List all valid projects from the centralized project management system.
-    Prioritizes personal database for authenticated users, shows shared for demos.
+    List all valid projects combining:
+    1. Distinct project names from user's todos (primary - what they actually use)
+    2. Projects from projects collection (if any)
+    3. Fallback to hardcoded list only if both are empty
     """
     try:
-        # For authenticated users, show only personal projects
+        all_project_names = set()
+
+        # For authenticated users, get from their database
         if ctx and ctx.user and ctx.user.get('sub'):
+            # Primary: Get distinct projects from todos (fast indexed query)
+            todo_projects = get_distinct_projects_from_todos(ctx)
+            all_project_names.update(todo_projects)
+
+            # Secondary: Merge with projects collection
             user_projects = get_all_projects(ctx)
             if user_projects:
-                project_names = [p.get('name', p.get('id', '')) for p in user_projects]
-                return json.dumps({"items": project_names, "count": len(project_names)})
+                collection_names = [p.get('name', p.get('id', '')) for p in user_projects]
+                all_project_names.update(n for n in collection_names if n)
+        else:
+            # For unauthenticated users (demo mode), use shared database
+            todo_projects = get_distinct_projects_from_todos(None)
+            all_project_names.update(todo_projects)
 
-        # For unauthenticated users (demo mode), show shared projects
-        shared_projects = get_all_projects(None)
-        if shared_projects:
-            project_names = [p.get('name', p.get('id', '')) for p in shared_projects]
-            return json.dumps({"items": project_names, "count": len(project_names)})
+            shared_projects = get_all_projects(None)
+            if shared_projects:
+                collection_names = [p.get('name', p.get('id', '')) for p in shared_projects]
+                all_project_names.update(n for n in collection_names if n)
+
+        # If we found projects, return them sorted
+        if all_project_names:
+            sorted_projects = sorted(all_project_names)
+            return json.dumps({"items": sorted_projects, "count": len(sorted_projects)})
 
         # Final fallback to hardcoded list if database is empty
         return json.dumps({"items": VALID_PROJECTS, "count": len(VALID_PROJECTS)})
