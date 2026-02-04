@@ -650,12 +650,34 @@ async def update_todo(todo_id: str, updates: dict, ctx: Optional[Context] = None
             logger.info(f"Todo updated by {user_email}: {todo_id} in {database_source} database")
             description = updates.get('description', existing_todo.get('description', 'Unknown'))
             project = updates.get('project', existing_todo.get('project', 'Unknown'))
-            changes = [
-                {"field": field, "old_value": existing_todo.get(field), "new_value": value}
-                for field, value in updates.items()
-                if field != 'updated_at' and existing_todo.get(field) != value
-            ]
-            await log_todo_update(todo_id, description, project, changes, user_email, ctx.user if ctx else None)
+
+            # Build changes list, filtering out identical values (prevents duplicate logging from fallback retries)
+            changes = []
+            for field, value in updates.items():
+                if field == 'updated_at':
+                    continue
+
+                old_value = existing_todo.get(field)
+
+                # Skip if values are identical (handles JSON serialization comparison)
+                if old_value == value:
+                    continue
+
+                # For nested objects (like metadata), compare JSON representations
+                if isinstance(old_value, dict) and isinstance(value, dict):
+                    import json as json_lib
+                    if json_lib.dumps(old_value, sort_keys=True) == json_lib.dumps(value, sort_keys=True):
+                        logger.debug(f"Skipping metadata log - old and new values are identical for field '{field}'")
+                        continue
+
+                changes.append({"field": field, "old_value": old_value, "new_value": value})
+
+            # Only log if there are actual changes
+            if changes:
+                await log_todo_update(todo_id, description, project, changes, user_email, ctx.user if ctx else None)
+            else:
+                logger.debug(f"No actual changes detected for todo {todo_id}, skipping log entry")
+
             return json.dumps({"id": todo_id})
         else:
             return create_response(False, message=f"Todo {todo_id} found but no changes made.")
