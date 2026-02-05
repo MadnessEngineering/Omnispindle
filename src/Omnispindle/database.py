@@ -111,19 +111,47 @@ class Database:
     def get_collections(self, user_context: Optional[Dict[str, Any]] = None) -> Dict[str, Collection]:
         """
         Get all collections for the appropriate database (user-scoped or shared).
+
+        Legacy method - kept for backward compatibility during Phase 2 migration.
+        New code should use get_repositories() instead.
         """
         db = self.get_user_database(user_context)
         collections_dict = {
             'todos': db["todos"],
             'lessons': db["lessons_learned"],
             'tags_cache': db["tags_cache"],
-            'projects': db["projects"], 
+            'projects': db["projects"],
             'explanations': db["explanations"],
             'logs': db["todo_logs"]
         }
         # Add database reference for custom collection access
         collections_dict['database'] = db
         return collections_dict
+
+    def get_repositories(self, user_context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """
+        Get repository instances for the appropriate database (user-scoped or shared).
+
+        This is the new preferred method for database access through the repository layer.
+        Returns a dict of repository instances keyed by collection name.
+
+        Args:
+            user_context: User context dict (email, sub, etc.)
+
+        Returns:
+            Dict with repository instances for each collection
+        """
+        from .repositories import create_repositories
+
+        db = self.get_user_database(user_context)
+
+        # Determine scope for logging
+        if not user_context or not user_context.get('sub'):
+            scope = 'shared'
+        else:
+            scope = 'personal'
+
+        return create_repositories(db, scope)
 
     # Legacy properties for backward compatibility (use shared database)
     @property
