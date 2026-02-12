@@ -60,6 +60,7 @@ dependencies = [
 dev = [
     "pytest>=7.0.0",
     "pytest-asyncio>=0.21.0",
+    "pytest-timeout>=2.1.0",
     "black>=22.0.0",
     "isort>=5.10.0",
     "mypy>=1.0.0"
@@ -76,9 +77,9 @@ Issues = "https://github.com/DanEdens/Omnispindle/issues"
 Documentation = "https://github.com/DanEdens/Omnispindle/blob/main/README.md"
 
 [project.scripts]
-omnispindle = "src.Omnispindle.__main__:main"
-omnispindle-server = "src.Omnispindle.__main__:main"
-omnispindle-stdio = "src.Omnispindle.stdio_server:main"
+omnispindle = "Omnispindle.__main__:main"
+omnispindle-server = "Omnispindle.__main__:main"
+omnispindle-stdio = "Omnispindle.stdio_server:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/Omnispindle"]
@@ -131,3 +132,8 @@ python_version = "3.11"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
+
+[tool.pytest.ini_options]
+timeout = 30
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
