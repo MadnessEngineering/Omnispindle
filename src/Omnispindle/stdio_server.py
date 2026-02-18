@@ -162,21 +162,41 @@ def _create_context() -> Context:
     if api_key:
         logger.info(f"🔐 Using API key authentication: {api_key[:12]}...")
 
-        # Attempt to resolve real user identity from the API key via MongoDB lookup
-        # This ensures todos are stored in the correct user database (e.g. user_danedens31_gmail_com)
+        # Try to resolve real user identity via the Omnispindle HTTP server.
+        # The STDIO server runs locally but API keys live in the remote MongoDB,
+        # so we ask the HTTP server to validate the key and return user info.
         resolved_user = {}
+        omnispindle_url = os.getenv("OMNISPINDLE_URL", "https://madnessinteractive.cc/api/mcp")
 
-        async def resolve_api_key_user():
-            nonlocal resolved_user
-            from .auth import verify_api_key
-            result = await verify_api_key(api_key)
-            if result:
-                resolved_user.update(result)
+        try:
+            import urllib.request
+            import json as _json
+            req_data = _json.dumps({
+                "jsonrpc": "2.0", "id": 1,
+                "method": "tools/call",
+                "params": {"name": "get_current_user", "arguments": {}}
+            }).encode()
+            req = urllib.request.Request(
+                omnispindle_url,
+                data=req_data,
+                headers={
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {api_key}"
+                },
+                method="POST"
+            )
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                body = _json.loads(resp.read())
+                user_info = body.get("result", {}).get("content", [{}])
+                if isinstance(user_info, list) and user_info:
+                    user_info = _json.loads(user_info[0].get("text", "{}"))
+                if isinstance(user_info, dict) and user_info.get("email"):
+                    resolved_user = user_info
+        except Exception as e:
+            logger.debug(f"🔍 Remote API key resolution failed (will fall back): {e}")
 
-        run_async_in_thread(resolve_api_key_user())
-
-        if resolved_user:
-            logger.info(f"✅ API key resolved to user: {resolved_user.get('email')} (db: {resolved_user.get('user_database')})")
+        if resolved_user and resolved_user.get("email"):
+            logger.info(f"✅ API key resolved to user: {resolved_user.get('email')}")
             resolved_user["auth_method"] = "api_key"
             resolved_user["api_key"] = api_key
             return Context(user=resolved_user)
@@ -184,7 +204,10 @@ def _create_context() -> Context:
         # Fallback: companion env vars take priority over anonymous placeholder
         fallback_email = user_email or "api-key-user"
         fallback_sub = user_id or user_email or api_key[:16]
-        logger.warning(f"⚠️ API key lookup failed, falling back to: {fallback_email}")
+        if fallback_email == "api-key-user":
+            logger.warning("⚠️ API key could not be resolved to a user. Set MCP_USER_EMAIL alongside MCP_API_KEY to route to correct database.")
+        else:
+            logger.info(f"🔐 Using companion env vars for identity: {fallback_email}")
         user = {
             "email": fallback_email,
             "sub": fallback_sub,
