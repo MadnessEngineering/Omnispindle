@@ -160,12 +160,34 @@ def _create_context() -> Context:
     user_id = os.getenv("MCP_USER_ID")
 
     if api_key:
-        # Use API key authentication - we'll trust the API key format validation
-        # This allows using API keys from the Inventorium dashboard
         logger.info(f"🔐 Using API key authentication: {api_key[:12]}...")
+
+        # Attempt to resolve real user identity from the API key via MongoDB lookup
+        # This ensures todos are stored in the correct user database (e.g. user_danedens31_gmail_com)
+        resolved_user = {}
+
+        async def resolve_api_key_user():
+            nonlocal resolved_user
+            from .auth import verify_api_key
+            result = await verify_api_key(api_key)
+            if result:
+                resolved_user.update(result)
+
+        run_async_in_thread(resolve_api_key_user())
+
+        if resolved_user:
+            logger.info(f"✅ API key resolved to user: {resolved_user.get('email')} (db: {resolved_user.get('user_database')})")
+            resolved_user["auth_method"] = "api_key"
+            resolved_user["api_key"] = api_key
+            return Context(user=resolved_user)
+
+        # Fallback: companion env vars take priority over anonymous placeholder
+        fallback_email = user_email or "api-key-user"
+        fallback_sub = user_id or user_email or api_key[:16]
+        logger.warning(f"⚠️ API key lookup failed, falling back to: {fallback_email}")
         user = {
-            "email": "api-key-user",  # Placeholder - real validation would happen server-side
-            "sub": api_key[:16],  # Use key prefix as identifier
+            "email": fallback_email,
+            "sub": fallback_sub,
             "auth_method": "api_key",
             "api_key": api_key
         }
