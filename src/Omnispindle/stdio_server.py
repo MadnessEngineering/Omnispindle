@@ -162,41 +162,29 @@ def _create_context() -> Context:
     if api_key:
         logger.info(f"🔐 Using API key authentication: {api_key[:12]}...")
 
-        # Try to resolve real user identity via the Omnispindle HTTP server.
-        # The STDIO server runs locally but API keys live in the remote MongoDB,
-        # so we ask the HTTP server to validate the key and return user info.
+        # Resolve real user identity via direct MongoDB lookup.
+        # Requires MONGODB_URI to point to the database where API keys are stored.
         resolved_user = {}
-        omnispindle_url = os.getenv("OMNISPINDLE_URL", "https://madnessinteractive.cc/api/mcp")
-
         try:
-            import urllib.request
-            import json as _json
-            req_data = _json.dumps({
-                "jsonrpc": "2.0", "id": 1,
-                "method": "tools/call",
-                "params": {"name": "get_current_user", "arguments": {}}
-            }).encode()
-            req = urllib.request.Request(
-                omnispindle_url,
-                data=req_data,
-                headers={
-                    "Content-Type": "application/json",
-                    "Authorization": f"Bearer {api_key}"
-                },
-                method="POST"
-            )
-            with urllib.request.urlopen(req, timeout=5) as resp:
-                body = _json.loads(resp.read())
-                user_info = body.get("result", {}).get("content", [{}])
-                if isinstance(user_info, list) and user_info:
-                    user_info = _json.loads(user_info[0].get("text", "{}"))
-                if isinstance(user_info, dict) and user_info.get("email"):
-                    resolved_user = user_info
+            from .auth import verify_api_key
+            import asyncio
+
+            def sync_verify():
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                try:
+                    return loop.run_until_complete(verify_api_key(api_key))
+                finally:
+                    loop.close()
+
+            result = sync_verify()
+            if result:
+                resolved_user = result
         except Exception as e:
-            logger.debug(f"🔍 Remote API key resolution failed (will fall back): {e}")
+            logger.debug(f"🔍 API key DB lookup failed (will fall back): {e}")
 
         if resolved_user and resolved_user.get("email"):
-            logger.info(f"✅ API key resolved to user: {resolved_user.get('email')}")
+            logger.info(f"✅ API key resolved to user: {resolved_user.get('email')} (db: {resolved_user.get('user_database')})")
             resolved_user["auth_method"] = "api_key"
             resolved_user["api_key"] = api_key
             return Context(user=resolved_user)
@@ -205,7 +193,7 @@ def _create_context() -> Context:
         fallback_email = user_email or "api-key-user"
         fallback_sub = user_id or user_email or api_key[:16]
         if fallback_email == "api-key-user":
-            logger.warning("⚠️ API key could not be resolved to a user. Set MCP_USER_EMAIL alongside MCP_API_KEY to route to correct database.")
+            logger.warning("⚠️ API key could not be resolved. Set MONGODB_URI or add MCP_USER_EMAIL alongside MCP_API_KEY.")
         else:
             logger.info(f"🔐 Using companion env vars for identity: {fallback_email}")
         user = {
