@@ -699,16 +699,24 @@ async def delete_todo(todo_id: str, ctx: Optional[Context] = None) -> str:
         todos_collection = collections['todos']
 
         existing_todo = todos_collection.find_one({"id": todo_id})
-        if existing_todo:
-            user_email = ctx.user.get("email", "anonymous") if ctx and ctx.user else "anonymous"
-            logger.info(f"Todo deleted by {user_email}: {todo_id}")
-            await log_todo_delete(todo_id, existing_todo.get('description', 'Unknown'),
-                                  existing_todo.get('project', 'Unknown'), user_email, ctx.user if ctx else None)
-        result = todos_collection.delete_one({"id": todo_id})
-        if result.deleted_count == 1:
-            return json.dumps({"id": todo_id})
-        else:
+        if not existing_todo:
             return create_response(False, message=f"Todo {todo_id} not found.")
+
+        user_email = ctx.user.get("email", "anonymous") if ctx and ctx.user else "anonymous"
+        logger.info(f"Todo soft-deleted by {user_email}: {todo_id}")
+        await log_todo_delete(todo_id, existing_todo.get('description', 'Unknown'),
+                              existing_todo.get('project', 'Unknown'), user_email, ctx.user if ctx else None)
+
+        # Soft delete: move to deleted_todos collection
+        deleted_todos_collection = collections['deleted_todos']
+        tombstone = {k: v for k, v in existing_todo.items() if k != '_id'}
+        tombstone['deleted_at'] = datetime.now(timezone.utc).isoformat()
+        tombstone['deleted_by'] = user_email
+        deleted_todos_collection.insert_one(tombstone)
+
+        # Remove from active todos
+        todos_collection.delete_one({"id": todo_id})
+        return json.dumps({"id": todo_id})
     except Exception as e:
         logger.error(f"Failed to delete todo: {str(e)}")
         return create_response(False, message=str(e))

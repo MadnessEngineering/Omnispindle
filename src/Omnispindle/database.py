@@ -115,9 +115,10 @@ class Database:
         db = self.get_user_database(user_context)
         collections_dict = {
             'todos': db["todos"],
+            'deleted_todos': db["deleted_todos"],
             'lessons': db["lessons_learned"],
             'tags_cache': db["tags_cache"],
-            'projects': db["projects"], 
+            'projects': db["projects"],
             'explanations': db["explanations"],
             'logs': db["todo_logs"]
         }
