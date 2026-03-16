@@ -35,14 +35,15 @@ TOOL_SCHEMAS = {
     },
     "query_todos": {
         "name": "query_todos",
-        "description": "Query todos with pagination. Excludes completed items by default.",
+        "description": "Query todos with pagination. Excludes completed items by default. Use 'since' for change detection.",
         "inputSchema": {
             "type": "object",
             "properties": {
                 "filter": {"type": "object", "description": "{project: 'name', status: 'pending'|'completed'}"},
                 "limit": {"type": "number", "description": "Max results (default: 100)"},
                 "offset": {"type": "number", "description": "Skip N results for pagination (default: 0)"},
-                "exclude_completed": {"type": "boolean", "description": "Exclude completed items (default: true)"}
+                "exclude_completed": {"type": "boolean", "description": "Exclude completed items (default: true)"},
+                "since": {"type": "number", "description": "Unix timestamp — only return items modified after this time"}
             }
         }
     },
@@ -365,13 +366,14 @@ TOOL_SCHEMAS = {
     },
     "get_context_bundle": {
         "name": "get_context_bundle",
-        "description": "Bundle multiple context queries (todos, lessons, sessions) into one response for AI agent startup.",
+        "description": "Bundle multiple context queries (todos, lessons, sessions) into one response for AI agent startup. Use 'since' for change detection.",
         "inputSchema": {
             "type": "object",
             "properties": {
                 "project": {"type": "string", "description": "Project name (optional)"},
                 "keywords": {"type": "array", "items": {"type": "string"}, "description": "Keywords to search across todos and lessons (optional)"},
-                "include_completed": {"type": "boolean", "description": "Include recent completed todos (default: false)"}
+                "include_completed": {"type": "boolean", "description": "Include recent completed todos (default: false)"},
+                "since": {"type": "number", "description": "Unix timestamp — adds changed_todos section with items modified after this time"}
             }
         }
     }

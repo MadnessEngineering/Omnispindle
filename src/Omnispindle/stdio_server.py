@@ -400,11 +400,12 @@ class OmniSpindleStdioServer:
                                 limit: Annotated[int, Field(description="Max results")] = 100,
                                 offset: Annotated[int, Field(description="Skip N results for pagination")] = 0,
                                 exclude_completed: Annotated[bool, Field(description="Exclude completed items")] = True,
+                                since: Annotated[Optional[int], Field(description="Unix timestamp — only return items modified after this time")] = None,
                                 ctx: Annotated[Optional[str], Field(description="Additional context")] = None
                             ) -> str:
                                 """Query with MongoDB filters. Excludes completed items by default. Use offset for pagination."""
                                 context = _create_context()
-                                return await func(filter, projection, limit, offset, exclude_completed, ctx=context)
+                                return await func(filter, projection, limit, offset, exclude_completed, since, ctx=context)
                             return query_todos
 
                         elif name == "update_todo":
@@ -735,11 +736,12 @@ class OmniSpindleStdioServer:
                             async def get_context_bundle(
                                 project: Annotated[Optional[str], Field(description="Project name (optional)")] = None,
                                 keywords: Annotated[Optional[List[str]], Field(description="Keywords to search across todos and lessons")] = None,
-                                include_completed: Annotated[bool, Field(description="Include recent completed todos")] = False
+                                include_completed: Annotated[bool, Field(description="Include recent completed todos")] = False,
+                                since: Annotated[Optional[int], Field(description="Unix timestamp — adds changed_todos section with items modified after this time")] = None
                             ) -> str:
-                                """Bundle multiple context queries (todos, lessons, sessions) into one response for AI agent startup."""
+                                """Bundle multiple context queries (todos, lessons, sessions) into one response for AI agent startup. Use 'since' for change detection."""
                                 ctx = _create_context()
-                                return await func(project=project, keywords=keywords, include_completed=include_completed, ctx=ctx)
+                                return await func(project=project, keywords=keywords, include_completed=include_completed, since=since, ctx=ctx)
                             return get_context_bundle
 
                     return create_wrapper()

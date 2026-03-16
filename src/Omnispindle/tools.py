@@ -520,6 +520,7 @@ async def add_todo(description: str, project: str, priority: str = "Medium", tar
         "status": "pending",
         "target_agent": target_agent,
         "created_at": int(datetime.now(timezone.utc).timestamp()),
+        "updated_at": int(datetime.now(timezone.utc).timestamp()),
         "notes": notes,  # ✅ User-facing notes field
         "ticket": ticket,  # ✅ External ticket reference
         "metadata": validated_metadata
@@ -539,13 +540,14 @@ async def add_todo(description: str, project: str, priority: str = "Medium", tar
         logger.error(f"Failed to create todo: {str(e)}")
         return create_response(False, message=str(e))
 
-async def query_todos(filter: Optional[Dict[str, Any]] = None, projection: Optional[Dict[str, Any]] = None, limit: int = 100, offset: int = 0, exclude_completed: bool = True, ctx: Optional[Context] = None) -> str:
+async def query_todos(filter: Optional[Dict[str, Any]] = None, projection: Optional[Dict[str, Any]] = None, limit: int = 100, offset: int = 0, exclude_completed: bool = True, since: Optional[int] = None, ctx: Optional[Context] = None) -> str:
     """
     Query todos with flexible filtering options and pagination.
     - Authenticated users: returns their personal todos
     - Unauthenticated users: returns shared database todos (read-only demo mode)
     - By default, excludes completed items (set exclude_completed=False to include them)
     - Supports pagination via offset parameter
+    - Use 'since' (unix timestamp) to get only items modified after that time
     """
     try:
         user_context = ctx.user if ctx else None
@@ -568,10 +570,14 @@ async def query_todos(filter: Optional[Dict[str, Any]] = None, projection: Optio
         if exclude_completed and "status" not in query_filter:
             query_filter["status"] = {"$ne": "completed"}
 
+        # Filter by modification time (updated_at >= since)
+        if since is not None:
+            query_filter["updated_at"] = {"$gte": since}
+
         cursor = todos_collection.find(query_filter, projection).sort("created_at", -1).skip(offset).limit(limit)
         results = list(cursor)
 
-        logger.info(f"Query returned {len(results)} todos from {database_source} database (offset={offset}, limit={limit}, exclude_completed={exclude_completed})")
+        logger.info(f"Query returned {len(results)} todos from {database_source} database (offset={offset}, limit={limit}, exclude_completed={exclude_completed}, since={since})")
         return json.dumps({"items": results, "count": len(results)}, cls=MongoJSONEncoder)
     except Exception as e:
         logger.error(f"Failed to query todos: {str(e)}")
@@ -588,6 +594,8 @@ async def update_todo(todo_id: str, updates: dict, ctx: Optional[Context] = None
 
     if "updated_at" not in updates:
         updates["updated_at"] = int(datetime.now(timezone.utc).timestamp())
+    if "updated_by" not in updates:
+        updates["updated_by"] = ctx.user.get("email", "anonymous") if ctx and ctx.user else "anonymous"
 
     # NOTE: Metadata validation moved to AFTER fetching existing todo for proper merging
     try:
@@ -654,7 +662,7 @@ async def update_todo(todo_id: str, updates: dict, ctx: Optional[Context] = None
             # Build changes list, filtering out identical values (prevents duplicate logging from fallback retries)
             changes = []
             for field, value in updates.items():
-                if field == 'updated_at':
+                if field in ('updated_at', 'updated_by'):
                     continue
 
                 old_value = existing_todo.get(field)
@@ -1838,12 +1846,14 @@ async def get_context_bundle(
     project: Optional[str] = None,
     keywords: Optional[List[str]] = None,
     include_completed: bool = False,
+    since: Optional[int] = None,
     ctx: Optional[Context] = None
 ) -> str:
     """
     Bundle multiple context queries into a single response for AI agent session startup.
     Returns slim summaries (IDs + short fields) — use get_todo/get_lesson for full details.
     Each section degrades gracefully on failure.
+    Pass 'since' (unix timestamp) to add a 'changed_todos' section with items modified after that time.
     """
     bundle = {}
     sections_returned = []
@@ -1951,7 +1961,24 @@ async def get_context_bundle(
             bundle["blocked_todos"] = {"error": str(e)}
             sections_failed.append("blocked_todos")
 
-    # 6. Last session (slim — pick only key fields from API response)
+    # 6. Changed todos (modified since timestamp — cross-project)
+    if since is not None:
+        try:
+            changed_query = {"updated_at": {"$gte": since}}
+            if project:
+                changed_query["project"] = {"$regex": f"^{re.escape(project)}$", "$options": "i"}
+            # Include updated_by in changed results so agent sees who made changes
+            changed_fields = {**_TODO_FIELDS, "updated_at": 1, "updated_by": 1}
+            cursor = todos_collection.find(changed_query, changed_fields).sort("updated_at", -1).limit(10)
+            items = [strip_empty_fields(doc) for doc in cursor]
+            bundle["changed_todos"] = {"items": items, "count": len(items), "since": since}
+            sections_returned.append("changed_todos")
+        except Exception as e:
+            logger.error(f"get_context_bundle changed_todos error: {e}")
+            bundle["changed_todos"] = {"error": str(e)}
+            sections_failed.append("changed_todos")
+
+    # 7. Last session (slim — pick only key fields from API response)
     if project:
         try:
             result_str = await inventorium_sessions_list(project=project, limit=1, ctx=ctx)
@@ -1979,6 +2006,8 @@ async def get_context_bundle(
         query_desc.append(f"keywords={keywords}")
     if include_completed:
         query_desc.append("include_completed=true")
+    if since is not None:
+        query_desc.append(f"since={since}")
 
     response = {
         "bundle": bundle,
