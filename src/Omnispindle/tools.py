@@ -1842,12 +1842,17 @@ async def get_context_bundle(
 ) -> str:
     """
     Bundle multiple context queries into a single response for AI agent session startup.
-    Returns project todos, related lessons, keyword matches, blocked items, and last session.
+    Returns slim summaries (IDs + short fields) — use get_todo/get_lesson for full details.
     Each section degrades gracefully on failure.
     """
     bundle = {}
     sections_returned = []
     sections_failed = []
+
+    # Slim projections to keep token count low (~800-1000 tokens worst case)
+    _TODO_FIELDS = {"_id": 0, "id": 1, "description": 1, "priority": 1, "status": 1, "project": 1, "created_at": 1}
+    _LESSON_FIELDS = {"_id": 0, "id": 1, "topic": 1, "language": 1, "tags": 1}
+    _SESSION_KEYS = {"id", "title", "project", "status", "created_at"}
 
     try:
         collections = db_connection.get_collections(ctx.user if ctx else None)
@@ -1862,7 +1867,7 @@ async def get_context_bundle(
         try:
             cursor = todos_collection.find(
                 {"project": {"$regex": f"^{re.escape(project)}$", "$options": "i"}, "status": "pending"},
-                {"_id": 0}
+                _TODO_FIELDS
             ).sort("created_at", -1).limit(5)
             items = [strip_empty_fields(doc) for doc in cursor]
             bundle["project_todos"] = {"items": items, "count": len(items), "project": project}
@@ -1872,7 +1877,7 @@ async def get_context_bundle(
             bundle["project_todos"] = {"error": str(e)}
             sections_failed.append("project_todos")
 
-    # 2. Related lessons (keyword search)
+    # 2. Related lessons (keyword search — slim: topic + tags only, use get_lesson for full content)
     if keywords and lessons_collection is not None:
         try:
             keyword_pattern = "|".join(re.escape(k) for k in keywords)
@@ -1883,7 +1888,7 @@ async def get_context_bundle(
                     {"tags": {"$regex": keyword_pattern, "$options": "i"}}
                 ]
             }
-            cursor = lessons_collection.find(lesson_query, {"_id": 0}).limit(3)
+            cursor = lessons_collection.find(lesson_query, _LESSON_FIELDS).limit(3)
             items = [strip_empty_fields(doc) for doc in cursor]
             bundle["related_lessons"] = {"items": items, "count": len(items)}
             sections_returned.append("related_lessons")
@@ -1903,7 +1908,7 @@ async def get_context_bundle(
                 ],
                 "status": {"$ne": "completed"}
             }
-            cursor = todos_collection.find(keyword_query, {"_id": 0}).sort("created_at", -1).limit(10)
+            cursor = todos_collection.find(keyword_query, _TODO_FIELDS).sort("created_at", -1).limit(10)
             # Dedup against project_todos
             project_todo_ids = set()
             if "project_todos" in bundle and "items" in bundle["project_todos"]:
@@ -1921,7 +1926,7 @@ async def get_context_bundle(
         try:
             cursor = todos_collection.find(
                 {"project": {"$regex": f"^{re.escape(project)}$", "$options": "i"}, "status": "completed"},
-                {"_id": 0}
+                _TODO_FIELDS
             ).sort("updated_at", -1).limit(3)
             items = [strip_empty_fields(doc) for doc in cursor]
             bundle["recent_completions"] = {"items": items, "count": len(items)}
@@ -1936,7 +1941,7 @@ async def get_context_bundle(
         try:
             cursor = todos_collection.find(
                 {"project": {"$regex": f"^{re.escape(project)}$", "$options": "i"}, "status": "blocked"},
-                {"_id": 0}
+                _TODO_FIELDS
             ).limit(5)
             items = [strip_empty_fields(doc) for doc in cursor]
             bundle["blocked_todos"] = {"items": items, "count": len(items)}
@@ -1946,14 +1951,18 @@ async def get_context_bundle(
             bundle["blocked_todos"] = {"error": str(e)}
             sections_failed.append("blocked_todos")
 
-    # 6. Last session
+    # 6. Last session (slim — pick only key fields from API response)
     if project:
         try:
             result_str = await inventorium_sessions_list(project=project, limit=1, ctx=ctx)
             result_data = json.loads(result_str)
             if result_data.get("success"):
                 sessions = result_data.get("data", {}).get("sessions", [])
-                bundle["last_session"] = sessions[0] if sessions else None
+                if sessions:
+                    full = sessions[0]
+                    bundle["last_session"] = {k: full[k] for k in _SESSION_KEYS if k in full}
+                else:
+                    bundle["last_session"] = None
                 sections_returned.append("last_session")
             else:
                 bundle["last_session"] = None

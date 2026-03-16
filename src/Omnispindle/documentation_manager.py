@@ -341,18 +341,18 @@ Special formats:
 
     "get_context_bundle": {
         "minimal": "Context bundle",
-        "compact": "Bundle project todos, lessons, blocked items, and last session in one call. Params: project, keywords[], include_completed.",
-        "basic": "Bundle multiple context queries (todos, lessons, sessions) into one response for AI agent startup. Pass project and/or keywords.",
-        "admin": "RAG context bundler. Returns project_todos, related_lessons, keyword_todos, blocked_todos, recent_completions, last_session. Each section independent — graceful degradation on failure.",
-        "full": """Bundle multiple context queries into a single response for AI agent session startup.
+        "compact": "Bundle slim todo/lesson/session summaries in one call. Use get_todo/get_lesson for full details. Params: project, keywords[], include_completed.",
+        "basic": "Bundle slim context summaries (todos, lessons, sessions) into one response for AI agent startup. Returns IDs + short fields only — call get_todo/get_lesson to drill into specifics.",
+        "admin": "RAG context bundler. Returns slim projections: todos (id, description, priority, status, project), lessons (id, topic, language, tags), sessions (id, title, status). Each section independent — graceful degradation on failure.",
+        "full": """Bundle multiple context queries into a single slim response for AI agent session startup (~800-1000 tokens worst case).
 
-Returns up to 6 sections based on provided filters:
-- project_todos: Pending todos for the project (limit 5)
-- related_lessons: Lessons matching keywords across topic/content/tags (limit 3)
-- keyword_todos: Cross-project todos matching keywords, deduped against project_todos (limit 5)
-- recent_completions: Recently completed todos for context (limit 3, requires include_completed=true)
-- blocked_todos: Blocked items needing attention (limit 5)
-- last_session: Most recent chat session for the project
+Returns up to 6 sections with projected fields (not full documents):
+- project_todos: id, description, priority, status, project, created_at (limit 5)
+- related_lessons: id, topic, language, tags — NO lesson_learned content (limit 3). Use get_lesson(id) for full text.
+- keyword_todos: Same fields as project_todos, cross-project, deduped (limit 5)
+- recent_completions: Same fields, requires include_completed=true (limit 3)
+- blocked_todos: Same fields, status=blocked (limit 5)
+- last_session: id, title, project, status, created_at (limit 1)
 
 Each section degrades independently — if one query fails, others still return.
 Response includes summary with sections_returned and sections_failed lists."""
