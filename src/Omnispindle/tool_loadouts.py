@@ -32,13 +32,16 @@ _BASE_LOADOUTS: Dict[str, List[str]] = {
         "inventorium_sessions_list", "inventorium_sessions_get",
         "inventorium_sessions_create", "inventorium_sessions_spawn",
         "inventorium_sessions_fork", "inventorium_sessions_genealogy",
-        "inventorium_sessions_tree", "inventorium_todos_link_session"
+        "inventorium_sessions_tree", "inventorium_todos_link_session",
+
+        # Context bundle (1 tool)
+        "get_context_bundle"
     ],
 
     "basic": [
-        # Core CRUD operations (7 tools)
+        # Core CRUD operations + context (8 tools)
         "add_todo", "query_todos", "update_todo", "get_todo", "mark_todo_complete",
-        "list_todos_by_status", "list_project_todos"
+        "list_todos_by_status", "list_project_todos", "get_context_bundle"
     ],
 
     "minimal": [
@@ -69,18 +72,19 @@ _BASE_LOADOUTS: Dict[str, List[str]] = {
     ],
 
     "read_only": [
-        # Query/Get only (8 tools)
+        # Query/Get only (9 tools)
         "query_todos", "get_todo", "list_todos_by_status",
         "list_project_todos", "search_todos", "get_lesson",
-        "search_lessons", "list_lessons"
+        "search_lessons", "list_lessons", "get_context_bundle"
     ],
 
     "lightweight": [
-        # Token-optimized core functionality (10 tools)
+        # Token-optimized core functionality (11 tools)
         # These will use COMPACT documentation level for minimal token usage
         "add_todo", "query_todos", "update_todo", "get_todo",
         "mark_todo_complete", "add_lesson", "get_lesson",
-        "search_lessons", "inventorium_sessions_list", "inventorium_sessions_create"
+        "search_lessons", "inventorium_sessions_list", "inventorium_sessions_create",
+        "get_context_bundle"
     ],
 
     # Backward compatibility - keeping hybrid_test from stdio_server.py

@@ -16,7 +16,7 @@ import os
 import sys
 import time
 import hashlib
-from typing import Dict, Any, Optional, Annotated
+from typing import Dict, Any, List, Optional, Annotated
 
 from pydantic import Field
 from jose import jwt
@@ -361,6 +361,10 @@ class OmniSpindleStdioServer:
             "inventorium_sessions_tree": {
                 "func": tools.inventorium_sessions_tree,
                 "doc": get_tool_doc("inventorium_sessions_tree")
+            },
+            "get_context_bundle": {
+                "func": tools.get_context_bundle,
+                "doc": get_tool_doc("get_context_bundle")
             }
         }
 
@@ -725,6 +729,18 @@ class OmniSpindleStdioServer:
                                 ctx = _create_context()
                                 return await func(project, limit, ctx=ctx)
                             return inventorium_sessions_tree
+
+                        elif name == "get_context_bundle":
+                            @self.server.tool()
+                            async def get_context_bundle(
+                                project: Annotated[Optional[str], Field(description="Project name (optional)")] = None,
+                                keywords: Annotated[Optional[List[str]], Field(description="Keywords to search across todos and lessons")] = None,
+                                include_completed: Annotated[bool, Field(description="Include recent completed todos")] = False
+                            ) -> str:
+                                """Bundle multiple context queries (todos, lessons, sessions) into one response for AI agent startup."""
+                                ctx = _create_context()
+                                return await func(project=project, keywords=keywords, include_completed=include_completed, ctx=ctx)
+                            return get_context_bundle
 
                     return create_wrapper()
 

@@ -1832,6 +1832,157 @@ async def _execute_byo_tool(args):
             message=f"Failed to create/execute custom tool: {str(e)}")
 
 
+# --- Context Bundle (Tier 1 RAG) ---
+
+async def get_context_bundle(
+    project: Optional[str] = None,
+    keywords: Optional[List[str]] = None,
+    include_completed: bool = False,
+    ctx: Optional[Context] = None
+) -> str:
+    """
+    Bundle multiple context queries into a single response for AI agent session startup.
+    Returns project todos, related lessons, keyword matches, blocked items, and last session.
+    Each section degrades gracefully on failure.
+    """
+    bundle = {}
+    sections_returned = []
+    sections_failed = []
+
+    try:
+        collections = db_connection.get_collections(ctx.user if ctx else None)
+        todos_collection = collections['todos']
+        lessons_collection = collections.get('lessons')
+    except Exception as e:
+        logger.error(f"get_context_bundle: DB connection failed: {e}")
+        return create_response(False, message=f"Database connection failed: {str(e)}")
+
+    # 1. Project todos (pending)
+    if project:
+        try:
+            cursor = todos_collection.find(
+                {"project": {"$regex": f"^{re.escape(project)}$", "$options": "i"}, "status": "pending"},
+                {"_id": 0}
+            ).sort("created_at", -1).limit(5)
+            items = [strip_empty_fields(doc) for doc in cursor]
+            bundle["project_todos"] = {"items": items, "count": len(items), "project": project}
+            sections_returned.append("project_todos")
+        except Exception as e:
+            logger.error(f"get_context_bundle project_todos error: {e}")
+            bundle["project_todos"] = {"error": str(e)}
+            sections_failed.append("project_todos")
+
+    # 2. Related lessons (keyword search)
+    if keywords and lessons_collection is not None:
+        try:
+            keyword_pattern = "|".join(re.escape(k) for k in keywords)
+            lesson_query = {
+                "$or": [
+                    {"topic": {"$regex": keyword_pattern, "$options": "i"}},
+                    {"lesson_learned": {"$regex": keyword_pattern, "$options": "i"}},
+                    {"tags": {"$regex": keyword_pattern, "$options": "i"}}
+                ]
+            }
+            cursor = lessons_collection.find(lesson_query, {"_id": 0}).limit(3)
+            items = [strip_empty_fields(doc) for doc in cursor]
+            bundle["related_lessons"] = {"items": items, "count": len(items)}
+            sections_returned.append("related_lessons")
+        except Exception as e:
+            logger.error(f"get_context_bundle related_lessons error: {e}")
+            bundle["related_lessons"] = {"error": str(e)}
+            sections_failed.append("related_lessons")
+
+    # 3. Keyword todos (cross-project, deduped against project_todos)
+    if keywords:
+        try:
+            keyword_pattern = "|".join(re.escape(k) for k in keywords)
+            keyword_query = {
+                "$or": [
+                    {"description": {"$regex": keyword_pattern, "$options": "i"}},
+                    {"project": {"$regex": keyword_pattern, "$options": "i"}}
+                ],
+                "status": {"$ne": "completed"}
+            }
+            cursor = todos_collection.find(keyword_query, {"_id": 0}).sort("created_at", -1).limit(10)
+            # Dedup against project_todos
+            project_todo_ids = set()
+            if "project_todos" in bundle and "items" in bundle["project_todos"]:
+                project_todo_ids = {t.get("id") for t in bundle["project_todos"]["items"] if t.get("id")}
+            items = [strip_empty_fields(doc) for doc in cursor if doc.get("id") not in project_todo_ids][:5]
+            bundle["keyword_todos"] = {"items": items, "count": len(items)}
+            sections_returned.append("keyword_todos")
+        except Exception as e:
+            logger.error(f"get_context_bundle keyword_todos error: {e}")
+            bundle["keyword_todos"] = {"error": str(e)}
+            sections_failed.append("keyword_todos")
+
+    # 4. Recent completions
+    if project and include_completed:
+        try:
+            cursor = todos_collection.find(
+                {"project": {"$regex": f"^{re.escape(project)}$", "$options": "i"}, "status": "completed"},
+                {"_id": 0}
+            ).sort("updated_at", -1).limit(3)
+            items = [strip_empty_fields(doc) for doc in cursor]
+            bundle["recent_completions"] = {"items": items, "count": len(items)}
+            sections_returned.append("recent_completions")
+        except Exception as e:
+            logger.error(f"get_context_bundle recent_completions error: {e}")
+            bundle["recent_completions"] = {"error": str(e)}
+            sections_failed.append("recent_completions")
+
+    # 5. Blocked todos
+    if project:
+        try:
+            cursor = todos_collection.find(
+                {"project": {"$regex": f"^{re.escape(project)}$", "$options": "i"}, "status": "blocked"},
+                {"_id": 0}
+            ).limit(5)
+            items = [strip_empty_fields(doc) for doc in cursor]
+            bundle["blocked_todos"] = {"items": items, "count": len(items)}
+            sections_returned.append("blocked_todos")
+        except Exception as e:
+            logger.error(f"get_context_bundle blocked_todos error: {e}")
+            bundle["blocked_todos"] = {"error": str(e)}
+            sections_failed.append("blocked_todos")
+
+    # 6. Last session
+    if project:
+        try:
+            result_str = await inventorium_sessions_list(project=project, limit=1, ctx=ctx)
+            result_data = json.loads(result_str)
+            if result_data.get("success"):
+                sessions = result_data.get("data", {}).get("sessions", [])
+                bundle["last_session"] = sessions[0] if sessions else None
+                sections_returned.append("last_session")
+            else:
+                bundle["last_session"] = None
+                sections_returned.append("last_session")
+        except Exception as e:
+            logger.error(f"get_context_bundle last_session error: {e}")
+            bundle["last_session"] = {"error": str(e)}
+            sections_failed.append("last_session")
+
+    query_desc = []
+    if project:
+        query_desc.append(f"project={project}")
+    if keywords:
+        query_desc.append(f"keywords={keywords}")
+    if include_completed:
+        query_desc.append("include_completed=true")
+
+    response = {
+        "bundle": bundle,
+        "summary": {
+            "query": ", ".join(query_desc) if query_desc else "no filters",
+            "sections_returned": sections_returned,
+            "sections_failed": sections_failed
+        }
+    }
+
+    return json.dumps(response, cls=MongoJSONEncoder)
+
+
 # --- Chat session API wrappers (Phase 2) ---
 
 async def inventorium_sessions_list(project: Optional[str] = None, limit: int = 50, ctx: Optional[Context] = None) -> str:

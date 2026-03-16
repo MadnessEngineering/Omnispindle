@@ -362,6 +362,18 @@ TOOL_SCHEMAS = {
             },
             "required": ["todo_id", "session_id"]
         }
+    },
+    "get_context_bundle": {
+        "name": "get_context_bundle",
+        "description": "Bundle multiple context queries (todos, lessons, sessions) into one response for AI agent startup.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "project": {"type": "string", "description": "Project name (optional)"},
+                "keywords": {"type": "array", "items": {"type": "string"}, "description": "Keywords to search across todos and lessons (optional)"},
+                "include_completed": {"type": "boolean", "description": "Include recent completed todos (default: false)"}
+            }
+        }
     }
 }
 
@@ -505,7 +517,9 @@ async def mcp_handler(request: Request, get_current_user: Callable[[], Coroutine
                 "inventorium_sessions_fork": tools.inventorium_sessions_fork,
                 "inventorium_sessions_genealogy": tools.inventorium_sessions_genealogy,
                 "inventorium_sessions_tree": tools.inventorium_sessions_tree,
-                "inventorium_todos_link_session": tools.inventorium_todos_link_session
+                "inventorium_todos_link_session": tools.inventorium_todos_link_session,
+                # Context bundle (Tier 1 RAG)
+                "get_context_bundle": tools.get_context_bundle
             }
 
             if tool_name not in tool_functions:

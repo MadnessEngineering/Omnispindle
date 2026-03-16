@@ -337,6 +337,25 @@ Special formats:
         "basic": "Get full session tree for project",
         "admin": "Build tree (roots + children) by project, limited to N sessions.",
         "full": "Fetch the full session tree (roots + nested children) for the authenticated user, optionally filtered by project. Useful for UI tree renderers."
+    },
+
+    "get_context_bundle": {
+        "minimal": "Context bundle",
+        "compact": "Bundle project todos, lessons, blocked items, and last session in one call. Params: project, keywords[], include_completed.",
+        "basic": "Bundle multiple context queries (todos, lessons, sessions) into one response for AI agent startup. Pass project and/or keywords.",
+        "admin": "RAG context bundler. Returns project_todos, related_lessons, keyword_todos, blocked_todos, recent_completions, last_session. Each section independent — graceful degradation on failure.",
+        "full": """Bundle multiple context queries into a single response for AI agent session startup.
+
+Returns up to 6 sections based on provided filters:
+- project_todos: Pending todos for the project (limit 5)
+- related_lessons: Lessons matching keywords across topic/content/tags (limit 3)
+- keyword_todos: Cross-project todos matching keywords, deduped against project_todos (limit 5)
+- recent_completions: Recently completed todos for context (limit 3, requires include_completed=true)
+- blocked_todos: Blocked items needing attention (limit 5)
+- last_session: Most recent chat session for the project
+
+Each section degrades independently — if one query fails, others still return.
+Response includes summary with sections_returned and sections_failed lists."""
     }
 }
 
