@@ -535,7 +535,25 @@ async def add_todo(description: str, project: str, priority: str = "Medium", tar
         logger.info(f"Todo created by {user_email} in user database: {todo_id}")
         await log_todo_create(todo_id, description, project, user_email, ctx.user if ctx else None)
 
-        return json.dumps({"id": todo_id})
+        # Gather project stats for agent context
+        project_stats = {}
+        try:
+            project_stats = {
+                "pending": todos_collection.count_documents({"project": validated_project, "status": "pending"}),
+                "in_progress": todos_collection.count_documents({"project": validated_project, "status": "in_progress"}),
+                "total": todos_collection.count_documents({"project": validated_project}),
+            }
+        except Exception as stats_err:
+            logger.warning(f"Failed to gather project stats: {stats_err}")
+
+        return json.dumps({
+            "id": todo_id,
+            "project": validated_project,
+            "priority": priority,
+            "target_agent": target_agent,
+            "created_at": todo["created_at"],
+            "project_stats": project_stats,
+        })
     except Exception as e:
         logger.error(f"Failed to create todo: {str(e)}")
         return create_response(False, message=str(e))

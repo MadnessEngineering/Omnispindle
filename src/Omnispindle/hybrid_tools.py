@@ -203,15 +203,16 @@ async def _execute_with_fallback(operation_name: str, api_func, local_func, *arg
 
 # Hybrid tool implementations
 
-async def add_todo(description: str, project: str, priority: str = "Medium", 
-                  target_agent: str = "user", metadata: Optional[Dict[str, Any]] = None, 
+async def add_todo(description: str, project: str, priority: str = "Medium",
+                  target_agent: str = "user", notes: str = "", ticket: str = "",
+                  metadata: Optional[Dict[str, Any]] = None,
                   ctx: Optional[Context] = None) -> str:
     """Create a todo using hybrid mode"""
     return await _execute_with_fallback(
         "add_todo",
         api_tools.add_todo,
         local_tools.add_todo,
-        description, project, priority, target_agent, metadata,
+        description, project, priority, target_agent, notes, ticket, metadata,
         ctx=ctx
     )
 

@@ -145,8 +145,14 @@ async def add_todo(description: str, project: str, priority: str = "Medium",
             # Convert to MCP format
             mcp_todo = _convert_api_todo_to_mcp_format(todo_data)
 
-            # Return just the ID
-            return json.dumps({"id": mcp_todo["id"]})
+            # Return enriched response with agent context
+            return json.dumps({
+                "id": mcp_todo["id"],
+                "project": mcp_todo.get("project", project),
+                "priority": mcp_todo.get("priority", priority),
+                "target_agent": target_agent,
+                "created_at": mcp_todo.get("created_at"),
+            })
             
     except Exception as e:
         logger.error(f"Failed to create todo via API: {str(e)}")
