@@ -35,7 +35,10 @@ _BASE_LOADOUTS: Dict[str, List[str]] = {
         "inventorium_sessions_tree", "inventorium_todos_link_session",
 
         # Context bundle (1 tool)
-        "get_context_bundle"
+        "get_context_bundle",
+
+        # Semantic search (1 tool)
+        "find_relevant"
     ],
 
     "basic": [
@@ -72,19 +75,20 @@ _BASE_LOADOUTS: Dict[str, List[str]] = {
     ],
 
     "read_only": [
-        # Query/Get only (9 tools)
+        # Query/Get only (10 tools)
         "query_todos", "get_todo", "list_todos_by_status",
         "list_project_todos", "search_todos", "get_lesson",
-        "search_lessons", "list_lessons", "get_context_bundle"
+        "search_lessons", "list_lessons", "get_context_bundle",
+        "find_relevant"
     ],
 
     "lightweight": [
-        # Token-optimized core functionality (11 tools)
+        # Token-optimized core functionality (12 tools)
         # These will use COMPACT documentation level for minimal token usage
         "add_todo", "query_todos", "update_todo", "get_todo",
         "mark_todo_complete", "add_lesson", "get_lesson",
         "search_lessons", "inventorium_sessions_list", "inventorium_sessions_create",
-        "get_context_bundle"
+        "get_context_bundle", "find_relevant"
     ],
 
     # Backward compatibility - keeping hybrid_test from stdio_server.py

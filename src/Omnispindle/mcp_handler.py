@@ -376,6 +376,19 @@ TOOL_SCHEMAS = {
                 "since": {"type": "number", "description": "Unix timestamp — adds changed_todos section with items modified after this time"}
             }
         }
+    },
+    "find_relevant": {
+        "name": "find_relevant",
+        "description": "Semantic similarity search across todos and/or lessons. Uses vector embeddings when available, falls back to regex.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Natural language search query"},
+                "types": {"type": "array", "items": {"type": "string"}, "description": "Types to search: ['todos', 'lessons'] (default: both)"},
+                "limit": {"type": "number", "description": "Max results per type (default: 5)"}
+            },
+            "required": ["query"]
+        }
     }
 }
 
@@ -521,7 +534,9 @@ async def mcp_handler(request: Request, get_current_user: Callable[[], Coroutine
                 "inventorium_sessions_tree": tools.inventorium_sessions_tree,
                 "inventorium_todos_link_session": tools.inventorium_todos_link_session,
                 # Context bundle (Tier 1 RAG)
-                "get_context_bundle": tools.get_context_bundle
+                "get_context_bundle": tools.get_context_bundle,
+                # Semantic search (Tier 2 RAG)
+                "find_relevant": tools.find_relevant
             }
 
             if tool_name not in tool_functions:

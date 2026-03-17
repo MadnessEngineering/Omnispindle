@@ -20,6 +20,7 @@ from .schemas.todo_metadata_schema import validate_todo_metadata, validate_todo,
 from .query_handlers import enhance_todo_query, build_metadata_aggregation, get_query_enhancer
 from .git_integration import enrich_metadata_with_git
 from . import api_tools
+from . import embeddings
 
 # Load environment variables
 load_dotenv()
@@ -546,6 +547,15 @@ async def add_todo(description: str, project: str, priority: str = "Medium", tar
         except Exception as stats_err:
             logger.warning(f"Failed to gather project stats: {stats_err}")
 
+        # Generate embedding (non-blocking — failure never blocks todo creation)
+        try:
+            embed_text = embeddings.embedding_text_for_todo(todo)
+            embedding = await embeddings.generate_embedding(embed_text)
+            if embedding:
+                todos_collection.update_one({"id": todo_id}, {"$set": {"embedding": embedding}})
+        except Exception:
+            pass
+
         return json.dumps({
             "id": todo_id,
             "project": validated_project,
@@ -703,6 +713,19 @@ async def update_todo(todo_id: str, updates: dict, ctx: Optional[Context] = None
                 await log_todo_update(todo_id, description, project, changes, user_email, ctx.user if ctx else None)
             else:
                 logger.debug(f"No actual changes detected for todo {todo_id}, skipping log entry")
+
+            # Regenerate embedding when content fields change
+            embedding_fields = {"description", "notes", "project"}
+            if embedding_fields & set(updates.keys()):
+                try:
+                    updated_todo = todos_collection.find_one({"id": todo_id})
+                    if updated_todo:
+                        embed_text = embeddings.embedding_text_for_todo(updated_todo)
+                        embedding = await embeddings.generate_embedding(embed_text)
+                        if embedding:
+                            todos_collection.update_one({"id": todo_id}, {"$set": {"embedding": embedding}})
+                except Exception:
+                    pass
 
             return json.dumps({"id": todo_id})
         else:
@@ -903,6 +926,16 @@ async def add_lesson(language: str, topic: str, lesson_learned: str, tags: Optio
         if tags:
             # Invalidate the tags cache when new tags are added
             invalidate_lesson_tags_cache(ctx)
+
+        # Generate embedding (non-blocking — failure never blocks lesson creation)
+        try:
+            embed_text = embeddings.embedding_text_for_lesson(lesson)
+            embedding = await embeddings.generate_embedding(embed_text)
+            if embedding:
+                lessons_collection.update_one({"id": lesson["id"]}, {"$set": {"embedding": embedding}})
+        except Exception:
+            pass
+
         return json.dumps({"id": lesson["id"]})
     except Exception as e:
         logger.error(f"Failed to add lesson: {str(e)}")
@@ -1905,19 +1938,26 @@ async def get_context_bundle(
             bundle["project_todos"] = {"error": str(e)}
             sections_failed.append("project_todos")
 
-    # 2. Related lessons (keyword search — slim: topic + tags only, use get_lesson for full content)
+    # 2. Related lessons (semantic when available, regex fallback)
     if keywords and lessons_collection is not None:
         try:
-            keyword_pattern = "|".join(re.escape(k) for k in keywords)
-            lesson_query = {
-                "$or": [
-                    {"topic": {"$regex": keyword_pattern, "$options": "i"}},
-                    {"lesson_learned": {"$regex": keyword_pattern, "$options": "i"}},
-                    {"tags": {"$regex": keyword_pattern, "$options": "i"}}
-                ]
-            }
-            cursor = lessons_collection.find(lesson_query, _LESSON_FIELDS).limit(3)
-            items = [strip_empty_fields(doc) for doc in cursor]
+            query_text = " ".join(keywords)
+            use_semantic = embeddings.is_available() and lessons_collection.find_one({"embedding": {"$exists": True}})
+            if use_semantic:
+                items = await embeddings.find_similar(query_text, lessons_collection, "lesson", limit=3)
+                # Slim down to match expected projection
+                items = [{k: v for k, v in doc.items() if k in ("id", "topic", "language", "tags", "similarity_score")} for doc in items]
+            else:
+                keyword_pattern = "|".join(re.escape(k) for k in keywords)
+                lesson_query = {
+                    "$or": [
+                        {"topic": {"$regex": keyword_pattern, "$options": "i"}},
+                        {"lesson_learned": {"$regex": keyword_pattern, "$options": "i"}},
+                        {"tags": {"$regex": keyword_pattern, "$options": "i"}}
+                    ]
+                }
+                cursor = lessons_collection.find(lesson_query, _LESSON_FIELDS).limit(3)
+                items = [strip_empty_fields(doc) for doc in cursor]
             bundle["related_lessons"] = {"items": items, "count": len(items)}
             sections_returned.append("related_lessons")
         except Exception as e:
@@ -1925,23 +1965,35 @@ async def get_context_bundle(
             bundle["related_lessons"] = {"error": str(e)}
             sections_failed.append("related_lessons")
 
-    # 3. Keyword todos (cross-project, deduped against project_todos)
+    # 3. Keyword todos (semantic when available, regex fallback, deduped against project_todos)
     if keywords:
         try:
-            keyword_pattern = "|".join(re.escape(k) for k in keywords)
-            keyword_query = {
-                "$or": [
-                    {"description": {"$regex": keyword_pattern, "$options": "i"}},
-                    {"project": {"$regex": keyword_pattern, "$options": "i"}}
-                ],
-                "status": {"$ne": "completed"}
-            }
-            cursor = todos_collection.find(keyword_query, _TODO_FIELDS).sort("created_at", -1).limit(10)
-            # Dedup against project_todos
+            # Dedup IDs from section 1
             project_todo_ids = set()
             if "project_todos" in bundle and "items" in bundle["project_todos"]:
                 project_todo_ids = {t.get("id") for t in bundle["project_todos"]["items"] if t.get("id")}
-            items = [strip_empty_fields(doc) for doc in cursor if doc.get("id") not in project_todo_ids][:5]
+
+            query_text = " ".join(keywords)
+            use_semantic = embeddings.is_available() and todos_collection.find_one({"embedding": {"$exists": True}})
+            if use_semantic:
+                raw_items = await embeddings.find_similar(query_text, todos_collection, "todo", limit=10)
+                # Slim to expected fields + dedup
+                items = []
+                for doc in raw_items:
+                    if doc.get("id") not in project_todo_ids:
+                        items.append({k: v for k, v in doc.items() if k in ("id", "description", "priority", "status", "project", "created_at", "similarity_score")})
+                items = items[:5]
+            else:
+                keyword_pattern = "|".join(re.escape(k) for k in keywords)
+                keyword_query = {
+                    "$or": [
+                        {"description": {"$regex": keyword_pattern, "$options": "i"}},
+                        {"project": {"$regex": keyword_pattern, "$options": "i"}}
+                    ],
+                    "status": {"$ne": "completed"}
+                }
+                cursor = todos_collection.find(keyword_query, _TODO_FIELDS).sort("created_at", -1).limit(10)
+                items = [strip_empty_fields(doc) for doc in cursor if doc.get("id") not in project_todo_ids][:5]
             bundle["keyword_todos"] = {"items": items, "count": len(items)}
             sections_returned.append("keyword_todos")
         except Exception as e:
@@ -2037,6 +2089,101 @@ async def get_context_bundle(
     }
 
     return json.dumps(response, cls=MongoJSONEncoder)
+
+
+# --- Semantic Search (Phase 4 RAG) ---
+
+async def find_relevant(
+    query: str,
+    types: Optional[List[str]] = None,
+    limit: int = 5,
+    ctx: Optional[Context] = None,
+) -> str:
+    """
+    Semantic similarity search across todos and/or lessons using vector embeddings.
+    Falls back to regex search if embeddings are not available.
+
+    Args:
+        query: Natural language search query
+        types: List of types to search — ["todos", "lessons"] (default: both)
+        limit: Max results per type
+        ctx: User context
+    """
+    if types is None:
+        types = ["todos", "lessons"]
+
+    results = {}
+
+    try:
+        collections = db_connection.get_collections(ctx.user if ctx else None)
+
+        # Check if semantic search is possible
+        use_semantic = embeddings.is_available()
+
+        if "todos" in types:
+            todos_collection = collections['todos']
+            if use_semantic:
+                # Check if any docs have embeddings
+                has_embeddings = todos_collection.find_one({"embedding": {"$exists": True}})
+                if has_embeddings:
+                    items = await embeddings.find_similar(query, todos_collection, "todo", limit=limit)
+                    results["todos"] = {"items": items, "count": len(items), "method": "semantic"}
+                else:
+                    # Fall back to regex
+                    items = _regex_search_todos(todos_collection, query, limit)
+                    results["todos"] = {"items": items, "count": len(items), "method": "regex"}
+            else:
+                items = _regex_search_todos(todos_collection, query, limit)
+                results["todos"] = {"items": items, "count": len(items), "method": "regex"}
+
+        if "lessons" in types:
+            lessons_collection = collections.get('lessons')
+            if lessons_collection is not None:
+                if use_semantic:
+                    has_embeddings = lessons_collection.find_one({"embedding": {"$exists": True}})
+                    if has_embeddings:
+                        items = await embeddings.find_similar(query, lessons_collection, "lesson", limit=limit)
+                        results["lessons"] = {"items": items, "count": len(items), "method": "semantic"}
+                    else:
+                        items = _regex_search_lessons(lessons_collection, query, limit)
+                        results["lessons"] = {"items": items, "count": len(items), "method": "regex"}
+                else:
+                    items = _regex_search_lessons(lessons_collection, query, limit)
+                    results["lessons"] = {"items": items, "count": len(items), "method": "regex"}
+
+        return json.dumps(results, cls=MongoJSONEncoder)
+    except Exception as e:
+        logger.error(f"find_relevant failed: {e}")
+        return create_response(False, message=str(e))
+
+
+def _regex_search_todos(collection, query: str, limit: int) -> list:
+    """Regex fallback for todo search."""
+    search_query = {
+        "$or": [
+            {"description": {"$regex": re.escape(query), "$options": "i"}},
+            {"project": {"$regex": re.escape(query), "$options": "i"}},
+            {"notes": {"$regex": re.escape(query), "$options": "i"}},
+        ],
+        "status": {"$ne": "completed"},
+    }
+    projection = {"_id": 0, "id": 1, "description": 1, "priority": 1, "status": 1, "project": 1, "created_at": 1}
+    cursor = collection.find(search_query, projection).sort("created_at", -1).limit(limit)
+    return [strip_empty_fields(doc) for doc in cursor]
+
+
+def _regex_search_lessons(collection, query: str, limit: int) -> list:
+    """Regex fallback for lesson search."""
+    search_query = {
+        "$or": [
+            {"topic": {"$regex": re.escape(query), "$options": "i"}},
+            {"lesson_learned": {"$regex": re.escape(query), "$options": "i"}},
+            {"tags": {"$regex": re.escape(query), "$options": "i"}},
+        ]
+    }
+    projection = {"_id": 0, "id": 1, "topic": 1, "language": 1, "tags": 1, "lesson_learned": 1}
+    cursor = collection.find(search_query, projection).limit(limit)
+    return [strip_empty_fields(doc) for doc in cursor]
 
 
 # --- Chat session API wrappers (Phase 2) ---

@@ -365,6 +365,10 @@ class OmniSpindleStdioServer:
             "get_context_bundle": {
                 "func": tools.get_context_bundle,
                 "doc": get_tool_doc("get_context_bundle")
+            },
+            "find_relevant": {
+                "func": tools.find_relevant,
+                "doc": get_tool_doc("find_relevant")
             }
         }
 
@@ -743,6 +747,18 @@ class OmniSpindleStdioServer:
                                 ctx = _create_context()
                                 return await func(project=project, keywords=keywords, include_completed=include_completed, since=since, ctx=ctx)
                             return get_context_bundle
+
+                        elif name == "find_relevant":
+                            @self.server.tool()
+                            async def find_relevant(
+                                query: Annotated[str, Field(description="Natural language search query")],
+                                types: Annotated[Optional[List[str]], Field(description="Types to search: ['todos', 'lessons'] (default: both)")] = None,
+                                limit: Annotated[int, Field(description="Max results per type (default: 5)")] = 5
+                            ) -> str:
+                                """Semantic similarity search across todos and/or lessons. Uses vector embeddings when available, falls back to regex."""
+                                ctx = _create_context()
+                                return await func(query=query, types=types, limit=limit, ctx=ctx)
+                            return find_relevant
 
                     return create_wrapper()
 
