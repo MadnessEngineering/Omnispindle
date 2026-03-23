@@ -28,6 +28,30 @@ load_dotenv()
 # Get the logger
 logger = logging.getLogger(__name__)
 
+# Helper function to build tokenized search queries for fuzzy multi-word matching
+def _build_tokenized_search_query(query: str, fields: list) -> dict:
+    """Build a MongoDB query that tokenizes multi-word queries for fuzzy matching.
+
+    Each word must match in at least one field (AND between tokens, OR across fields).
+    Single-word queries behave identically to the original regex approach.
+    """
+    tokens = [re.escape(t) for t in query.split() if t.strip()]
+
+    if not tokens:
+        return {"$or": [{field: {"$regex": "", "$options": "i"}} for field in fields]}
+
+    if len(tokens) == 1:
+        return {"$or": [{field: {"$regex": tokens[0], "$options": "i"}} for field in fields]}
+
+    # Multi-token: each token must appear in at least one field
+    return {
+        "$and": [
+            {"$or": [{field: {"$regex": token, "$options": "i"}} for field in fields]}
+            for token in tokens
+        ]
+    }
+
+
 # Helper function to strip empty fields to save tokens
 def strip_empty_fields(obj):
     """Recursively remove empty fields (None, empty strings, empty lists, empty dicts)"""
@@ -1008,9 +1032,7 @@ async def search_todos(query: str, fields: Optional[list] = None, limit: int = 1
     """
     if fields is None:
         fields = ["description", "project"]
-    search_query = {
-        "$or": [{field: {"$regex": query, "$options": "i"}} for field in fields]
-    }
+    search_query = _build_tokenized_search_query(query, fields)
 
     user_id = ctx.user.get('sub') if ctx and ctx.user else 'anonymous'
     logger.info(f"search_todos called by {user_id}: query='{query}', fields={fields}, limit={limit}")
@@ -1261,12 +1283,7 @@ async def grep_lessons(pattern: str, limit: int = 20, ctx: Optional[Context] = N
         db_name = lessons_collection.database.name
         logger.info(f"grep_lessons called by {user_id}: pattern='{pattern}', limit={limit}, db={db_name}")
 
-        search_query = {
-            "$or": [
-                {"topic": {"$regex": pattern, "$options": "i"}},
-                {"lesson_learned": {"$regex": pattern, "$options": "i"}}
-            ]
-        }
+        search_query = _build_tokenized_search_query(pattern, ["topic", "lesson_learned"])
         logger.debug(f"MongoDB query: {search_query}")
 
         cursor = lessons_collection.find(search_query).limit(limit)
@@ -1521,9 +1538,7 @@ async def search_lessons(query: str, fields: Optional[list] = None, limit: int =
     """
     if fields is None:
         fields = ["topic", "lesson_learned", "tags"]
-    search_query = {
-        "$or": [{field: {"$regex": query, "$options": "i"}} for field in fields]
-    }
+    search_query = _build_tokenized_search_query(query, fields)
     try:
         # Get user-scoped collections
         collections = db_connection.get_collections(ctx.user if ctx else None)

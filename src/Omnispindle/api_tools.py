@@ -3,6 +3,7 @@ API-based tools for Omnispindle MCP server.
 Replaces direct database operations with HTTP API calls to madnessinteractive.cc/api
 """
 import json
+import re
 import uuid
 import logging
 from typing import Union, List, Dict, Optional, Any
@@ -321,13 +322,18 @@ async def search_todos(query: str, fields: Optional[list] = None, limit: int = 1
                 fields = ["description", "project"]
             
             filtered_todos = []
-            query_lower = query.lower()
-            
+            tokens = [t.lower() for t in query.split() if t.strip()]
+
             for todo in todos_list:
-                for field in fields:
-                    if field in todo and query_lower in str(todo[field]).lower():
-                        filtered_todos.append(_convert_api_todo_to_mcp_format(todo))
-                        break  # Don't add the same todo multiple times
+                # Each token must match in at least one field (AND between tokens)
+                if all(
+                    any(
+                        token in str(todo.get(field, "")).lower()
+                        for field in fields
+                    )
+                    for token in tokens
+                ):
+                    filtered_todos.append(_convert_api_todo_to_mcp_format(todo))
             
             return create_response(True, {"items": filtered_todos})
             
