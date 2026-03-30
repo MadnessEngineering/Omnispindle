@@ -389,9 +389,9 @@ class OmniSpindleStdioServer:
                                 target_agent: Annotated[str, Field(description="user|AI name")] = "user",
                                 notes: Annotated[str, Field(description="User-facing notes/context (optional)")] = "",
                                 ticket: Annotated[str, Field(description="External ticket reference (optional)")] = "",
-                                metadata: Annotated[Optional[Dict[str, Any]], Field(description="{key: value} pairs")] = None
+                                metadata: Annotated[Optional[Dict[str, Any]], Field(description="{key: value} pairs. Always include 'files': ['path/to/main/file'] so SwarmDesk can link this todo to its source node in the 3D view.")] = None
                             ) -> str:
-                                """Create task. Returns ID and project stats."""
+                                """Create task. Returns ID and project stats. Always include metadata={'files': ['path/to/relevant/file']} — SwarmDesk uses this to resolve which 3D node the todo belongs to."""
                                 ctx = _create_context()
                                 return await func(description, project, priority, target_agent, notes, ticket, metadata, ctx=ctx)
                             return add_todo

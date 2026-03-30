@@ -482,7 +482,9 @@ async def add_todo(description: str, project: str, priority: str = "Medium", tar
         target_agent: Who should work on this (default: "user")
         notes: User-facing notes/context about the todo (default: "")
         ticket: External ticket reference (default: "")
-        metadata: Optional structured metadata (tags, files, etc.)
+        metadata: Optional structured metadata. Always include 'files': ['path/to/main/file']
+            so SwarmDesk can link this todo to its source node in the 3D view.
+            Example: {"files": ["src/components/Dashboard.js"], "tags": ["bug", "ui"]}
         ctx: Context with user information
 
     Returns a compact representation of the created todo with an ID for reference.
