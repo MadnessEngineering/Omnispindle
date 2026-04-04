@@ -63,6 +63,7 @@ TOOL_ACCESS_LEVELS: Dict[str, ToolAccessLevel] = {
     "inventorium_sessions_tree": ToolAccessLevel.REMOTE_SAFE,
     "inventorium_todos_link_session": ToolAccessLevel.REMOTE_SAFE,
     "get_context_bundle": ToolAccessLevel.REMOTE_SAFE,
+    "preflight_rag": ToolAccessLevel.REMOTE_SAFE,
 }
 
 
@@ -133,6 +134,9 @@ TOOL_FEATURES: Dict[str, Set[ToolFeature]] = {
         ToolFeature.DATABASE_READ,
     },
     "get_context_bundle": {
+        ToolFeature.DATABASE_READ,
+    },
+    "preflight_rag": {
         ToolFeature.DATABASE_READ,
     },
 }

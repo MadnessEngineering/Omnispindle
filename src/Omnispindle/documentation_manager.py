@@ -357,6 +357,27 @@ Returns up to 7 sections with projected fields (not full documents):
 
 Each section degrades independently — if one query fails, others still return.
 Response includes summary with sections_returned and sections_failed lists."""
+    },
+
+    "preflight_rag": {
+        "minimal": "Preflight lessons check",
+        "compact": "Query lessons learned before starting work. Returns past solutions, pitfalls, suggestions. Params: intent (required), project, tags[], limit.",
+        "basic": "Pre-processing RAG tool: search lessons learned against agent intent before beginning work. Returns categorised results: lessons (past solutions), pitfalls (known issues), and suggestions. Supports semantic + regex fallback.",
+        "admin": "Preflight RAG. Searches lessons via semantic embeddings (falls back to regex). Project filter boosts project-specific lessons. Tags narrow results. Classifies lessons vs pitfalls by keyword detection in lesson_learned text.",
+        "full": """Pre-processing RAG tool for agent preflight checks. Call at the start of a task to review what has been learned before.
+
+Returns structured JSON with:
+- lessons: Past solutions and decisions relevant to the intent
+- pitfalls: Known issues, mistakes, things to avoid (detected by warning keywords)
+- suggestions: Summary of findings and recommended actions
+- method: 'semantic' or 'regex' (search method used)
+- message: Human-readable status
+
+Search strategy:
+1. Semantic search against intent (or regex fallback)
+2. If project specified, project-specific lessons are boosted to top
+3. If tags specified, results are re-ranked by tag overlap
+4. Results classified as lessons vs pitfalls by keyword analysis"""
     }
 }
 

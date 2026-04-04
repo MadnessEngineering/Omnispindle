@@ -2201,6 +2201,120 @@ def _regex_search_lessons(collection, query: str, limit: int) -> list:
     return [strip_empty_fields(doc) for doc in cursor]
 
 
+# --- Preflight RAG (Pre-processing lessons lookup) ---
+
+async def preflight_rag(
+    intent: str,
+    project: Optional[str] = None,
+    tags: Optional[List[str]] = None,
+    limit: int = 5,
+    ctx: Optional[Context] = None,
+) -> str:
+    """
+    Pre-processing RAG tool: query lessons learned before beginning work on a user request.
+    Returns relevant past solutions, known pitfalls, and prior decisions ranked by relevance.
+
+    Args:
+        intent: Natural language description of what the agent is about to do
+        project: Optional project scope to prioritise project-specific lessons
+        tags: Optional tags to narrow the search (e.g. ["deployment", "auth"])
+        limit: Max lessons to return (default: 5)
+        ctx: User context
+    """
+    results = {
+        "intent": intent,
+        "lessons": [],
+        "pitfalls": [],
+        "suggestions": [],
+        "method": "none",
+    }
+
+    try:
+        collections = db_connection.get_collections(ctx.user if ctx else None)
+        lessons_collection = collections.get("lessons")
+
+        if lessons_collection is None:
+            return json.dumps({
+                **results,
+                "message": "No lessons collection available — proceeding without historical context."
+            }, cls=MongoJSONEncoder)
+
+        use_semantic = embeddings.is_available() and lessons_collection.find_one({"embedding": {"$exists": True}})
+
+        matched_lessons = []
+
+        if use_semantic:
+            # Semantic search against the intent
+            matched_lessons = await embeddings.find_similar(intent, lessons_collection, "lesson", limit=limit)
+            results["method"] = "semantic"
+        else:
+            # Regex fallback — tokenise intent into keywords
+            matched_lessons = _regex_search_lessons(lessons_collection, intent, limit)
+            results["method"] = "regex"
+
+        # If project specified, boost project-specific lessons by also searching with project scope
+        if project and matched_lessons:
+            project_lessons = []
+            project_query = {
+                "$or": [
+                    {"project": {"$regex": f"^{re.escape(project)}$", "$options": "i"}},
+                    {"tags": {"$regex": re.escape(project), "$options": "i"}},
+                ]
+            }
+            projection = {"_id": 0, "id": 1, "topic": 1, "language": 1, "tags": 1, "lesson_learned": 1}
+            cursor = lessons_collection.find(project_query, projection).limit(limit)
+            project_lessons = [strip_empty_fields(doc) for doc in cursor]
+
+            # Merge: project lessons first, then general (deduped)
+            seen_ids = {l.get("id") for l in project_lessons}
+            merged = project_lessons + [l for l in matched_lessons if l.get("id") not in seen_ids]
+            matched_lessons = merged[:limit]
+
+        # If tags provided, also filter/boost by tag overlap
+        if tags and matched_lessons:
+            def tag_score(lesson):
+                lesson_tags = lesson.get("tags", [])
+                if isinstance(lesson_tags, str):
+                    lesson_tags = [t.strip() for t in lesson_tags.split(",")]
+                overlap = len(set(t.lower() for t in lesson_tags) & set(t.lower() for t in tags))
+                return overlap
+            matched_lessons.sort(key=tag_score, reverse=True)
+
+        # Categorise lessons into actionable sections
+        for lesson in matched_lessons:
+            entry = {
+                "id": lesson.get("id"),
+                "topic": lesson.get("topic"),
+                "lesson_learned": lesson.get("lesson_learned", ""),
+                "tags": lesson.get("tags", []),
+            }
+            if lesson.get("similarity_score"):
+                entry["relevance"] = lesson["similarity_score"]
+
+            text_lower = entry["lesson_learned"].lower()
+            # Classify as pitfall if it mentions common warning patterns
+            if any(w in text_lower for w in ("don't", "avoid", "broke", "fail", "bug", "mistake", "careful", "wrong", "never")):
+                results["pitfalls"].append(entry)
+            else:
+                results["lessons"].append(entry)
+
+        # Build suggestions summary
+        total = len(results["lessons"]) + len(results["pitfalls"])
+        if total > 0:
+            results["suggestions"].append(f"Found {total} relevant lesson(s) for this intent.")
+            if results["pitfalls"]:
+                results["suggestions"].append(f"⚠ {len(results['pitfalls'])} pitfall(s) flagged — review before proceeding.")
+        else:
+            results["suggestions"].append("No prior lessons found for this intent — charting new territory.")
+
+        results["message"] = f"Preflight check complete: {total} lesson(s) retrieved via {results['method']} search."
+        return json.dumps(results, cls=MongoJSONEncoder)
+
+    except Exception as e:
+        logger.error(f"preflight_rag failed: {e}")
+        return create_response(False, message=f"Preflight RAG failed: {str(e)}")
+
+
 # --- Chat session API wrappers (Phase 2) ---
 
 async def inventorium_sessions_list(project: Optional[str] = None, limit: int = 50, ctx: Optional[Context] = None) -> str:

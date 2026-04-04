@@ -369,6 +369,10 @@ class OmniSpindleStdioServer:
             "find_relevant": {
                 "func": tools.find_relevant,
                 "doc": get_tool_doc("find_relevant")
+            },
+            "preflight_rag": {
+                "func": tools.preflight_rag,
+                "doc": get_tool_doc("preflight_rag")
             }
         }
 
@@ -759,6 +763,19 @@ class OmniSpindleStdioServer:
                                 ctx = _create_context()
                                 return await func(query=query, types=types, limit=limit, ctx=ctx)
                             return find_relevant
+
+                        elif name == "preflight_rag":
+                            @self.server.tool()
+                            async def preflight_rag(
+                                intent: Annotated[str, Field(description="What the agent is about to do (natural language)")],
+                                project: Annotated[Optional[str], Field(description="Project scope to prioritise project-specific lessons")] = None,
+                                tags: Annotated[Optional[List[str]], Field(description="Tags to narrow the search (e.g. ['deployment', 'auth'])")] = None,
+                                limit: Annotated[int, Field(description="Max lessons to return (default: 5)")] = 5
+                            ) -> str:
+                                """Pre-processing RAG: query lessons learned before starting work. Returns past solutions, pitfalls, and suggestions ranked by relevance."""
+                                ctx = _create_context()
+                                return await func(intent=intent, project=project, tags=tags, limit=limit, ctx=ctx)
+                            return preflight_rag
 
                     return create_wrapper()
 

@@ -389,6 +389,20 @@ TOOL_SCHEMAS = {
             },
             "required": ["query"]
         }
+    },
+    "preflight_rag": {
+        "name": "preflight_rag",
+        "description": "Pre-processing RAG: query lessons learned before starting work on a task. Returns past solutions, pitfalls, and suggestions ranked by relevance.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "intent": {"type": "string", "description": "What the agent is about to do (natural language)"},
+                "project": {"type": "string", "description": "Project scope to prioritise project-specific lessons"},
+                "tags": {"type": "array", "items": {"type": "string"}, "description": "Tags to narrow the search (e.g. ['deployment', 'auth'])"},
+                "limit": {"type": "number", "description": "Max lessons to return (default: 5)"}
+            },
+            "required": ["intent"]
+        }
     }
 }
 
@@ -536,7 +550,9 @@ async def mcp_handler(request: Request, get_current_user: Callable[[], Coroutine
                 # Context bundle (Tier 1 RAG)
                 "get_context_bundle": tools.get_context_bundle,
                 # Semantic search (Tier 2 RAG)
-                "find_relevant": tools.find_relevant
+                "find_relevant": tools.find_relevant,
+                # Preflight RAG (Pre-processing lessons lookup)
+                "preflight_rag": tools.preflight_rag
             }
 
             if tool_name not in tool_functions:

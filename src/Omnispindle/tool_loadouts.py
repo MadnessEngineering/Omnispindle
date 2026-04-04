@@ -38,7 +38,10 @@ _BASE_LOADOUTS: Dict[str, List[str]] = {
         "get_context_bundle",
 
         # Semantic search (1 tool)
-        "find_relevant"
+        "find_relevant",
+
+        # Preflight RAG (1 tool)
+        "preflight_rag"
     ],
 
     "basic": [
@@ -79,7 +82,7 @@ _BASE_LOADOUTS: Dict[str, List[str]] = {
         "query_todos", "get_todo", "list_todos_by_status",
         "list_project_todos", "search_todos", "get_lesson",
         "search_lessons", "list_lessons", "get_context_bundle",
-        "find_relevant"
+        "find_relevant", "preflight_rag"
     ],
 
     "lightweight": [
@@ -88,7 +91,7 @@ _BASE_LOADOUTS: Dict[str, List[str]] = {
         "add_todo", "query_todos", "update_todo", "get_todo",
         "mark_todo_complete", "add_lesson", "get_lesson",
         "search_lessons", "inventorium_sessions_list", "inventorium_sessions_create",
-        "get_context_bundle", "find_relevant"
+        "get_context_bundle", "find_relevant", "preflight_rag"
     ],
 
     # Backward compatibility - keeping hybrid_test from stdio_server.py
