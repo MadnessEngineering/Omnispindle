@@ -95,7 +95,7 @@ TOOL_SCHEMAS = {
     },
     "list_todos_by_status": {
         "name": "list_todos_by_status",
-        "description": "List todos by status with pagination",
+        "description": "Quick status filter. Returns todos matching a single status with pagination.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -108,7 +108,7 @@ TOOL_SCHEMAS = {
     },
     "search_todos": {
         "name": "search_todos",
-        "description": "Search todos",
+        "description": "Text search todos by keyword. Shorthand for query_todos with tokenized regex on description+project.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -120,7 +120,7 @@ TOOL_SCHEMAS = {
     },
     "list_project_todos": {
         "name": "list_project_todos",
-        "description": "List recent pending todos for project with pagination",
+        "description": "Quick project filter. Returns recent pending todos for one project.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -181,7 +181,7 @@ TOOL_SCHEMAS = {
     },
     "search_lessons": {
         "name": "search_lessons",
-        "description": "Text search lessons",
+        "description": "Text search across lesson topic, content, and tags. For broader semantic search, use find_relevant.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -194,7 +194,7 @@ TOOL_SCHEMAS = {
     },
     "grep_lessons": {
         "name": "grep_lessons",
-        "description": "Pattern match lessons",
+        "description": "Pattern match on lesson topic and content only (no tags). Use search_lessons for broader search.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -216,12 +216,15 @@ TOOL_SCHEMAS = {
     },
     "query_todo_logs": {
         "name": "query_todo_logs",
-        "description": "Query todo audit logs",
+        "description": "Query todo audit logs with filtering and pagination",
         "inputSchema": {
             "type": "object",
             "properties": {
-                "filter": {"type": "object"},
-                "limit": {"type": "number"}
+                "filter_type": {"type": "string", "description": "Log type filter: all|create|update|delete|complete (default: all)"},
+                "project": {"type": "string", "description": "Project filter (default: all)"},
+                "page": {"type": "number", "description": "Page number (default: 1)"},
+                "page_size": {"type": "number", "description": "Results per page (default: 20)"},
+                "unified": {"type": "boolean", "description": "Query both personal and shared databases (default: false)"}
             }
         }
     },
@@ -231,7 +234,8 @@ TOOL_SCHEMAS = {
         "inputSchema": {
             "type": "object",
             "properties": {
-                "madness_root": {"type": "string"}
+                "include_details": {"type": "boolean", "description": "Include project metadata (default: false)"},
+                "madness_root": {"type": "string", "description": "Root directory path (default: lab root)"}
             }
         }
     },
@@ -248,25 +252,28 @@ TOOL_SCHEMAS = {
     },
     "add_explanation": {
         "name": "add_explanation",
-        "description": "Add explanation",
+        "description": "Add explanation to the knowledge base",
         "inputSchema": {
             "type": "object",
             "properties": {
-                "topic": {"type": "string"},
-                "explanation": {"type": "string"}
+                "topic": {"type": "string", "description": "Topic to explain"},
+                "content": {"type": "string", "description": "Explanation content"},
+                "kind": {"type": "string", "description": "Type: concept|pattern|gotcha|reference (default: concept)"},
+                "author": {"type": "string", "description": "Author attribution (default: system)"}
             },
-            "required": ["topic", "explanation"]
+            "required": ["topic", "content"]
         }
     },
     "point_out_obvious": {
         "name": "point_out_obvious",
-        "description": "Sarcastically point out the obvious",
+        "description": "Point out something obvious with varying levels of humor",
         "inputSchema": {
             "type": "object",
             "properties": {
-                "statement": {"type": "string"}
+                "observation": {"type": "string", "description": "The obvious thing to point out"},
+                "sarcasm_level": {"type": "number", "description": "Scale from 1-10 (1=gentle, 10=maximum sass, default: 5)"}
             },
-            "required": ["statement"]
+            "required": ["observation"]
         }
     },
     "inventorium_sessions_list": {
@@ -321,12 +328,15 @@ TOOL_SCHEMAS = {
     },
     "inventorium_sessions_fork": {
         "name": "inventorium_sessions_fork",
-        "description": "Fork session at specific point",
+        "description": "Fork an existing session into a new branch",
         "inputSchema": {
             "type": "object",
             "properties": {
-                "session_id": {"type": "string"},
-                "fork_point": {"type": "string"}
+                "session_id": {"type": "string", "description": "Session ID to fork from"},
+                "title": {"type": "string", "description": "Title for the forked session"},
+                "include_messages": {"type": "boolean", "description": "Copy message history to fork (default: true)"},
+                "inherit_todos": {"type": "boolean", "description": "Link parent todos to fork (default: true)"},
+                "initial_status": {"type": "string", "description": "Status for forked session (default: server decides)"}
             },
             "required": ["session_id"]
         }
@@ -344,11 +354,12 @@ TOOL_SCHEMAS = {
     },
     "inventorium_sessions_tree": {
         "name": "inventorium_sessions_tree",
-        "description": "Get full session tree",
+        "description": "Get full session tree for a project",
         "inputSchema": {
             "type": "object",
             "properties": {
-                "root_session_id": {"type": "string"}
+                "project": {"type": "string", "description": "Project name filter (optional)"},
+                "limit": {"type": "number", "description": "Max sessions to return (default: 200)"}
             }
         }
     },
@@ -366,7 +377,7 @@ TOOL_SCHEMAS = {
     },
     "get_context_bundle": {
         "name": "get_context_bundle",
-        "description": "Bundle multiple context queries (todos, lessons, sessions) into one response for AI agent startup. Use 'since' for change detection.",
+        "description": "Session startup bundle. Returns slim todo/lesson/session summaries in one call. Use at conversation start. Use 'since' for change detection.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -379,7 +390,7 @@ TOOL_SCHEMAS = {
     },
     "find_relevant": {
         "name": "find_relevant",
-        "description": "Semantic similarity search across todos and/or lessons. Uses vector embeddings when available, falls back to regex.",
+        "description": "Semantic search across todos AND lessons. Use for ad-hoc 'find related items' queries mid-task. Uses embeddings when available, regex fallback.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -392,7 +403,7 @@ TOOL_SCHEMAS = {
     },
     "preflight_rag": {
         "name": "preflight_rag",
-        "description": "Pre-processing RAG: query lessons learned before starting work on a task. Returns past solutions, pitfalls, and suggestions ranked by relevance.",
+        "description": "Pre-task lessons check. Searches lessons only, classifies into solutions vs pitfalls. Use before starting work on a task.",
         "inputSchema": {
             "type": "object",
             "properties": {

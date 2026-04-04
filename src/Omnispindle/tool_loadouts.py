@@ -45,9 +45,10 @@ _BASE_LOADOUTS: Dict[str, List[str]] = {
     ],
 
     "basic": [
-        # Core CRUD operations + context (8 tools)
+        # Core CRUD + context + lesson lookup (10 tools)
         "add_todo", "query_todos", "update_todo", "get_todo", "mark_todo_complete",
-        "list_todos_by_status", "list_project_todos", "get_context_bundle"
+        "list_todos_by_status", "list_project_todos", "get_context_bundle",
+        "get_lesson", "search_lessons"
     ],
 
     "minimal": [
@@ -78,11 +79,13 @@ _BASE_LOADOUTS: Dict[str, List[str]] = {
     ],
 
     "read_only": [
-        # Query/Get only (10 tools)
+        # Query/Get only (15 tools)
         "query_todos", "get_todo", "list_todos_by_status",
         "list_project_todos", "search_todos", "get_lesson",
         "search_lessons", "list_lessons", "get_context_bundle",
-        "find_relevant", "preflight_rag"
+        "find_relevant", "preflight_rag",
+        "inventorium_sessions_list", "inventorium_sessions_get",
+        "inventorium_sessions_genealogy", "inventorium_sessions_tree"
     ],
 
     "lightweight": [
@@ -94,10 +97,10 @@ _BASE_LOADOUTS: Dict[str, List[str]] = {
         "get_context_bundle", "find_relevant", "preflight_rag"
     ],
 
-    # Backward compatibility - keeping hybrid_test from stdio_server.py
-    "hybrid_test": [
-        "add_todo", "query_todos", "get_todo", "mark_todo_complete",
-        "get_hybrid_status", "test_api_connectivity"
+    "agent_preflight": [
+        # Startup context for agents beginning work (6 tools)
+        "get_context_bundle", "preflight_rag", "find_relevant",
+        "query_todos", "get_todo", "get_lesson"
     ]
 }
 
@@ -164,15 +167,15 @@ def get_loadout_info(loadout_name: str) -> Dict[str, any]:
         Dictionary with loadout metadata (name, tool_count, description)
     """
     loadout_descriptions = {
-        "full": "All available tools (30 local, 28 remote after filtering)",
-        "basic": "Core CRUD operations (7 tools)",
+        "full": "All available tools (33 local, 31 remote after filtering)",
+        "basic": "Core CRUD + context + lesson lookup (10 tools)",
         "minimal": "Absolute minimum functionality (4 tools)",
         "lessons": "Knowledge management focus (7 tools)",
-        "admin": "Administrative tools and session management (13 tools)",
+        "admin": "Administrative tools and session management (14 tools)",
         "write_only": "Create, update, delete operations only (6 tools)",
-        "read_only": "Query and get operations only (8 tools)",
-        "lightweight": "Token-optimized core functionality (10 tools)",
-        "hybrid_test": "Testing hybrid mode functionality (6 tools)"
+        "read_only": "Query, get, and search operations + sessions (15 tools)",
+        "lightweight": "Token-optimized core functionality (13 tools)",
+        "agent_preflight": "Startup context for agents beginning work (6 tools)"
     }
 
     tools = _BASE_LOADOUTS.get(loadout_name, [])

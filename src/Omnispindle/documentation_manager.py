@@ -47,9 +47,9 @@ class DocumentationManager:
             "lessons": DocumentationLevel.BASIC,  # Use basic level for lessons loadout
             "admin": DocumentationLevel.ADMIN,
             "full": DocumentationLevel.FULL,
-            "hybrid_test": DocumentationLevel.BASIC,
-            "write_only": DocumentationLevel.BASIC,  # New loadouts use basic
-            "read_only": DocumentationLevel.BASIC
+            "write_only": DocumentationLevel.BASIC,
+            "read_only": DocumentationLevel.BASIC,
+            "agent_preflight": DocumentationLevel.BASIC
         }
         return mapping.get(self.loadout, DocumentationLevel.FULL)
     
@@ -359,6 +359,21 @@ Each section degrades independently — if one query fails, others still return.
 Response includes summary with sections_returned and sections_failed lists."""
     },
 
+    "find_relevant": {
+        "minimal": "Semantic search",
+        "compact": "Semantic similarity search across todos and/or lessons. Falls back to regex. Params: query (required), types[] (todos|lessons), limit.",
+        "basic": "Semantic similarity search across todos and/or lessons using vector embeddings. Falls back to regex if embeddings unavailable. Use for ad-hoc 'find related items' queries.",
+        "admin": "Semantic search via Gemini embeddings (768-dim cosine similarity). Falls back to tokenized regex on description/topic fields. types=['todos','lessons'] controls scope. Returns items with similarity_score when semantic.",
+        "full": """Semantic similarity search across todos and/or lessons. Uses vector embeddings when available, falls back to regex.
+
+Returns structured JSON per type:
+- todos: id, description, priority, status, project, created_at, similarity_score
+- lessons: id, topic, language, tags, lesson_learned, similarity_score
+- method: 'semantic' or 'regex' per type
+
+Use this for ad-hoc 'find related items' queries mid-task. For session startup context, use get_context_bundle. For pre-task lessons review, use preflight_rag."""
+    },
+
     "preflight_rag": {
         "minimal": "Preflight lessons check",
         "compact": "Query lessons learned before starting work. Returns past solutions, pitfalls, suggestions. Params: intent (required), project, tags[], limit.",
@@ -410,6 +425,79 @@ PARAMETER_HINTS = {
   Examples: {"description": 1, "status": 1}, {"metadata": 0}
 - limit (int, optional): Maximum number of results (default: 100)
 - ctx (str, optional): Additional context for the query"""
+    },
+
+    "get_context_bundle": {
+        "basic": "project: scope to project; keywords[]: search terms; since: unix timestamp for change detection",
+        "admin": "7 sections: project_todos, related_lessons, keyword_todos, recent_completions, blocked_todos, changed_todos, last_session. Each degrades independently.",
+        "full": """Parameters:
+- project (str, optional): Project name — enables project_todos, recent_completions, blocked_todos, last_session sections
+- keywords (list[str], optional): Search terms — enables related_lessons and keyword_todos sections
+- include_completed (bool, optional): Include recent completed todos (default: false)
+- since (int, optional): Unix timestamp — adds changed_todos section with items modified after this time. Use for session continuity."""
+    },
+
+    "preflight_rag": {
+        "basic": "intent: what you're about to do; project: scope lessons; tags[]: narrow search",
+        "admin": "Semantic search against intent, project-specific boost, tag re-ranking. Returns lessons[] + pitfalls[] + suggestions[].",
+        "full": """Parameters:
+- intent (str, required): Natural language description of what you're about to do
+- project (str, optional): Project name — project-specific lessons are boosted to top of results
+- tags (list[str], optional): Tags to narrow search — results re-ranked by tag overlap
+- limit (int, optional): Max lessons to return (default: 5)"""
+    },
+
+    "find_relevant": {
+        "basic": "query: natural language search; types[]: 'todos','lessons'; limit: per type",
+        "admin": "Semantic via Gemini embeddings when available, regex fallback. Returns similarity_score per item.",
+        "full": """Parameters:
+- query (str, required): Natural language search query
+- types (list[str], optional): Types to search — ['todos', 'lessons'] (default: both)
+- limit (int, optional): Max results per type (default: 5)"""
+    },
+
+    "inventorium_sessions_fork": {
+        "basic": "session_id: source session; include_messages: copy chat history; inherit_todos: link parent todos",
+        "full": """Parameters:
+- session_id (str, required): Session ID to fork from
+- title (str, optional): Title for the forked session
+- include_messages (bool, optional): Copy message history to fork (default: true)
+- inherit_todos (bool, optional): Link parent session's todos to fork (default: true)
+- initial_status (str, optional): Override status for forked session"""
+    },
+
+    "query_todo_logs": {
+        "basic": "filter_type: all|create|update|delete|complete; project: filter by project",
+        "full": """Parameters:
+- filter_type (str, optional): Log type — all|create|update|delete|complete (default: all)
+- project (str, optional): Project name filter (default: all)
+- page (int, optional): Page number (default: 1)
+- page_size (int, optional): Results per page (default: 20)
+- unified (bool, optional): Query both personal and shared databases (default: false)"""
+    },
+
+    "point_out_obvious": {
+        "basic": "observation: what to point out; sarcasm_level: 1-10",
+        "full": """Parameters:
+- observation (str, required): The obvious thing to point out
+- sarcasm_level (int, optional): Scale from 1 (gentle) to 10 (maximum sass, default: 5)"""
+    },
+
+    "update_todo": {
+        "basic": "todo_id: UUID; updates: {field: new_value}. metadata is MERGED, not replaced.",
+        "full": """Parameters:
+- todo_id (str, required): UUID of the todo to update
+- updates (dict, required): Fields to update — {field: new_value}
+  - metadata updates are MERGED with existing metadata (not replaced)
+  - status: pending|in_progress|blocked|completed
+  - priority: Critical|High|Medium|Low"""
+    },
+
+    "list_projects": {
+        "basic": "include_details: true for metadata; madness_root: override root dir",
+        "full": """Parameters:
+- include_details (bool|str, optional): Include project metadata like todo counts (default: false)
+- madness_root (str, optional): Override lab root directory path"""
     }
 }
 

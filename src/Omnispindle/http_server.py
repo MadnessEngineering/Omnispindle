@@ -298,6 +298,114 @@ if "list_lessons" in selected_tools:
         auth_ctx = await get_authenticated_context_from_mcp(ctx)
         return await tools.list_lessons(limit, auth_ctx)
 
+# Admin/System tools
+if "query_todo_logs" in selected_tools:
+    @mcp.tool()
+    async def query_todo_logs(filter_type: str = "all", project: str = "all", page: int = 1, page_size: int = 20, unified: bool = False, ctx: MCPContext = None):
+        """Query todo audit logs with filtering and pagination."""
+        auth_ctx = await get_authenticated_context_from_mcp(ctx)
+        return await tools.query_todo_logs(filter_type, project, page, page_size, unified, auth_ctx)
+
+if "explain" in selected_tools:
+    @mcp.tool()
+    async def explain(topic: str, brief: bool = False, ctx: MCPContext = None):
+        """Get explanation for a topic from the knowledge base."""
+        auth_ctx = await get_authenticated_context_from_mcp(ctx)
+        return await tools.explain_tool(topic, brief, auth_ctx)
+
+if "add_explanation" in selected_tools:
+    @mcp.tool()
+    async def add_explanation(topic: str, content: str, kind: str = "concept", author: str = "system", ctx: MCPContext = None):
+        """Add explanation to the knowledge base."""
+        auth_ctx = await get_authenticated_context_from_mcp(ctx)
+        return await tools.add_explanation(topic, content, kind, author, auth_ctx)
+
+if "point_out_obvious" in selected_tools:
+    @mcp.tool()
+    async def point_out_obvious(observation: str, sarcasm_level: int = 5, ctx: MCPContext = None):
+        """Point out something obvious with varying levels of humor."""
+        auth_ctx = await get_authenticated_context_from_mcp(ctx)
+        return await tools.point_out_obvious(observation, sarcasm_level, auth_ctx)
+
+# Session management tools
+if "inventorium_sessions_list" in selected_tools:
+    @mcp.tool()
+    async def inventorium_sessions_list(project: Optional[str] = None, limit: int = 50, ctx: MCPContext = None):
+        """List chat sessions, optionally filtered by project."""
+        auth_ctx = await get_authenticated_context_from_mcp(ctx)
+        return await tools.inventorium_sessions_list(project, limit, auth_ctx)
+
+if "inventorium_sessions_get" in selected_tools:
+    @mcp.tool()
+    async def inventorium_sessions_get(session_id: str, ctx: MCPContext = None):
+        """Get a specific session by ID."""
+        auth_ctx = await get_authenticated_context_from_mcp(ctx)
+        return await tools.inventorium_sessions_get(session_id, auth_ctx)
+
+if "inventorium_sessions_create" in selected_tools:
+    @mcp.tool()
+    async def inventorium_sessions_create(project: str, title: Optional[str] = None, initial_prompt: Optional[str] = None, agentic_tool: str = "claude-code", ctx: MCPContext = None):
+        """Create a new chat session for a project."""
+        auth_ctx = await get_authenticated_context_from_mcp(ctx)
+        return await tools.inventorium_sessions_create(project, title, initial_prompt, agentic_tool, auth_ctx)
+
+if "inventorium_sessions_spawn" in selected_tools:
+    @mcp.tool()
+    async def inventorium_sessions_spawn(parent_session_id: str, prompt: str, todo_id: Optional[str] = None, title: Optional[str] = None, ctx: MCPContext = None):
+        """Spawn a child session from a parent session."""
+        auth_ctx = await get_authenticated_context_from_mcp(ctx)
+        return await tools.inventorium_sessions_spawn(parent_session_id, prompt, todo_id, title, auth_ctx)
+
+if "inventorium_sessions_fork" in selected_tools:
+    @mcp.tool()
+    async def inventorium_sessions_fork(session_id: str, title: Optional[str] = None, include_messages: bool = True, inherit_todos: bool = True, initial_status: Optional[str] = None, ctx: MCPContext = None):
+        """Fork an existing session into a new branch."""
+        auth_ctx = await get_authenticated_context_from_mcp(ctx)
+        return await tools.inventorium_sessions_fork(session_id, title, include_messages, inherit_todos, initial_status, auth_ctx)
+
+if "inventorium_sessions_genealogy" in selected_tools:
+    @mcp.tool()
+    async def inventorium_sessions_genealogy(session_id: str, ctx: MCPContext = None):
+        """Get session genealogy (parent/child chain)."""
+        auth_ctx = await get_authenticated_context_from_mcp(ctx)
+        return await tools.inventorium_sessions_genealogy(session_id, auth_ctx)
+
+if "inventorium_sessions_tree" in selected_tools:
+    @mcp.tool()
+    async def inventorium_sessions_tree(project: Optional[str] = None, limit: int = 200, ctx: MCPContext = None):
+        """Get full session tree for a project."""
+        auth_ctx = await get_authenticated_context_from_mcp(ctx)
+        return await tools.inventorium_sessions_tree(project, limit, auth_ctx)
+
+if "inventorium_todos_link_session" in selected_tools:
+    @mcp.tool()
+    async def inventorium_todos_link_session(todo_id: str, session_id: str, ctx: MCPContext = None):
+        """Link a todo to a chat session."""
+        auth_ctx = await get_authenticated_context_from_mcp(ctx)
+        return await tools.inventorium_todos_link_session(todo_id, session_id, auth_ctx)
+
+# RAG / Context tools
+if "get_context_bundle" in selected_tools:
+    @mcp.tool()
+    async def get_context_bundle(project: Optional[str] = None, keywords: Optional[List[str]] = None, include_completed: bool = False, since: Optional[int] = None, ctx: MCPContext = None):
+        """Session startup bundle. Returns slim todo/lesson/session summaries in one call."""
+        auth_ctx = await get_authenticated_context_from_mcp(ctx)
+        return await tools.get_context_bundle(project=project, keywords=keywords, include_completed=include_completed, since=since, ctx=auth_ctx)
+
+if "find_relevant" in selected_tools:
+    @mcp.tool()
+    async def find_relevant(query: str, types: Optional[List[str]] = None, limit: int = 5, ctx: MCPContext = None):
+        """Semantic search across todos and lessons. Uses embeddings when available, falls back to regex."""
+        auth_ctx = await get_authenticated_context_from_mcp(ctx)
+        return await tools.find_relevant(query=query, types=types, limit=limit, ctx=auth_ctx)
+
+if "preflight_rag" in selected_tools:
+    @mcp.tool()
+    async def preflight_rag(intent: str, project: Optional[str] = None, tags: Optional[List[str]] = None, limit: int = 5, ctx: MCPContext = None):
+        """Pre-task lessons check. Searches lessons for past solutions and pitfalls before starting work."""
+        auth_ctx = await get_authenticated_context_from_mcp(ctx)
+        return await tools.preflight_rag(intent=intent, project=project, tags=tags, limit=limit, ctx=auth_ctx)
+
 # Log all registered tools
 logger.info(f"Registered {len([t for t in selected_tools])} tools for HTTP transport (remote mode)")
 

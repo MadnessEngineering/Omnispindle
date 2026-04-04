@@ -21,14 +21,14 @@ class TestToolLoadouts:
         full = get_loadout("full", mode="local")
         assert "bring_your_own" in full
         assert "list_projects" in full
-        assert len(full) == 30  # All tools
+        assert len(full) == 33  # All tools
 
     def test_remote_mode_filters_local_only(self):
         """Remote mode should exclude local-only tools."""
         full = get_loadout("full", mode="remote")
         assert "bring_your_own" not in full
         assert "list_projects" not in full
-        assert len(full) == 28  # Excluding 2 local-only
+        assert len(full) == 31  # Excluding 2 local-only
 
     def test_write_only_loadout(self):
         """Write-only loadout should only have create/update/delete tools."""
@@ -42,20 +42,21 @@ class TestToolLoadouts:
         assert len(write_only) == 6
 
     def test_read_only_loadout(self):
-        """Read-only loadout should only have query/get tools."""
+        """Read-only loadout should only have query/get/search tools + sessions."""
         read_only = get_loadout("read_only", mode="local")
         assert "query_todos" in read_only
         assert "get_todo" in read_only
         assert "list_todos_by_status" in read_only
+        assert "inventorium_sessions_list" in read_only
         assert "add_todo" not in read_only
         assert "update_todo" not in read_only
         assert "delete_todo" not in read_only
-        assert len(read_only) == 8
+        assert len(read_only) == 15
 
     def test_lightweight_has_minimal_token_cost(self):
-        """Lightweight loadout should have 10 tools for token optimization."""
+        """Lightweight loadout should have 13 tools for token optimization."""
         lightweight = get_loadout("lightweight", mode="local")
-        assert len(lightweight) == 10
+        assert len(lightweight) == 13
         # Should include core functionality
         assert "add_todo" in lightweight
         assert "query_todos" in lightweight
@@ -63,14 +64,16 @@ class TestToolLoadouts:
         assert "mark_todo_complete" in lightweight
 
     def test_basic_loadout(self):
-        """Basic loadout should have 7 core CRUD tools."""
+        """Basic loadout should have 10 core CRUD + context + lesson lookup tools."""
         basic = get_loadout("basic", mode="local")
-        assert len(basic) == 7
+        assert len(basic) == 10
         assert "add_todo" in basic
         assert "query_todos" in basic
         assert "update_todo" in basic
         assert "get_todo" in basic
         assert "mark_todo_complete" in basic
+        assert "get_lesson" in basic
+        assert "search_lessons" in basic
 
     def test_minimal_loadout(self):
         """Minimal loadout should have only 4 essential tools."""
@@ -92,7 +95,7 @@ class TestToolLoadouts:
     def test_admin_loadout(self):
         """Admin loadout should have administrative and session tools."""
         admin = get_loadout("admin", mode="local")
-        assert len(admin) == 13
+        assert len(admin) == 14
         assert "query_todo_logs" in admin
         assert "inventorium_sessions_list" in admin
         assert "inventorium_sessions_fork" in admin
@@ -123,10 +126,10 @@ class TestToolLoadouts:
         """Get loadout info should return metadata about a loadout."""
         info = get_loadout_info("basic")
         assert info["name"] == "basic"
-        assert info["tool_count"] == 7
+        assert info["tool_count"] == 10
         assert "tools" in info
         assert "description" in info
-        assert len(info["tools"]) == 7
+        assert len(info["tools"]) == 10
 
     def test_invalid_loadout_defaults_to_full(self):
         """Invalid loadout name should default to full loadout."""

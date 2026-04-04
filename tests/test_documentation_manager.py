@@ -78,7 +78,7 @@ class TestDocumentationManager:
             ("lessons", DocumentationLevel.BASIC),  # lessons maps to basic
             ("admin", DocumentationLevel.ADMIN),
             ("full", DocumentationLevel.FULL),
-            ("hybrid_test", DocumentationLevel.BASIC),
+            ("agent_preflight", DocumentationLevel.BASIC),
             ("unknown_loadout", DocumentationLevel.FULL)  # fallback to full
         ]
 
@@ -105,8 +105,8 @@ class TestToolDocumentation:
 
         test_cases = [
             ("minimal", "Create task"),
-            ("basic", "Creates a task in the specified project"),
-            ("admin", "Creates a task in the specified project. Supports"),
+            ("basic", "Create task. Returns ID"),
+            ("admin", "Create task with metadata"),
             ("full", "Creates a task in the specified project with the given priority")
         ]
 

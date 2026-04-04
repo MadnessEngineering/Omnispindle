@@ -465,7 +465,7 @@ class OmniSpindleStdioServer:
                                 limit: Annotated[int, Field(description="Max results")] = 100,
                                 offset: Annotated[int, Field(description="Skip N results for pagination")] = 0
                             ) -> str:
-                                """List by status with pagination: pending|completed|initial|blocked|in_progress"""
+                                """Quick status filter. Returns todos matching a single status with pagination."""
                                 ctx = _create_context()
                                 return await func(status, limit, offset, ctx=ctx)
                             return list_todos_by_status
@@ -478,7 +478,7 @@ class OmniSpindleStdioServer:
                                 limit: Annotated[int, Field(description="Max results")] = 100,
                                 ctx: Annotated[Optional[str], Field(description="Additional context")] = None
                             ) -> str:
-                                """Text search across fields. Use 'project:Name' for project filter."""
+                                """Text search shorthand. Tokenized regex on description+project. Use 'project:Name' for project filter."""
                                 context = _create_context()
                                 return await func(query, fields, limit, ctx=context)
                             return search_todos
@@ -490,7 +490,7 @@ class OmniSpindleStdioServer:
                                 limit: Annotated[int, Field(description="Max results")] = 5,
                                 offset: Annotated[int, Field(description="Skip N results for pagination")] = 0
                             ) -> str:
-                                """List recent pending todos for project with pagination"""
+                                """Quick project filter. Returns recent pending todos for one project."""
                                 ctx = _create_context()
                                 return await func(project, limit, offset, ctx=ctx)
                             return list_project_todos
@@ -546,7 +546,7 @@ class OmniSpindleStdioServer:
                                 fields: Annotated[Optional[list], Field(description="Fields to search")] = None,
                                 limit: Annotated[int, Field(description="Max results")] = 100
                             ) -> str:
-                                """Text search lessons"""
+                                """Text search across lesson topic, content, and tags. For semantic search, use find_relevant."""
                                 ctx = _create_context()
                                 return await func(query, fields, limit, ctx=ctx)
                             return search_lessons
@@ -557,7 +557,7 @@ class OmniSpindleStdioServer:
                                 pattern: Annotated[str, Field(description="Regex pattern")],
                                 limit: Annotated[int, Field(description="Max results")] = 20
                             ) -> str:
-                                """Pattern match across topic and content"""
+                                """Pattern match on topic and content only (no tags). Use search_lessons for broader search."""
                                 ctx = _create_context()
                                 return await func(pattern, limit, ctx=ctx)
                             return grep_lessons
@@ -747,7 +747,7 @@ class OmniSpindleStdioServer:
                                 include_completed: Annotated[bool, Field(description="Include recent completed todos")] = False,
                                 since: Annotated[Optional[int], Field(description="Unix timestamp — adds changed_todos section with items modified after this time")] = None
                             ) -> str:
-                                """Bundle multiple context queries (todos, lessons, sessions) into one response for AI agent startup. Use 'since' for change detection."""
+                                """Session startup bundle. Returns slim todo/lesson/session summaries in one call. Use at conversation start. Use 'since' for change detection."""
                                 ctx = _create_context()
                                 return await func(project=project, keywords=keywords, include_completed=include_completed, since=since, ctx=ctx)
                             return get_context_bundle
@@ -759,7 +759,7 @@ class OmniSpindleStdioServer:
                                 types: Annotated[Optional[List[str]], Field(description="Types to search: ['todos', 'lessons'] (default: both)")] = None,
                                 limit: Annotated[int, Field(description="Max results per type (default: 5)")] = 5
                             ) -> str:
-                                """Semantic similarity search across todos and/or lessons. Uses vector embeddings when available, falls back to regex."""
+                                """Semantic search across todos AND lessons. Use for ad-hoc 'find related items' queries mid-task. Embeddings when available, regex fallback."""
                                 ctx = _create_context()
                                 return await func(query=query, types=types, limit=limit, ctx=ctx)
                             return find_relevant
@@ -772,7 +772,7 @@ class OmniSpindleStdioServer:
                                 tags: Annotated[Optional[List[str]], Field(description="Tags to narrow the search (e.g. ['deployment', 'auth'])")] = None,
                                 limit: Annotated[int, Field(description="Max lessons to return (default: 5)")] = 5
                             ) -> str:
-                                """Pre-processing RAG: query lessons learned before starting work. Returns past solutions, pitfalls, and suggestions ranked by relevance."""
+                                """Pre-task lessons check. Searches lessons only, classifies into solutions vs pitfalls. Use before starting work."""
                                 ctx = _create_context()
                                 return await func(intent=intent, project=project, tags=tags, limit=limit, ctx=ctx)
                             return preflight_rag
