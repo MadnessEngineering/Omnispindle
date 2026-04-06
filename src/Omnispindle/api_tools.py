@@ -106,7 +106,9 @@ async def add_todo(description: str, project: str, priority: str = "Medium",
         target_agent: Who should work on this (default: "user")
         notes: User-facing notes/context (default: "")
         ticket: External ticket reference (default: "")
-        metadata: Optional structured metadata
+        metadata: Optional structured metadata. Always include 'files': ['path/to/main/file']
+            so SwarmDesk can link this todo to its source node in the 3D view.
+            Example: {"files": ["src/components/Dashboard.js"], "tags": ["bug", "ui"]}
         ctx: Context with user information
 
     Returns a compact representation of the created todo with an ID for reference.
@@ -204,14 +206,31 @@ async def query_todos(filter: Optional[Dict[str, Any]] = None, projection: Optio
         logger.error(f"Failed to query todos via API: {str(e)}")
         return create_response(False, message=f"API error: {str(e)}")
 
+async def _resolve_todo_id_api(todo_id: str, client: "MadnessAPIClient") -> Optional[str]:
+    """Resolve a short 8-char ID prefix to a full UUID via API search."""
+    if len(todo_id) > 8:
+        return todo_id
+    api_response = await client.get_todos(limit=500)
+    if not api_response.success:
+        return None
+    api_data = api_response.data
+    todos_list = api_data.get('todos', api_data) if isinstance(api_data, dict) else api_data
+    for todo in (todos_list if isinstance(todos_list, list) else []):
+        full_id = todo.get('id', '')
+        if full_id.startswith(todo_id):
+            return full_id
+    return None
+
+
 async def update_todo(todo_id: str, updates: dict, ctx: Optional[Context] = None) -> str:
     """
     Update a todo with the provided changes.
     """
     try:
         auth_token, api_key = _get_auth_from_context(ctx)
-        
+
         async with MadnessAPIClient(auth_token=auth_token, api_key=api_key) as client:
+            todo_id = await _resolve_todo_id_api(todo_id, client) or todo_id
             api_response = await client.update_todo(todo_id, updates)
             
             if not api_response.success:
@@ -229,8 +248,9 @@ async def delete_todo(todo_id: str, ctx: Optional[Context] = None) -> str:
     """
     try:
         auth_token, api_key = _get_auth_from_context(ctx)
-        
+
         async with MadnessAPIClient(auth_token=auth_token, api_key=api_key) as client:
+            todo_id = await _resolve_todo_id_api(todo_id, client) or todo_id
             api_response = await client.delete_todo(todo_id)
             
             if not api_response.success:
@@ -248,8 +268,9 @@ async def get_todo(todo_id: str, ctx: Optional[Context] = None) -> str:
     """
     try:
         auth_token, api_key = _get_auth_from_context(ctx)
-        
+
         async with MadnessAPIClient(auth_token=auth_token, api_key=api_key) as client:
+            todo_id = await _resolve_todo_id_api(todo_id, client) or todo_id
             api_response = await client.get_todo(todo_id)
             
             if not api_response.success:
@@ -272,8 +293,9 @@ async def mark_todo_complete(todo_id: str, comment: Optional[str] = None, ctx: O
     """
     try:
         auth_token, api_key = _get_auth_from_context(ctx)
-        
+
         async with MadnessAPIClient(auth_token=auth_token, api_key=api_key) as client:
+            todo_id = await _resolve_todo_id_api(todo_id, client) or todo_id
             api_response = await client.complete_todo(todo_id, comment)
             
             if not api_response.success:

@@ -506,7 +506,9 @@ async def add_todo(description: str, project: str, priority: str = "Medium", tar
         target_agent: Who should work on this (default: "user")
         notes: User-facing notes/context about the todo (default: "")
         ticket: External ticket reference (default: "")
-        metadata: Optional structured metadata (tags, files, etc.)
+        metadata: Optional structured metadata. Always include 'files': ['path/to/main/file']
+            so SwarmDesk can link this todo to its source node in the 3D view.
+            Example: {"files": ["src/components/Dashboard.js"], "tags": ["bug", "ui"]}
         ctx: Context with user information
 
     Returns a compact representation of the created todo with an ID for reference.
@@ -635,6 +637,32 @@ async def query_todos(filter: Optional[Dict[str, Any]] = None, projection: Optio
         logger.error(f"Failed to query todos: {str(e)}")
         return create_response(False, message=str(e))
 
+def _resolve_todo_id(todo_id: str, user_context, db_conn) -> Optional[str]:
+    """
+    Resolve a short ID prefix (e.g. 'bbb92e6d') to a full UUID.
+    Returns the full ID if found, None otherwise.
+    Searches user DB first, then shared DB.
+    """
+    # Already looks like a full UUID — return as-is
+    if len(todo_id) > 8:
+        return todo_id
+
+    pattern = re.compile(f"^{re.escape(todo_id)}", re.IGNORECASE)
+
+    if user_context and user_context.get('sub'):
+        user_collections = db_conn.get_collections(user_context)
+        todo = user_collections['todos'].find_one({"id": pattern})
+        if todo:
+            return todo['id']
+
+    shared_collections = db_conn.get_collections(None)
+    todo = shared_collections['todos'].find_one({"id": pattern})
+    if todo:
+        return todo['id']
+
+    return None
+
+
 async def update_todo(todo_id: str, updates: dict, ctx: Optional[Context] = None) -> str:
     """
     Update a todo with the provided changes.
@@ -652,6 +680,10 @@ async def update_todo(todo_id: str, updates: dict, ctx: Optional[Context] = None
     # NOTE: Metadata validation moved to AFTER fetching existing todo for proper merging
     try:
         user_context = ctx.user if ctx else None
+        resolved = _resolve_todo_id(todo_id, user_context, db_connection)
+        if resolved is None:
+            return create_response(False, message=f"Todo {todo_id} not found.")
+        todo_id = resolved
         searched_databases = []
         existing_todo = None
         todos_collection = None
@@ -767,8 +799,14 @@ async def delete_todo(todo_id: str, ctx: Optional[Context] = None) -> str:
         return create_response(False, message="Demo mode: Todo deletion is disabled. Please authenticate to delete todos.")
 
     try:
+        user_context = ctx.user if ctx else None
+        resolved = _resolve_todo_id(todo_id, user_context, db_connection)
+        if resolved is None:
+            return create_response(False, message=f"Todo {todo_id} not found.")
+        todo_id = resolved
+
         # Get user-scoped collections
-        collections = db_connection.get_collections(ctx.user if ctx else None)
+        collections = db_connection.get_collections(user_context)
         todos_collection = collections['todos']
 
         existing_todo = todos_collection.find_one({"id": todo_id})
@@ -801,6 +839,11 @@ async def get_todo(todo_id: str, ctx: Optional[Context] = None) -> str:
     """
     try:
         user_context = ctx.user if ctx else None
+        resolved = _resolve_todo_id(todo_id, user_context, db_connection)
+        if resolved is None:
+            searched_locations = f"user database and shared database"
+            return create_response(False, message=f"Todo with ID {todo_id} not found. Searched in: {searched_locations}")
+        todo_id = resolved
         searched_databases = []
 
         # First, try user-specific database
@@ -850,6 +893,10 @@ async def mark_todo_complete(todo_id: str, comment: Optional[str] = None, ctx: O
 
     try:
         user_context = ctx.user if ctx else None
+        resolved = _resolve_todo_id(todo_id, user_context, db_connection)
+        if resolved is None:
+            return create_response(False, message=f"Todo {todo_id} not found.")
+        todo_id = resolved
         searched_databases = []
         existing_todo = None
         todos_collection = None

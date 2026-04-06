@@ -85,3 +85,4 @@ Thumbs.db
 *.temp
 /.claude/data
 uv.lock
+/.claude/worktrees
