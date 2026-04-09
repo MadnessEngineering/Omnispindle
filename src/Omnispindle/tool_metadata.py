@@ -16,6 +16,12 @@ class ToolAccessLevel(str, Enum):
     PRIVILEGED = "privileged"        # Requires admin access
 
 
+class ToolTier(str, Enum):
+    """Subscription tier required to use a tool."""
+    FREE = "free"       # Available to all users
+    PRO = "pro"         # Requires Madness Pass subscription
+
+
 class ToolFeature(str, Enum):
     """Features that tools may provide."""
     AUTO_GIT_METADATA = "auto_git_metadata"      # Adds git context automatically
@@ -144,6 +150,39 @@ TOOL_FEATURES: Dict[str, Set[ToolFeature]] = {
         ToolFeature.DATABASE_READ,
     },
 }
+
+
+# Subscription tier requirements for tools
+# Tools not listed here default to FREE (available to all users)
+TOOL_TIERS: Dict[str, ToolTier] = {
+    # Inventorium session tools — AI agent workspace (pro only)
+    "inventorium_sessions_list": ToolTier.PRO,
+    "inventorium_sessions_get": ToolTier.PRO,
+    "inventorium_sessions_create": ToolTier.PRO,
+    "inventorium_sessions_spawn": ToolTier.PRO,
+    "inventorium_sessions_fork": ToolTier.PRO,
+    "inventorium_sessions_genealogy": ToolTier.PRO,
+    "inventorium_sessions_tree": ToolTier.PRO,
+    "inventorium_todos_link_session": ToolTier.PRO,
+    # Semantic search / RAG (pro only)
+    "find_relevant": ToolTier.PRO,
+    "preflight_rag": ToolTier.PRO,
+    # MQTT broadcast (pro only)
+    "point_out_obvious": ToolTier.PRO,
+}
+
+
+def is_pro_tool(tool_name: str) -> bool:
+    """Check if a tool requires a Pro subscription."""
+    return TOOL_TIERS.get(tool_name, ToolTier.FREE) == ToolTier.PRO
+
+
+def get_pro_tools() -> Set[str]:
+    """Get all tools that require a Pro subscription."""
+    return {
+        tool for tool, tier in TOOL_TIERS.items()
+        if tier == ToolTier.PRO
+    }
 
 
 def is_remote_safe(tool_name: str) -> bool:

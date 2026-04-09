@@ -8,7 +8,7 @@ This module is the single source of truth for tool registration across:
 """
 
 from typing import Dict, List
-from .tool_metadata import filter_remote_safe_loadout
+from .tool_metadata import filter_remote_safe_loadout, is_pro_tool
 
 
 # Base loadout definitions (before security filtering for remote mode)
@@ -134,6 +134,24 @@ def get_loadout(loadout_name: str, mode: str = "local") -> List[str]:
         return filter_remote_safe_loadout(tools)
 
     return tools
+
+
+def filter_by_tier(tools: List[str], tier: str) -> List[str]:
+    """
+    Filter tool list by user subscription tier.
+
+    Pro/admin users see all tools. Free users see only free-tier tools.
+
+    Args:
+        tools: List of tool names to filter
+        tier: User subscription tier ('free', 'pro', 'admin')
+
+    Returns:
+        Filtered list of tools available to the user's tier
+    """
+    if tier in ("pro", "admin"):
+        return tools
+    return [tool for tool in tools if not is_pro_tool(tool)]
 
 
 def get_all_loadouts() -> Dict[str, List[str]]:

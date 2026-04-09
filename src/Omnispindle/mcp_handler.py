@@ -9,7 +9,8 @@ import asyncio
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
-from .tool_loadouts import get_loadout
+from .tool_loadouts import get_loadout, filter_by_tier
+from .tool_metadata import is_pro_tool
 
 logger = logging.getLogger(__name__)
 
@@ -490,7 +491,11 @@ async def mcp_handler(request: Request, get_current_user: Callable[[], Coroutine
             loadout = os.getenv("OMNISPINDLE_TOOL_LOADOUT", "full")
             enabled_tools = get_loadout(loadout, mode="remote")
 
-            logger.info(f"🔧 MCP tools/list: Loading '{loadout}' loadout (remote mode, {len(enabled_tools)} tools)")
+            # Filter by subscription tier — free users don't see pro-only tools
+            user_tier = user.get("subscription_tier", "free")
+            enabled_tools = filter_by_tier(enabled_tools, user_tier)
+
+            logger.info(f"🔧 MCP tools/list: Loading '{loadout}' loadout (remote mode, tier={user_tier}, {len(enabled_tools)} tools)")
 
             # Build tools list dynamically from TOOL_SCHEMAS
             tools = [
@@ -571,6 +576,19 @@ async def mcp_handler(request: Request, get_current_user: Callable[[], Coroutine
                     "jsonrpc": "2.0",
                     "id": request_id,
                     "error": {"code": -32601, "message": f"Method not found: {tool_name}"}
+                })
+
+            # Enforce subscription tier — block pro tools for free users
+            user_tier = user.get("subscription_tier", "free")
+            if is_pro_tool(tool_name) and user_tier not in ("pro", "admin"):
+                logger.info(f"🚫 Tier gate: {user.get('email', 'unknown')} blocked from pro tool '{tool_name}' (tier: {user_tier})")
+                return JSONResponse(content={
+                    "jsonrpc": "2.0",
+                    "id": request_id,
+                    "error": {
+                        "code": -32001,
+                        "message": f"'{tool_name}' requires a Madness Pass. Upgrade at madnessinteractive.cc to unlock pro tools."
+                    }
                 })
 
             try:
