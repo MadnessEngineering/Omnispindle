@@ -199,7 +199,7 @@ MQTT_PORT=1883
 
 Omnispindle is the AI interface layer. The rest of the workshop:
 
-**[Inventorium](https://github.com/DanEdens/Inventorium)** — React web dashboard and SwarmDesk 3D spatial workspace. Humans use this. It reads todos and sessions via the REST API directly — not MCP, which is strictly for AI agents. If you're clicking buttons, you're in Inventorium. If you're an agent, you're calling MCP tools.
+**[Inventorium](https://madnessinteractive.cc)** — React web dashboard and SwarmDesk 3D spatial workspace. Humans use this. It reads todos and sessions via the REST API directly — not MCP, which is strictly for AI agents. If you're clicking buttons, you're in Inventorium. If you're an agent, you're calling MCP tools.
 
 **[cartogomancy](https://github.com/DanEdens/cartogomancy)** — JS/TS codebase analysis tool (`npm install -g @madnessengineering/cartogomancy`). Point it at any JavaScript or TypeScript project; get back a rich JSON map of structure, complexity, git blame, and cross-references. Feed that map to SwarmDesk and your codebase becomes a 3D city you can walk through.
 
