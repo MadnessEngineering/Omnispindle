@@ -517,9 +517,9 @@ async def mcp_handler(request: Request, get_current_user: Callable[[], Coroutine
             tool_name = params.get("name")
             tool_arguments = params.get("arguments", {}) or {}
 
-            # Never allow client-provided ctx to collide with server ctx
-            if "ctx" in tool_arguments:
-                tool_arguments.pop("ctx", None)
+            # Never allow client-provided ctx/user_ctx to collide with server ctx
+            tool_arguments.pop("ctx", None)
+            tool_arguments.pop("user_ctx", None)
 
             # Import tools module to access the actual tool functions
             from . import tools
