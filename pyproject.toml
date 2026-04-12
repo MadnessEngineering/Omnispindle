@@ -44,7 +44,7 @@ classifiers = [
     "Environment :: Web Environment"
 ]
 dependencies = [
-    "fastmcp>=0.1.0",
+    "fastmcp==2.2.8",
     "pymongo>=4.0.0", 
     "paho-mqtt>=2.0.0",
     "python-dotenv>=0.19.0",

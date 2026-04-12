@@ -1,4 +1,4 @@
-fastmcp>=0.1.0
+fastmcp==2.2.8
 lmstudio
 pymongo>=4.0.0
 paho-mqtt>=2.0.0
