@@ -226,6 +226,22 @@ async def update_todo(todo_id: str, updates: dict, ctx: Optional[Context] = None
     """
     Update a todo with the provided changes.
     """
+    # Completion must go through mark_todo_complete — not update_todo
+    if updates.get("status", "").lower() == "completed":
+        return create_response(
+            False,
+            message=(
+                f"Use mark_todo_complete to complete a todo — not update_todo.\n\n"
+                f"Why: mark_todo_complete records git context (branch & commit at completion), "
+                f"calculates duration, stores a completion comment in metadata, and writes a "
+                f"proper audit log entry. Bypassing it via update_todo loses all of that.\n\n"
+                f"Correct call:\n"
+                f"  mark_todo_complete(todo_id=\"{todo_id}\", comment=\"what you finished and why\")\n\n"
+                f"The comment parameter is optional but strongly encouraged — it is the only "
+                f"place to capture what was actually accomplished."
+            ),
+        )
+
     try:
         auth_token, api_key = _get_auth_from_context(ctx)
 

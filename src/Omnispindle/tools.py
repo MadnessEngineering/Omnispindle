@@ -672,6 +672,22 @@ async def update_todo(todo_id: str, updates: dict, ctx: Optional[Context] = None
     if _is_read_only_user(ctx):
         return create_response(False, message="Demo mode: Todo updates are disabled. Please authenticate to modify todos.")
 
+    # Completion must go through mark_todo_complete — not update_todo
+    if updates.get("status", "").lower() == "completed":
+        return create_response(
+            False,
+            message=(
+                f"Use mark_todo_complete to complete a todo — not update_todo.\n\n"
+                f"Why: mark_todo_complete records git context (branch & commit at completion), "
+                f"calculates duration, stores a completion comment in metadata, and writes a "
+                f"proper audit log entry. Bypassing it via update_todo loses all of that.\n\n"
+                f"Correct call:\n"
+                f"  mark_todo_complete(todo_id=\"{todo_id}\", comment=\"what you finished and why\")\n\n"
+                f"The comment parameter is optional but strongly encouraged — it is the only "
+                f"place to capture what was actually accomplished."
+            ),
+        )
+
     if "updated_at" not in updates:
         updates["updated_at"] = int(datetime.now(timezone.utc).timestamp())
     if "updated_by" not in updates:
