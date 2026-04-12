@@ -56,11 +56,18 @@ else:
     logger.warning("FastMCP doesn't support app.add_middleware - using fallback header capture")
 
 
-async def get_authenticated_context_from_mcp(mcp_ctx: MCPContext) -> Context:
+async def get_authenticated_context_from_mcp(mcp_ctx: MCPContext, user_ctx: Optional[Dict[str, Any]] = None) -> Context:
     """
     Extract and verify Auth0 token from MCP context.
     Returns authenticated user context or raises an error.
     """
+    # Fast path: backend already verified user, use pre-resolved context dict
+    if user_ctx and isinstance(user_ctx, dict):
+        user_data = user_ctx.get('user', user_ctx)
+        if user_data and user_data.get('sub'):
+            logger.info(f"Using pre-resolved user context from backend: {user_data.get('sub')}")
+            return Context(user=user_data)
+
     token = None
     
     # Debug: Log what MCP context contains
@@ -186,224 +193,224 @@ logger.info(f"Loading '{loadout_name}' loadout (remote mode, {len(selected_tools
 # Register specific tools manually for HTTP transport compatibility
 if "add_todo" in selected_tools:
     @mcp.tool()
-    async def add_todo(description: str, project: str, priority: str = "Medium", target_agent: str = "user", notes: str = "", ticket: str = "", metadata: Optional[Dict[str, Any]] = None, ctx: MCPContext = None):
+    async def add_todo(description: str, project: str, priority: str = "Medium", target_agent: str = "user", notes: str = "", ticket: str = "", metadata: Optional[Dict[str, Any]] = None, user_ctx: Optional[Dict[str, Any]] = None, ctx: MCPContext = None):
         """Creates a task in the specified project with the given priority and target agent."""
-        auth_ctx = await get_authenticated_context_from_mcp(ctx)
+        auth_ctx = await get_authenticated_context_from_mcp(ctx, user_ctx)
         return await tools.add_todo(description, project, priority, target_agent, notes, ticket, metadata, auth_ctx)
 
 if "query_todos" in selected_tools:
     @mcp.tool()
-    async def query_todos(filter: Optional[Dict[str, Any]] = None, projection: Optional[Dict[str, Any]] = None, limit: int = 100, offset: int = 0, exclude_completed: bool = True, ctx: MCPContext = None):
+    async def query_todos(filter: Optional[Dict[str, Any]] = None, projection: Optional[Dict[str, Any]] = None, limit: int = 100, offset: int = 0, exclude_completed: bool = True, user_ctx: Optional[Dict[str, Any]] = None, ctx: MCPContext = None):
         """Query todos with flexible filtering options from user's database. Excludes completed items by default."""
-        auth_ctx = await get_authenticated_context_from_mcp(ctx)
+        auth_ctx = await get_authenticated_context_from_mcp(ctx, user_ctx)
         return await tools.query_todos(filter, projection, limit, offset, exclude_completed, auth_ctx)
 
 if "get_todo" in selected_tools:
     @mcp.tool()
-    async def get_todo(todo_id: str, ctx: MCPContext = None):
+    async def get_todo(todo_id: str, user_ctx: Optional[Dict[str, Any]] = None, ctx: MCPContext = None):
         """Get a specific todo item by its ID."""
-        auth_ctx = await get_authenticated_context_from_mcp(ctx)
+        auth_ctx = await get_authenticated_context_from_mcp(ctx, user_ctx)
         return await tools.get_todo(todo_id, auth_ctx)
 
 if "mark_todo_complete" in selected_tools:
     @mcp.tool()
-    async def mark_todo_complete(todo_id: str, comment: Optional[str] = None, ctx: MCPContext = None):
+    async def mark_todo_complete(todo_id: str, comment: Optional[str] = None, user_ctx: Optional[Dict[str, Any]] = None, ctx: MCPContext = None):
         """Mark a todo as completed."""
-        auth_ctx = await get_authenticated_context_from_mcp(ctx)
+        auth_ctx = await get_authenticated_context_from_mcp(ctx, user_ctx)
         return await tools.mark_todo_complete(todo_id, comment, auth_ctx)
 
 if "update_todo" in selected_tools:
     @mcp.tool()
-    async def update_todo(todo_id: str, updates: Dict[str, Any], ctx: MCPContext = None):
+    async def update_todo(todo_id: str, updates: Dict[str, Any], user_ctx: Optional[Dict[str, Any]] = None, ctx: MCPContext = None):
         """Update an existing todo with the provided changes."""
-        auth_ctx = await get_authenticated_context_from_mcp(ctx)
+        auth_ctx = await get_authenticated_context_from_mcp(ctx, user_ctx)
         return await tools.update_todo(todo_id, updates, auth_ctx)
 
 if "list_todos_by_status" in selected_tools:
     @mcp.tool()
-    async def list_todos_by_status(status: str, limit: int = 100, offset: int = 0, ctx: MCPContext = None):
+    async def list_todos_by_status(status: str, limit: int = 100, offset: int = 0, user_ctx: Optional[Dict[str, Any]] = None, ctx: MCPContext = None):
         """List todos filtered by status with pagination."""
-        auth_ctx = await get_authenticated_context_from_mcp(ctx)
+        auth_ctx = await get_authenticated_context_from_mcp(ctx, user_ctx)
         return await tools.list_todos_by_status(status, limit, offset, auth_ctx)
 
 if "list_project_todos" in selected_tools:
     @mcp.tool()
-    async def list_project_todos(project: str, limit: int = 5, offset: int = 0, ctx: MCPContext = None):
+    async def list_project_todos(project: str, limit: int = 5, offset: int = 0, user_ctx: Optional[Dict[str, Any]] = None, ctx: MCPContext = None):
         """List recent todos for a specific project with pagination."""
-        auth_ctx = await get_authenticated_context_from_mcp(ctx)
+        auth_ctx = await get_authenticated_context_from_mcp(ctx, user_ctx)
         return await tools.list_project_todos(project, limit, offset, auth_ctx)
 
 # ADDED: Missing CRUD tools for remote parity
 if "delete_todo" in selected_tools:
     @mcp.tool()
-    async def delete_todo(todo_id: str, ctx: MCPContext = None):
+    async def delete_todo(todo_id: str, user_ctx: Optional[Dict[str, Any]] = None, ctx: MCPContext = None):
         """Delete a todo item by its ID."""
-        auth_ctx = await get_authenticated_context_from_mcp(ctx)
+        auth_ctx = await get_authenticated_context_from_mcp(ctx, user_ctx)
         return await tools.delete_todo(todo_id, auth_ctx)
 
 if "search_todos" in selected_tools:
     @mcp.tool()
-    async def search_todos(query: str, limit: int = 100, ctx: MCPContext = None):
+    async def search_todos(query: str, limit: int = 100, user_ctx: Optional[Dict[str, Any]] = None, ctx: MCPContext = None):
         """Search todos by text query."""
-        auth_ctx = await get_authenticated_context_from_mcp(ctx)
+        auth_ctx = await get_authenticated_context_from_mcp(ctx, user_ctx)
         return await tools.search_todos(query, limit, auth_ctx)
 
 # ADDED: Lesson management tools
 if "add_lesson" in selected_tools:
     @mcp.tool()
-    async def add_lesson(language: str, topic: str, lesson_learned: str, tags: Optional[list] = None, ctx: MCPContext = None):
+    async def add_lesson(language: str, topic: str, lesson_learned: str, tags: Optional[list] = None, user_ctx: Optional[Dict[str, Any]] = None, ctx: MCPContext = None):
         """Add a lesson learned."""
-        auth_ctx = await get_authenticated_context_from_mcp(ctx)
+        auth_ctx = await get_authenticated_context_from_mcp(ctx, user_ctx)
         return await tools.add_lesson(language, topic, lesson_learned, tags, auth_ctx)
 
 if "get_lesson" in selected_tools:
     @mcp.tool()
-    async def get_lesson(lesson_id: str, ctx: MCPContext = None):
+    async def get_lesson(lesson_id: str, user_ctx: Optional[Dict[str, Any]] = None, ctx: MCPContext = None):
         """Get a specific lesson by ID."""
-        auth_ctx = await get_authenticated_context_from_mcp(ctx)
+        auth_ctx = await get_authenticated_context_from_mcp(ctx, user_ctx)
         return await tools.get_lesson(lesson_id, auth_ctx)
 
 if "update_lesson" in selected_tools:
     @mcp.tool()
-    async def update_lesson(lesson_id: str, updates: Dict[str, Any], ctx: MCPContext = None):
+    async def update_lesson(lesson_id: str, updates: Dict[str, Any], user_ctx: Optional[Dict[str, Any]] = None, ctx: MCPContext = None):
         """Update an existing lesson."""
-        auth_ctx = await get_authenticated_context_from_mcp(ctx)
+        auth_ctx = await get_authenticated_context_from_mcp(ctx, user_ctx)
         return await tools.update_lesson(lesson_id, updates, auth_ctx)
 
 if "delete_lesson" in selected_tools:
     @mcp.tool()
-    async def delete_lesson(lesson_id: str, ctx: MCPContext = None):
+    async def delete_lesson(lesson_id: str, user_ctx: Optional[Dict[str, Any]] = None, ctx: MCPContext = None):
         """Delete a lesson by ID."""
-        auth_ctx = await get_authenticated_context_from_mcp(ctx)
+        auth_ctx = await get_authenticated_context_from_mcp(ctx, user_ctx)
         return await tools.delete_lesson(lesson_id, auth_ctx)
 
 if "search_lessons" in selected_tools:
     @mcp.tool()
-    async def search_lessons(query: str, fields: Optional[list] = None, limit: int = 50, ctx: MCPContext = None):
+    async def search_lessons(query: str, fields: Optional[list] = None, limit: int = 50, user_ctx: Optional[Dict[str, Any]] = None, ctx: MCPContext = None):
         """Search lessons by text query."""
-        auth_ctx = await get_authenticated_context_from_mcp(ctx)
+        auth_ctx = await get_authenticated_context_from_mcp(ctx, user_ctx)
         return await tools.search_lessons(query, fields, limit, auth_ctx)
 
 if "grep_lessons" in selected_tools:
     @mcp.tool()
-    async def grep_lessons(pattern: str, limit: int = 50, ctx: MCPContext = None):
+    async def grep_lessons(pattern: str, limit: int = 50, user_ctx: Optional[Dict[str, Any]] = None, ctx: MCPContext = None):
         """Search lessons using regex pattern."""
-        auth_ctx = await get_authenticated_context_from_mcp(ctx)
+        auth_ctx = await get_authenticated_context_from_mcp(ctx, user_ctx)
         return await tools.grep_lessons(pattern, limit, auth_ctx)
 
 if "list_lessons" in selected_tools:
     @mcp.tool()
-    async def list_lessons(limit: int = 50, ctx: MCPContext = None):
+    async def list_lessons(limit: int = 50, user_ctx: Optional[Dict[str, Any]] = None, ctx: MCPContext = None):
         """List all lessons."""
-        auth_ctx = await get_authenticated_context_from_mcp(ctx)
+        auth_ctx = await get_authenticated_context_from_mcp(ctx, user_ctx)
         return await tools.list_lessons(limit, auth_ctx)
 
 # Admin/System tools
 if "query_todo_logs" in selected_tools:
     @mcp.tool()
-    async def query_todo_logs(filter_type: str = "all", project: str = "all", page: int = 1, page_size: int = 20, unified: bool = False, ctx: MCPContext = None):
+    async def query_todo_logs(filter_type: str = "all", project: str = "all", page: int = 1, page_size: int = 20, unified: bool = False, user_ctx: Optional[Dict[str, Any]] = None, ctx: MCPContext = None):
         """Query todo audit logs with filtering and pagination."""
-        auth_ctx = await get_authenticated_context_from_mcp(ctx)
+        auth_ctx = await get_authenticated_context_from_mcp(ctx, user_ctx)
         return await tools.query_todo_logs(filter_type, project, page, page_size, unified, auth_ctx)
 
 if "explain" in selected_tools:
     @mcp.tool()
-    async def explain(topic: str, brief: bool = False, ctx: MCPContext = None):
+    async def explain(topic: str, brief: bool = False, user_ctx: Optional[Dict[str, Any]] = None, ctx: MCPContext = None):
         """Get explanation for a topic from the knowledge base."""
-        auth_ctx = await get_authenticated_context_from_mcp(ctx)
+        auth_ctx = await get_authenticated_context_from_mcp(ctx, user_ctx)
         return await tools.explain_tool(topic, brief, auth_ctx)
 
 if "add_explanation" in selected_tools:
     @mcp.tool()
-    async def add_explanation(topic: str, content: str, kind: str = "concept", author: str = "system", ctx: MCPContext = None):
+    async def add_explanation(topic: str, content: str, kind: str = "concept", author: str = "system", user_ctx: Optional[Dict[str, Any]] = None, ctx: MCPContext = None):
         """Add explanation to the knowledge base."""
-        auth_ctx = await get_authenticated_context_from_mcp(ctx)
+        auth_ctx = await get_authenticated_context_from_mcp(ctx, user_ctx)
         return await tools.add_explanation(topic, content, kind, author, auth_ctx)
 
 if "point_out_obvious" in selected_tools:
     @mcp.tool()
-    async def point_out_obvious(observation: str, sarcasm_level: int = 5, ctx: MCPContext = None):
+    async def point_out_obvious(observation: str, sarcasm_level: int = 5, user_ctx: Optional[Dict[str, Any]] = None, ctx: MCPContext = None):
         """Point out something obvious with varying levels of humor."""
-        auth_ctx = await get_authenticated_context_from_mcp(ctx)
+        auth_ctx = await get_authenticated_context_from_mcp(ctx, user_ctx)
         return await tools.point_out_obvious(observation, sarcasm_level, auth_ctx)
 
 # Session management tools
 if "inventorium_sessions_list" in selected_tools:
     @mcp.tool()
-    async def inventorium_sessions_list(project: Optional[str] = None, limit: int = 50, ctx: MCPContext = None):
+    async def inventorium_sessions_list(project: Optional[str] = None, limit: int = 50, user_ctx: Optional[Dict[str, Any]] = None, ctx: MCPContext = None):
         """List chat sessions, optionally filtered by project."""
-        auth_ctx = await get_authenticated_context_from_mcp(ctx)
+        auth_ctx = await get_authenticated_context_from_mcp(ctx, user_ctx)
         return await tools.inventorium_sessions_list(project, limit, auth_ctx)
 
 if "inventorium_sessions_get" in selected_tools:
     @mcp.tool()
-    async def inventorium_sessions_get(session_id: str, ctx: MCPContext = None):
+    async def inventorium_sessions_get(session_id: str, user_ctx: Optional[Dict[str, Any]] = None, ctx: MCPContext = None):
         """Get a specific session by ID."""
-        auth_ctx = await get_authenticated_context_from_mcp(ctx)
+        auth_ctx = await get_authenticated_context_from_mcp(ctx, user_ctx)
         return await tools.inventorium_sessions_get(session_id, auth_ctx)
 
 if "inventorium_sessions_create" in selected_tools:
     @mcp.tool()
-    async def inventorium_sessions_create(project: str, title: Optional[str] = None, initial_prompt: Optional[str] = None, agentic_tool: str = "claude-code", ctx: MCPContext = None):
+    async def inventorium_sessions_create(project: str, title: Optional[str] = None, initial_prompt: Optional[str] = None, agentic_tool: str = "claude-code", user_ctx: Optional[Dict[str, Any]] = None, ctx: MCPContext = None):
         """Create a new chat session for a project."""
-        auth_ctx = await get_authenticated_context_from_mcp(ctx)
+        auth_ctx = await get_authenticated_context_from_mcp(ctx, user_ctx)
         return await tools.inventorium_sessions_create(project, title, initial_prompt, agentic_tool, auth_ctx)
 
 if "inventorium_sessions_spawn" in selected_tools:
     @mcp.tool()
-    async def inventorium_sessions_spawn(parent_session_id: str, prompt: str, todo_id: Optional[str] = None, title: Optional[str] = None, ctx: MCPContext = None):
+    async def inventorium_sessions_spawn(parent_session_id: str, prompt: str, todo_id: Optional[str] = None, title: Optional[str] = None, user_ctx: Optional[Dict[str, Any]] = None, ctx: MCPContext = None):
         """Spawn a child session from a parent session."""
-        auth_ctx = await get_authenticated_context_from_mcp(ctx)
+        auth_ctx = await get_authenticated_context_from_mcp(ctx, user_ctx)
         return await tools.inventorium_sessions_spawn(parent_session_id, prompt, todo_id, title, auth_ctx)
 
 if "inventorium_sessions_fork" in selected_tools:
     @mcp.tool()
-    async def inventorium_sessions_fork(session_id: str, title: Optional[str] = None, include_messages: bool = True, inherit_todos: bool = True, initial_status: Optional[str] = None, ctx: MCPContext = None):
+    async def inventorium_sessions_fork(session_id: str, title: Optional[str] = None, include_messages: bool = True, inherit_todos: bool = True, initial_status: Optional[str] = None, user_ctx: Optional[Dict[str, Any]] = None, ctx: MCPContext = None):
         """Fork an existing session into a new branch."""
-        auth_ctx = await get_authenticated_context_from_mcp(ctx)
+        auth_ctx = await get_authenticated_context_from_mcp(ctx, user_ctx)
         return await tools.inventorium_sessions_fork(session_id, title, include_messages, inherit_todos, initial_status, auth_ctx)
 
 if "inventorium_sessions_genealogy" in selected_tools:
     @mcp.tool()
-    async def inventorium_sessions_genealogy(session_id: str, ctx: MCPContext = None):
+    async def inventorium_sessions_genealogy(session_id: str, user_ctx: Optional[Dict[str, Any]] = None, ctx: MCPContext = None):
         """Get session genealogy (parent/child chain)."""
-        auth_ctx = await get_authenticated_context_from_mcp(ctx)
+        auth_ctx = await get_authenticated_context_from_mcp(ctx, user_ctx)
         return await tools.inventorium_sessions_genealogy(session_id, auth_ctx)
 
 if "inventorium_sessions_tree" in selected_tools:
     @mcp.tool()
-    async def inventorium_sessions_tree(project: Optional[str] = None, limit: int = 200, ctx: MCPContext = None):
+    async def inventorium_sessions_tree(project: Optional[str] = None, limit: int = 200, user_ctx: Optional[Dict[str, Any]] = None, ctx: MCPContext = None):
         """Get full session tree for a project."""
-        auth_ctx = await get_authenticated_context_from_mcp(ctx)
+        auth_ctx = await get_authenticated_context_from_mcp(ctx, user_ctx)
         return await tools.inventorium_sessions_tree(project, limit, auth_ctx)
 
 if "inventorium_todos_link_session" in selected_tools:
     @mcp.tool()
-    async def inventorium_todos_link_session(todo_id: str, session_id: str, ctx: MCPContext = None):
+    async def inventorium_todos_link_session(todo_id: str, session_id: str, user_ctx: Optional[Dict[str, Any]] = None, ctx: MCPContext = None):
         """Link a todo to a chat session."""
-        auth_ctx = await get_authenticated_context_from_mcp(ctx)
+        auth_ctx = await get_authenticated_context_from_mcp(ctx, user_ctx)
         return await tools.inventorium_todos_link_session(todo_id, session_id, auth_ctx)
 
 # RAG / Context tools
 if "get_context_bundle" in selected_tools:
     @mcp.tool()
-    async def get_context_bundle(project: Optional[str] = None, keywords: Optional[List[str]] = None, include_completed: bool = False, since: Optional[int] = None, ctx: MCPContext = None):
+    async def get_context_bundle(project: Optional[str] = None, keywords: Optional[List[str]] = None, include_completed: bool = False, since: Optional[int] = None, user_ctx: Optional[Dict[str, Any]] = None, ctx: MCPContext = None):
         """Session startup bundle. Returns slim todo/lesson/session summaries in one call."""
-        auth_ctx = await get_authenticated_context_from_mcp(ctx)
+        auth_ctx = await get_authenticated_context_from_mcp(ctx, user_ctx)
         return await tools.get_context_bundle(project=project, keywords=keywords, include_completed=include_completed, since=since, ctx=auth_ctx)
 
 if "find_relevant" in selected_tools:
     @mcp.tool()
-    async def find_relevant(query: str, types: Optional[List[str]] = None, limit: int = 5, ctx: MCPContext = None):
+    async def find_relevant(query: str, types: Optional[List[str]] = None, limit: int = 5, user_ctx: Optional[Dict[str, Any]] = None, ctx: MCPContext = None):
         """Semantic search across todos and lessons. Uses embeddings when available, falls back to regex."""
-        auth_ctx = await get_authenticated_context_from_mcp(ctx)
+        auth_ctx = await get_authenticated_context_from_mcp(ctx, user_ctx)
         return await tools.find_relevant(query=query, types=types, limit=limit, ctx=auth_ctx)
 
 if "preflight_rag" in selected_tools:
     @mcp.tool()
-    async def preflight_rag(intent: str, project: Optional[str] = None, tags: Optional[List[str]] = None, limit: int = 5, ctx: MCPContext = None):
+    async def preflight_rag(intent: str, project: Optional[str] = None, tags: Optional[List[str]] = None, limit: int = 5, user_ctx: Optional[Dict[str, Any]] = None, ctx: MCPContext = None):
         """Pre-task lessons check. Searches lessons for past solutions and pitfalls before starting work."""
-        auth_ctx = await get_authenticated_context_from_mcp(ctx)
+        auth_ctx = await get_authenticated_context_from_mcp(ctx, user_ctx)
         return await tools.preflight_rag(intent=intent, project=project, tags=tags, limit=limit, ctx=auth_ctx)
 
 # Log all registered tools
