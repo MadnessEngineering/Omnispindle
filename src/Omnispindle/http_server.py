@@ -12,7 +12,9 @@ import os
 from typing import Dict, Any, Optional, Union, List
 
 from fastmcp import FastMCP, Context as MCPContext
-from fastmcp.utilities.http import get_current_starlette_request
+# get_current_starlette_request removed in fastmcp 3.x — use global header capture instead
+def get_current_starlette_request():
+    return None
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from dotenv import load_dotenv
