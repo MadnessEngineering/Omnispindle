@@ -30,7 +30,7 @@ apply_patches()
 load_dotenv()
 
 # Import shared loadout definitions
-from .tool_loadouts import get_loadout
+from src.Omnispindle.tool_loadouts import get_loadout
 
 # Global variable to store current request headers (not ideal but might work)
 _current_request_headers = {}
