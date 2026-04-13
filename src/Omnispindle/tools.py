@@ -488,6 +488,25 @@ def validate_project_name(project: str, ctx: Optional[Context] = None) -> str:
     logger.info(f"Accepting new project name: '{project_lower}'")
     return project_lower
 
+
+def normalize_project_name(project: Optional[str]) -> str:
+    """
+    Fast-path project normalization.
+    No database lookups; just normalize and apply fallback.
+    """
+    project_lower = (project or "").lower().strip()
+    return project_lower or "madness_interactive"
+
+
+def should_validate_project_name() -> bool:
+    """
+    Feature flag for slower, lookup-based project validation.
+    Default is disabled for lower add_todo latency.
+    """
+    raw = os.getenv("OMNISPINDLE_VALIDATE_PROJECT_NAMES", "").strip().lower()
+    return raw in {"1", "true", "yes", "on"}
+
+
 def _is_read_only_user(ctx: Optional[Context]) -> bool:
     """
     Check if the user is in read-only mode (unauthenticated demo user).
@@ -520,7 +539,10 @@ async def add_todo(description: str, project: str, priority: str = "Medium", tar
         return create_response(False, message="Demo mode: Todo creation is disabled. Please authenticate to create todos.")
 
     todo_id = str(uuid.uuid4())
-    validated_project = validate_project_name(project, ctx)
+    if should_validate_project_name():
+        validated_project = validate_project_name(project, ctx)
+    else:
+        validated_project = normalize_project_name(project)
 
     # Validate metadata against schema if provided
     validated_metadata = {}
@@ -560,27 +582,30 @@ async def add_todo(description: str, project: str, priority: str = "Medium", tar
         todos_collection.insert_one(todo)
         user_email = ctx.user.get("email", "anonymous") if ctx and ctx.user else "anonymous"
         logger.info(f"Todo created by {user_email} in user database: {todo_id}")
-        await log_todo_create(todo_id, description, project, user_email, ctx.user if ctx else None)
 
-        # Gather project stats for agent context
-        project_stats = {}
-        try:
-            project_stats = {
-                "pending": todos_collection.count_documents({"project": validated_project, "status": "pending"}),
-                "in_progress": todos_collection.count_documents({"project": validated_project, "status": "in_progress"}),
-                "total": todos_collection.count_documents({"project": validated_project}),
-            }
-        except Exception as stats_err:
-            logger.warning(f"Failed to gather project stats: {stats_err}")
+        # Keep add_todo latency tight: schedule non-critical follow-up work in background.
+        async def _background_log_create():
+            await log_todo_create(todo_id, description, project, user_email, ctx.user if ctx else None)
 
-        # Generate embedding (non-blocking — failure never blocks todo creation)
-        try:
+        async def _background_embedding_update():
             embed_text = embeddings.embedding_text_for_todo(todo)
             embedding = await embeddings.generate_embedding(embed_text)
             if embedding:
                 todos_collection.update_one({"id": todo_id}, {"$set": {"embedding": embedding}})
-        except Exception:
-            pass
+
+        def _track_background(task_name: str, coro):
+            task = asyncio.create_task(coro)
+
+            def _done(t):
+                try:
+                    t.result()
+                except Exception as bg_err:
+                    logger.warning(f"Background add_todo task '{task_name}' failed for {todo_id}: {bg_err}")
+
+            task.add_done_callback(_done)
+
+        _track_background("log_todo_create", _background_log_create())
+        _track_background("embedding_update", _background_embedding_update())
 
         return json.dumps({
             "id": todo_id,
@@ -588,7 +613,6 @@ async def add_todo(description: str, project: str, priority: str = "Medium", tar
             "priority": priority,
             "target_agent": target_agent,
             "created_at": todo["created_at"],
-            "project_stats": project_stats,
         })
     except Exception as e:
         logger.error(f"Failed to create todo: {str(e)}")

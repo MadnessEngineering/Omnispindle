@@ -179,6 +179,7 @@ All data is scoped per user at the database level. Your todos stay yours.
 OMNISPINDLE_MODE=hybrid          # api | hybrid | local | auto
 OMNISPINDLE_TOOL_LOADOUT=basic   # see loadouts table above
 OMNISPINDLE_FALLBACK_ENABLED=true
+OMNISPINDLE_VALIDATE_PROJECT_NAMES=false  # optional: enable slower DB-backed project validation
 
 # Authentication
 MADNESS_AUTH_TOKEN=<jwt>
