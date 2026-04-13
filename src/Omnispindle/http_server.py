@@ -12,7 +12,7 @@ import os
 from typing import Dict, Any, Optional, Union, List
 
 from fastmcp import FastMCP, Context as MCPContext
-from fastmcp.server.dependencies import get_http_headers
+from fastmcp.utilities.http import get_current_starlette_request
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from dotenv import load_dotenv
@@ -103,16 +103,17 @@ async def get_authenticated_context_from_mcp(mcp_ctx: MCPContext, user_ctx: Opti
                             logger.info(f"Token extracted from {attr_name} (length: {len(token)})")
                             break
     
-    # Fallback to get_http_headers
+    # Fallback to get_current_starlette_request
     if not token:
         try:
-            request_headers = get_http_headers()
-            logger.info(f"Fallback headers from get_http_headers: {list(request_headers.keys()) if request_headers else 'None'}")
+            starlette_req = get_current_starlette_request()
+            request_headers = dict(starlette_req.headers) if starlette_req else {}
+            logger.info(f"Fallback headers from starlette request: {list(request_headers.keys()) if request_headers else 'None'}")
             if request_headers:
                 auth_header = request_headers.get("authorization") or request_headers.get("Authorization")
                 if auth_header and auth_header.startswith("Bearer "):
                     token = auth_header[7:]
-                    logger.info(f"Token extracted from get_http_headers (length: {len(token)})")
+                    logger.info(f"Token extracted from starlette request (length: {len(token)})")
         except Exception as e:
             logger.warning(f"Could not get HTTP headers from FastMCP context: {e}")
     
@@ -152,8 +153,9 @@ async def get_authenticated_context(request_headers: Optional[Dict[str, str]] = 
     # First try to get token from FastMCP request headers
     if not request_headers:
         try:
-            request_headers = get_http_headers()
-            logger.info(f"Retrieved headers from FastMCP context: {list(request_headers.keys()) if request_headers else 'None'}")
+            starlette_req = get_current_starlette_request()
+            request_headers = dict(starlette_req.headers) if starlette_req else {}
+            logger.info(f"Retrieved headers from starlette request: {list(request_headers.keys()) if request_headers else 'None'}")
         except Exception as e:
             logger.warning(f"Could not get HTTP headers from FastMCP context: {e}")
             request_headers = {}
