@@ -4,6 +4,11 @@ FastMCP HTTP Server for Omnispindle with user-scoped databases.
 
 This server uses the recommended FastMCP HTTP transport for remote deployments.
 Run with: fastmcp run src/Omnispindle/http_server.py
+
+Compatibility note:
+- `fastmcp run ...` imports this module and serves the FastMCP `mcp` instance.
+- `python -m src.Omnispindle.http_server` boots the legacy FastAPI app (`/api/mcp`)
+  to preserve existing PM2 and Inventorium endpoint contracts.
 """
 
 import asyncio
@@ -421,3 +426,12 @@ if "preflight_rag" in selected_tools:
 logger.info(f"Registered {len([t for t in selected_tools])} tools for HTTP transport (remote mode)")
 
 # The mcp instance is now ready for fastmcp run command
+
+
+if __name__ == "__main__":
+    # Keep long-standing operator workflow working:
+    # `python -m src.Omnispindle.http_server` should start the HTTP MCP endpoint
+    # expected by Inventorium (`/api/mcp`), even as we retain FastMCP import mode.
+    from src.Omnispindle.__main__ import run_web_server
+
+    run_web_server()
