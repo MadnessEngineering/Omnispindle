@@ -183,6 +183,7 @@ class Omnispindle:
 
                 self.tool(tool_name)(make_wrapper(func, doc))
 
-# --- Server Instantiation ---
-server = Omnispindle()
-app = asyncio.run(server.run_server())
+# --- Server Instantiation (only when run as main module, not imported) ---
+if __name__ == "__main__":
+    server = Omnispindle()
+    app = asyncio.run(server.run_server())
