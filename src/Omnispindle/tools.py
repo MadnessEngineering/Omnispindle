@@ -975,7 +975,7 @@ async def mark_todo_complete(todo_id: str, comment: Optional[str] = None, ctx: O
         completed_at = int(datetime.now(timezone.utc).timestamp())
         duration_sec = completed_at - existing_todo.get('created_at', completed_at)
         updates = {
-            "status": "completed",
+            "status": "in_review",
             "completed_at": completed_at,
             "duration": _format_duration(duration_sec),
             "duration_sec": duration_sec,
@@ -997,7 +997,7 @@ async def mark_todo_complete(todo_id: str, comment: Optional[str] = None, ctx: O
         result = todos_collection.update_one({"id": todo_id}, {"$set": updates})
         if result.modified_count == 1:
             user_email = ctx.user.get("email", "anonymous") if ctx and ctx.user else "anonymous"
-            logger.info(f"Todo completed by {user_email}: {todo_id} in {database_source} database")
+            logger.info(f"Todo staged for review by {user_email}: {todo_id} in {database_source} database")
             await log_todo_complete(todo_id, existing_todo.get('description', 'Unknown'),
                                     existing_todo.get('project', 'Unknown'), user_email, ctx.user if ctx else None, comment)
             return json.dumps({"id": todo_id})
