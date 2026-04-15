@@ -296,14 +296,14 @@ if "delete_lesson" in selected_tools:
 if "search_lessons" in selected_tools:
     @mcp.tool()
     async def search_lessons(query: str, fields: Optional[list] = None, limit: int = 50, user_ctx: Optional[Dict[str, Any]] = None, ctx: MCPContext = None):
-        """Search lessons by text query."""
+        """Text search across lesson topic, content, and tags. For broader semantic search, use find_relevant."""
         auth_ctx = await get_authenticated_context_from_mcp(ctx, user_ctx)
         return await tools.search_lessons(query, fields, limit, auth_ctx)
 
 if "grep_lessons" in selected_tools:
     @mcp.tool()
     async def grep_lessons(pattern: str, limit: int = 50, user_ctx: Optional[Dict[str, Any]] = None, ctx: MCPContext = None):
-        """Search lessons using regex pattern."""
+        """Pattern match on lesson topic and content only (no tags). Use search_lessons for broader search."""
         auth_ctx = await get_authenticated_context_from_mcp(ctx, user_ctx)
         return await tools.grep_lessons(pattern, limit, auth_ctx)
 
