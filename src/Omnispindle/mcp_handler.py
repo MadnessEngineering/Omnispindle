@@ -50,7 +50,7 @@ TOOL_SCHEMAS = {
     },
     "update_todo": {
         "name": "update_todo",
-        "description": "Update todo",
+        "description": "Modify task fields in-place. Pass only changed fields. Returns updated object.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -62,7 +62,7 @@ TOOL_SCHEMAS = {
     },
     "delete_todo": {
         "name": "delete_todo",
-        "description": "Delete todo",
+        "description": "Permanently remove task by ID. Irreversible.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -73,7 +73,7 @@ TOOL_SCHEMAS = {
     },
     "get_todo": {
         "name": "get_todo",
-        "description": "Get todo by ID",
+        "description": "Retrieve single task by UUID. Returns full object including metadata.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -84,7 +84,7 @@ TOOL_SCHEMAS = {
     },
     "mark_todo_complete": {
         "name": "mark_todo_complete",
-        "description": "Complete todo",
+        "description": "Set status=completed. Optional closing comment. Prefer over update_todo for completions.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -134,7 +134,7 @@ TOOL_SCHEMAS = {
     },
     "add_lesson": {
         "name": "add_lesson",
-        "description": "Add lesson",
+        "description": "Persist a lesson/pitfall for future recall. Tag well — drives preflight_rag relevance.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -148,7 +148,7 @@ TOOL_SCHEMAS = {
     },
     "get_lesson": {
         "name": "get_lesson",
-        "description": "Get lesson by ID",
+        "description": "Retrieve single lesson by UUID. Returns full content.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -159,7 +159,7 @@ TOOL_SCHEMAS = {
     },
     "update_lesson": {
         "name": "update_lesson",
-        "description": "Update lesson",
+        "description": "Modify stored lesson fields. Use to correct or expand existing entries.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -171,7 +171,7 @@ TOOL_SCHEMAS = {
     },
     "delete_lesson": {
         "name": "delete_lesson",
-        "description": "Delete lesson",
+        "description": "Permanently remove lesson by ID. Irreversible.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -207,7 +207,7 @@ TOOL_SCHEMAS = {
     },
     "list_lessons": {
         "name": "list_lessons",
-        "description": "List all lessons",
+        "description": "Fetch all lessons paginated. Broad browse — use search_lessons or grep_lessons for targeted lookup.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -217,7 +217,7 @@ TOOL_SCHEMAS = {
     },
     "query_todo_logs": {
         "name": "query_todo_logs",
-        "description": "Query todo audit logs with filtering and pagination",
+        "description": "Retrieve task audit trails. Filter by type/project. Use for debugging state changes or history.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -231,7 +231,7 @@ TOOL_SCHEMAS = {
     },
     "list_projects": {
         "name": "list_projects",
-        "description": "List available projects",
+        "description": "Enumerate known projects. Returns names and optional metadata.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -242,7 +242,7 @@ TOOL_SCHEMAS = {
     },
     "explain": {
         "name": "explain",
-        "description": "Get explanation for topic",
+        "description": "Fetch concept explanation from knowledge base. Returns text. Use for conceptual lookups.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -279,7 +279,7 @@ TOOL_SCHEMAS = {
     },
     "inventorium_sessions_list": {
         "name": "inventorium_sessions_list",
-        "description": "List chat sessions",
+        "description": "List chat sessions, optionally by project. Use for context navigation.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -290,7 +290,7 @@ TOOL_SCHEMAS = {
     },
     "inventorium_sessions_get": {
         "name": "inventorium_sessions_get",
-        "description": "Get session by ID",
+        "description": "Retrieve full session history by ID. Returns messages and metadata.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -301,7 +301,7 @@ TOOL_SCHEMAS = {
     },
     "inventorium_sessions_create": {
         "name": "inventorium_sessions_create",
-        "description": "Create session",
+        "description": "Initialize new chat session for a project. Returns session object.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -315,7 +315,7 @@ TOOL_SCHEMAS = {
     },
     "inventorium_sessions_spawn": {
         "name": "inventorium_sessions_spawn",
-        "description": "Spawn child session",
+        "description": "Create sub-session branching from parent. Links to a todo. Returns new session.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -329,7 +329,7 @@ TOOL_SCHEMAS = {
     },
     "inventorium_sessions_fork": {
         "name": "inventorium_sessions_fork",
-        "description": "Fork an existing session into a new branch",
+        "description": "Clone session into new branch. Returns new session. Use to explore alternatives without losing original.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -344,7 +344,7 @@ TOOL_SCHEMAS = {
     },
     "inventorium_sessions_genealogy": {
         "name": "inventorium_sessions_genealogy",
-        "description": "Get session genealogy",
+        "description": "Fetch session parent/child chain. Use to trace context history.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -355,7 +355,7 @@ TOOL_SCHEMAS = {
     },
     "inventorium_sessions_tree": {
         "name": "inventorium_sessions_tree",
-        "description": "Get full session tree for a project",
+        "description": "Fetch complete session hierarchy for a project. Use for global context overview.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -366,7 +366,7 @@ TOOL_SCHEMAS = {
     },
     "inventorium_todos_link_session": {
         "name": "inventorium_todos_link_session",
-        "description": "Link todo to session",
+        "description": "Associate task UUID with chat session ID. Use for context grouping.",
         "inputSchema": {
             "type": "object",
             "properties": {
