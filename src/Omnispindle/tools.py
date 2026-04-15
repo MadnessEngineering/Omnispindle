@@ -1714,7 +1714,7 @@ async def point_out_obvious(observation: str, sarcasm_level: int = 5, ctx: Optio
 
     # Publish to MQTT for other systems to enjoy the obviousness
     try:
-        mqtt_publish("observations/obvious", {
+        await mqtt_publish("observations/obvious", {
             "observation": observation,
             "sarcasm_level": level,
             "response": response
@@ -1949,13 +1949,16 @@ async def _execute_byo_tool(args):
             logger.debug(f"Failed to store BYO tool execution: {e}")
 
         # Publish to MQTT for monitoring
-        mqtt_publish("tools/byo/execution", {
-            "tool_id": tool_id,
-            "tool_name": full_tool_name,
-            "runtime": runtime,
-            "user": user_id,
-            "success": True
-        })
+        try:
+            await mqtt_publish("tools/byo/execution", {
+                "tool_id": tool_id,
+                "tool_name": full_tool_name,
+                "runtime": runtime,
+                "user": user_id,
+                "success": True
+            })
+        except Exception as e:
+            logger.debug(f"Failed to publish BYO execution to MQTT: {e}")
 
         return create_response(True, {
             "tool_id": tool_id,

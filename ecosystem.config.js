@@ -50,6 +50,10 @@ module.exports = {
             OMNISPINDLE_TOOL_LOADOUT: process.env.OMNISPINDLE_TOOL_LOADOUT || 'full',
             MADNESS_AUTH_TOKEN: process.env.MADNESS_AUTH_TOKEN,
             MADNESS_API_URL: process.env.MADNESS_API_URL || 'https://madnessinteractive.cc/api',
+            MQTT_HOST: 'localhost',
+            MQTT_PORT: '4140',
+            AWSIP: 'localhost',
+            AWSPORT: '4140',
             PYTHONPATH: '.'
         },
         error_file: './logs/http-err.log',
