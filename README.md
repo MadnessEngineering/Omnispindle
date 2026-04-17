@@ -2,7 +2,7 @@
 
 **A todo system that went wonderfully, intentionally wrong.**
 
-Omnispindle is the coordination spine of the Madness Interactive ecosystem — a Python FastMCP server with 32 tools that lets AI agents manage tasks, capture knowledge, coordinate sessions, and navigate the whole workshop from a single, standardized interface. PyPI packaged. Auth0 integrated. Runs anywhere a Claude Desktop config lives.
+Omnispindle is the coordination spine of the Madness Interactive ecosystem — a Python FastMCP server with 32 tools that lets AI agents manage tasks, capture knowledge, coordinate sessions, and navigate the whole workshop from a single, standardized interface. PyPI packaged. Auth0 integrated. Runs anywhere a MCP config lives.
 
 It started as "let's do todos properly." It became the central nervous system for a multi-project AI-assisted development lab. Both of these things are fine.
 
