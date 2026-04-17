@@ -18,7 +18,6 @@ It started as "let's do todos properly." It became the central nervous system fo
 
 **Semantic search** — `find_relevant` uses vector embeddings to surface todos and lessons by meaning, not just keywords. `get_context_bundle` gives an agent the full project picture in one call.
 
-**Bring your own tool** — inject Python, JavaScript, or shell code as a live MCP tool at runtime. No restart required. We did this because we needed it.
 
 ---
 
