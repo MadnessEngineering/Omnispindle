@@ -690,8 +690,19 @@ def _resolve_todo_id(todo_id: str, user_context, db_conn) -> Optional[str]:
 
 async def update_todo(todo_id: str, updates: dict, ctx: Optional[Context] = None) -> str:
     """
-    Update a todo with the provided changes.
-    Metadata updates are MERGED with existing metadata instead of replacing it.
+    Update a todo with the provided changes. Metadata updates are MERGED with existing metadata.
+
+    IMPORTANT: All fields go inside the `updates` dict — not as flat args.
+
+    Correct usage:
+        update_todo(todo_id="abc-123", updates={"status": "in_progress", "priority": "High"})
+        update_todo(todo_id="abc-123", updates={"notes": "blocked on auth", "metadata": {"pr": "42"}})
+
+    Wrong (causes MCP -32603 internal error):
+        update_todo(todo_id="abc-123", status="in_progress")   # flat args rejected
+        update_todo(todo_id="abc-123", notes="...")             # same mistake
+
+    Do NOT set status="completed" here — use mark_todo_complete() instead.
     """
     # Check for read-only mode (unauthenticated demo users)
     if _is_read_only_user(ctx):
@@ -926,7 +937,16 @@ async def get_todo(todo_id: str, ctx: Optional[Context] = None) -> str:
 
 async def mark_todo_complete(todo_id: str, comment: Optional[str] = None, ctx: Optional[Context] = None) -> str:
     """
-    Mark a todo as completed.
+    Mark a todo as completed. Records git context, calculates duration, and writes an audit log entry.
+
+    ALWAYS pass comment= with a summary of what was accomplished — this is the only place
+    to preserve completion notes. If update_todo failed before you got here, bring those
+    notes along as comment= so they aren't lost.
+
+    Args:
+        todo_id: The todo ID to complete.
+        comment: What was actually finished and why. Strongly encouraged — omitting it loses
+                 the completion context permanently.
     """
     # Check for read-only mode (unauthenticated demo users)
     if _is_read_only_user(ctx):
@@ -975,7 +995,7 @@ async def mark_todo_complete(todo_id: str, comment: Optional[str] = None, ctx: O
         completed_at = int(datetime.now(timezone.utc).timestamp())
         duration_sec = completed_at - existing_todo.get('created_at', completed_at)
         updates = {
-            "status": "in_review",
+            "status": "review",
             "completed_at": completed_at,
             "duration": _format_duration(duration_sec),
             "duration_sec": duration_sec,
@@ -1012,8 +1032,8 @@ async def list_todos_by_status(status: str, limit: int = 100, offset: int = 0, c
     """
     List todos filtered by their status with pagination support.
     """
-    if status.lower() not in ['pending', 'completed', 'initial', 'blocked', 'in_progress']:
-        return create_response(False, message="Invalid status. Must be one of 'pending', 'completed', 'initial', 'blocked', 'in_progress'.")
+    if status.lower() not in ['pending', 'completed', 'initial', 'blocked', 'in_progress', 'review']:
+        return create_response(False, message="Invalid status. Must be one of 'pending', 'completed', 'initial', 'blocked', 'in_progress', 'review'.")
     # When querying by status, don't apply the default completed filter
     return await query_todos(filter={"status": status.lower()}, limit=limit, offset=offset, exclude_completed=False, ctx=ctx)
 
