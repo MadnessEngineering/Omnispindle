@@ -461,7 +461,7 @@ class OmniSpindleStdioServer:
                         elif name == "list_todos_by_status":
                             @self.server.tool()
                             async def list_todos_by_status(
-                                status: Annotated[str, Field(description="pending|completed|initial|blocked|in_progress")],
+                                status: Annotated[str, Field(description="pending|completed|initial|blocked|in_progress|review")],
                                 limit: Annotated[int, Field(description="Max results")] = 100,
                                 offset: Annotated[int, Field(description="Skip N results for pagination")] = 0
                             ) -> str:

@@ -142,25 +142,27 @@ for audit purposes. The updated_at timestamp is automatically set."""
     },
     
     "mark_todo_complete": {
-        "minimal": "Complete todo",
-        "basic": "Mark completed. Optional comment.",
-        "admin": "Mark completed. Calculates duration, logs event, stores comment in metadata.",
-        "full": """Mark a todo as completed with optional completion comment.
+        "minimal": "Stage todo for review",
+        "basic": "Mark done → status=review. Pass comment= with what was accomplished.",
+        "admin": "Sets status=review. Calculates duration, logs event, stores comment in metadata.",
+        "full": """Mark a todo as done (stages it for review) with optional completion comment.
 
 Automatically:
-- Sets status to "completed"
+- Sets status to "review" (staged for human review before archiving)
 - Records completion timestamp
 - Calculates duration from creation to completion
 - Updates completed_by field with user information
 - Stores completion comment in metadata if provided
-- Logs completion event for audit trail"""
+- Logs completion event for audit trail
+
+Always pass comment= — it's the only place to record what was actually accomplished."""
     },
     
     "list_todos_by_status": {
         "minimal": "List by status",
-        "basic": "List by status: pending|completed|initial|blocked|in_progress",
-        "admin": "Filter by status (pending|completed|initial|blocked|in_progress). Returns with metadata summary.",
-        "full": "List todos filtered by their status. Valid status values: pending, completed, initial, blocked, in_progress. Results are formatted for efficiency with truncated descriptions to reduce token usage while preserving essential information."
+        "basic": "List by status: pending|completed|initial|blocked|in_progress|review",
+        "admin": "Filter by status (pending|completed|initial|blocked|in_progress|review). Returns with metadata summary.",
+        "full": "List todos filtered by their status. Valid status values: pending, completed, initial, blocked, in_progress, review. Results are formatted for efficiency with truncated descriptions to reduce token usage while preserving essential information."
     },
     
     "list_project_todos": {

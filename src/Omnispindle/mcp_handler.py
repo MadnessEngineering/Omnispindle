@@ -44,7 +44,8 @@ TOOL_SCHEMAS = {
                 "limit": {"type": "number", "description": "Max results (default: 100)"},
                 "offset": {"type": "number", "description": "Skip N results for pagination (default: 0)"},
                 "exclude_completed": {"type": "boolean", "description": "Exclude completed items (default: true)"},
-                "since": {"type": "number", "description": "Unix timestamp — only return items modified after this time"}
+                "since": {"type": "number", "description": "Unix timestamp — only return items modified after this time"},
+                "projection": {"type": "object", "description": "{field: 1} to include, {field: 0} to exclude"}
             }
         }
     },
@@ -54,8 +55,8 @@ TOOL_SCHEMAS = {
         "inputSchema": {
             "type": "object",
             "properties": {
-                "todo_id": {"type": "string"},
-                "updates": {"type": "object"}
+                "todo_id": {"type": "string", "description": "Todo UUID"},
+                "updates": {"type": "object", "description": "{field: new_value} — metadata is MERGED not replaced"}
             },
             "required": ["todo_id", "updates"]
         }
@@ -66,7 +67,7 @@ TOOL_SCHEMAS = {
         "inputSchema": {
             "type": "object",
             "properties": {
-                "todo_id": {"type": "string"}
+                "todo_id": {"type": "string", "description": "Todo UUID to delete"}
             },
             "required": ["todo_id"]
         }
@@ -77,19 +78,19 @@ TOOL_SCHEMAS = {
         "inputSchema": {
             "type": "object",
             "properties": {
-                "todo_id": {"type": "string"}
+                "todo_id": {"type": "string", "description": "Todo UUID"}
             },
             "required": ["todo_id"]
         }
     },
     "mark_todo_complete": {
         "name": "mark_todo_complete",
-        "description": "Set status=completed. Optional closing comment. Prefer over update_todo for completions.",
+        "description": "Set status=review (staged for review). Optional closing comment. Prefer over update_todo for completions.",
         "inputSchema": {
             "type": "object",
             "properties": {
-                "todo_id": {"type": "string"},
-                "comment": {"type": "string"}
+                "todo_id": {"type": "string", "description": "Todo UUID"},
+                "comment": {"type": "string", "description": "What was accomplished — omitting loses completion context permanently"}
             },
             "required": ["todo_id"]
         }
@@ -100,7 +101,7 @@ TOOL_SCHEMAS = {
         "inputSchema": {
             "type": "object",
             "properties": {
-                "status": {"type": "string", "description": "pending|completed|initial|blocked|in_progress"},
+                "status": {"type": "string", "description": "pending|completed|initial|blocked|in_progress|review"},
                 "limit": {"type": "number", "description": "Max results (default: 100)"},
                 "offset": {"type": "number", "description": "Skip N results for pagination (default: 0)"}
             },
@@ -113,8 +114,9 @@ TOOL_SCHEMAS = {
         "inputSchema": {
             "type": "object",
             "properties": {
-                "query": {"type": "string"},
-                "limit": {"type": "number"}
+                "query": {"type": "string", "description": "Search text. Tokenized regex across description+project."},
+                "limit": {"type": "number", "description": "Max results (default: 100)"},
+                "fields": {"type": "array", "description": "Fields to search (default: description, project)"}
             },
             "required": ["query"]
         }
@@ -139,9 +141,9 @@ TOOL_SCHEMAS = {
             "type": "object",
             "properties": {
                 "language": {"type": "string", "description": "python|javascript|rust|etc"},
-                "topic": {"type": "string"},
-                "lesson_learned": {"type": "string"},
-                "tags": {"type": "array", "items": {"type": "string"}}
+                "topic": {"type": "string", "description": "Topic/category"},
+                "lesson_learned": {"type": "string", "description": "Lesson content"},
+                "tags": {"type": "array", "items": {"type": "string"}, "description": "Categorization tags"}
             },
             "required": ["language", "topic", "lesson_learned"]
         }
@@ -152,7 +154,7 @@ TOOL_SCHEMAS = {
         "inputSchema": {
             "type": "object",
             "properties": {
-                "lesson_id": {"type": "string"}
+                "lesson_id": {"type": "string", "description": "Lesson UUID"}
             },
             "required": ["lesson_id"]
         }
@@ -163,8 +165,8 @@ TOOL_SCHEMAS = {
         "inputSchema": {
             "type": "object",
             "properties": {
-                "lesson_id": {"type": "string"},
-                "updates": {"type": "object"}
+                "lesson_id": {"type": "string", "description": "Lesson UUID"},
+                "updates": {"type": "object", "description": "{field: new_value}"}
             },
             "required": ["lesson_id", "updates"]
         }
@@ -175,7 +177,7 @@ TOOL_SCHEMAS = {
         "inputSchema": {
             "type": "object",
             "properties": {
-                "lesson_id": {"type": "string"}
+                "lesson_id": {"type": "string", "description": "Lesson UUID to delete"}
             },
             "required": ["lesson_id"]
         }
@@ -186,9 +188,10 @@ TOOL_SCHEMAS = {
         "inputSchema": {
             "type": "object",
             "properties": {
-                "query": {"type": "string"},
-                "fields": {"type": "array"},
-                "limit": {"type": "number"}
+                "query": {"type": "string", "description": "Search text"},
+                "fields": {"type": "array", "description": "Fields to search (default: topic, lesson_learned, tags)"},
+                "limit": {"type": "number", "description": "Max results (default: 100)"},
+                "brief": {"type": "boolean", "description": "Return compact results (default: false)"}
             },
             "required": ["query"]
         }
@@ -199,8 +202,8 @@ TOOL_SCHEMAS = {
         "inputSchema": {
             "type": "object",
             "properties": {
-                "pattern": {"type": "string"},
-                "limit": {"type": "number"}
+                "pattern": {"type": "string", "description": "Regex pattern"},
+                "limit": {"type": "number", "description": "Max results (default: 20)"}
             },
             "required": ["pattern"]
         }
@@ -211,7 +214,8 @@ TOOL_SCHEMAS = {
         "inputSchema": {
             "type": "object",
             "properties": {
-                "limit": {"type": "number"}
+                "limit": {"type": "number", "description": "Max results (default: 100)"},
+                "brief": {"type": "boolean", "description": "Return compact results (default: false)"}
             }
         }
     },
@@ -246,7 +250,8 @@ TOOL_SCHEMAS = {
         "inputSchema": {
             "type": "object",
             "properties": {
-                "topic": {"type": "string"}
+                "topic": {"type": "string", "description": "Project or concept name"},
+                "brief": {"type": "boolean", "description": "Return compact summary (default: false)"}
             },
             "required": ["topic"]
         }
@@ -283,8 +288,8 @@ TOOL_SCHEMAS = {
         "inputSchema": {
             "type": "object",
             "properties": {
-                "limit": {"type": "number"},
-                "project": {"type": "string"}
+                "limit": {"type": "number", "description": "Max results (default: 50)"},
+                "project": {"type": "string", "description": "Project name filter (optional)"}
             }
         }
     },
@@ -294,7 +299,7 @@ TOOL_SCHEMAS = {
         "inputSchema": {
             "type": "object",
             "properties": {
-                "session_id": {"type": "string"}
+                "session_id": {"type": "string", "description": "Session UUID"}
             },
             "required": ["session_id"]
         }
@@ -305,10 +310,10 @@ TOOL_SCHEMAS = {
         "inputSchema": {
             "type": "object",
             "properties": {
-                "project": {"type": "string"},
-                "title": {"type": "string"},
-                "agentic_tool": {"type": "string"},
-                "initial_prompt": {"type": "string"}
+                "project": {"type": "string", "description": "Project name"},
+                "title": {"type": "string", "description": "Session title (optional)"},
+                "agentic_tool": {"type": "string", "description": "Agent tool name (default: claude-code)"},
+                "initial_prompt": {"type": "string", "description": "First message to seed session (optional)"}
             },
             "required": ["project"]
         }
@@ -319,10 +324,10 @@ TOOL_SCHEMAS = {
         "inputSchema": {
             "type": "object",
             "properties": {
-                "parent_session_id": {"type": "string"},
-                "prompt": {"type": "string"},
-                "title": {"type": "string"},
-                "todo_id": {"type": "string"}
+                "parent_session_id": {"type": "string", "description": "Parent session UUID"},
+                "prompt": {"type": "string", "description": "Initial prompt for child session"},
+                "title": {"type": "string", "description": "Child session title (optional)"},
+                "todo_id": {"type": "string", "description": "Todo UUID to link (optional)"}
             },
             "required": ["parent_session_id", "prompt"]
         }
@@ -348,7 +353,7 @@ TOOL_SCHEMAS = {
         "inputSchema": {
             "type": "object",
             "properties": {
-                "session_id": {"type": "string"}
+                "session_id": {"type": "string", "description": "Session UUID"}
             },
             "required": ["session_id"]
         }
@@ -370,8 +375,8 @@ TOOL_SCHEMAS = {
         "inputSchema": {
             "type": "object",
             "properties": {
-                "todo_id": {"type": "string"},
-                "session_id": {"type": "string"}
+                "todo_id": {"type": "string", "description": "Todo UUID"},
+                "session_id": {"type": "string", "description": "Session UUID"}
             },
             "required": ["todo_id", "session_id"]
         }
@@ -417,7 +422,6 @@ TOOL_SCHEMAS = {
         }
     }
 }
-
 
 async def mcp_handler(request: Request, get_current_user: Callable[[], Coroutine[Any, Any, Any]]) -> JSONResponse:
     """
