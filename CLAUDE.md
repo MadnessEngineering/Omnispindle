@@ -139,26 +139,40 @@ python -m twine upload dist/*
 The server exposes standardized MCP tools that AI agents can call:
 
 **Todo Management**:
-- `add_todo` - Create new tasks with metadata
-- `query_todos` - Search and filter tasks with MongoDB queries
-- `update_todo` - Modify existing tasks
+- `add_todo` - Create new tasks with metadata (always include `metadata.files` for SwarmDesk 3D node linking)
+- `query_todos` - MongoDB-style filter queries; `projection` param to select fields, `since` for change detection
+- `update_todo` - Modify existing tasks. ALL fields go inside `updates` dict — flat args cause MCP -32603
 - `delete_todo` - Remove tasks
 - `get_todo` - Retrieve single task
-- `mark_todo_complete` - Complete tasks with optional comments
-- `list_todos_by_status` - Filter by status (pending, completed, etc.)
-- `list_project_todos` - Get recent tasks for specific projects
-- `search_todos` - Text search across todo fields
+- `mark_todo_complete` - Stages to `review` (not `completed`). Always pass `comment=` — it's the only completion record
+- `list_todos_by_status` - Filter by status: `pending|completed|initial|blocked|in_progress|review`
+- `list_project_todos` - Get recent pending tasks for a project
+- `search_todos` - Tokenized regex search; `fields` param to target specific fields
 
 **Knowledge Management**:
-- `add_lesson` - Capture lessons learned with language/topic tags
+- `add_lesson` - Capture lessons learned with language/topic tags (well-tagged lessons drive `preflight_rag`)
 - `get_lesson` / `update_lesson` / `delete_lesson` - Lesson CRUD operations
 - `search_lessons` / `grep_lessons` - Search knowledge base
 - `list_lessons` - Browse all lessons
+
+**Session Management** (Inventorium integration):
+- `inventorium_sessions_create` - Start a tracked session for a project
+- `inventorium_sessions_get` / `inventorium_sessions_list` - Retrieve sessions
+- `inventorium_sessions_spawn` - Create child session from parent (delegate subtask)
+- `inventorium_sessions_fork` - Clone session to explore alternatives
+- `inventorium_sessions_genealogy` / `inventorium_sessions_tree` - Navigate session hierarchy
+- `inventorium_todos_link_session` - Link a todo to a session (idempotent)
+
+**RAG / Context Tools**:
+- `get_context_bundle` - Session startup: returns slim todo/lesson/session summaries in one call. Use `since` for change detection
+- `find_relevant` - Semantic search across todos AND lessons (embeddings → regex fallback)
+- `preflight_rag` - Pre-task lessons check: call before starting work, classifies solutions vs pitfalls
 
 **System Integration**:
 - `list_projects` - Get available projects from filesystem
 - `explain` / `add_explanation` - Topic explanations system
 - `query_todo_logs` - Access audit logs
+- `point_out_obvious` / `bring_your_own` - Utility tools
 
 ### Data Structures
 
@@ -168,14 +182,29 @@ The server exposes standardized MCP tools that AI agents can call:
     "todo_id": "uuid",
     "description": "Task description",
     "project": "project_name",  # Must be in VALID_PROJECTS list
-    "status": "initial|pending|completed",
-    "priority": "Low|Medium|High",
-    "created": timestamp,
-    "completed": timestamp,  # if completed
+    "status": "initial|pending|in_progress|blocked|review|completed|cancelled",
+    "priority": "Critical|High|Medium|Low",
+    "created_at": timestamp,
+    "completed_at": timestamp,  # if completed
     "target_agent": "user|AI_name",
+    "notes": "user-facing notes",
+    "ticket": "external ticket ref",
     "metadata": {"key": "value"}  # Optional custom fields
 }
 ```
+
+**Canonical Status Workflow**: `initial → pending → in_progress → blocked? → review → completed`
+
+**Status values** (use exactly these strings, all lowercase, underscores not hyphens):
+- `initial` - just created, not yet started
+- `pending` - queued for work
+- `in_progress` - actively being worked
+- `blocked` - waiting on external dependency
+- `review` - done, staged for human review (this is what `mark_todo_complete` sets)
+- `completed` - fully done, after review queue approval
+- `cancelled` - abandoned
+
+**IMPORTANT**: `mark_todo_complete` sets status to `"review"`, NOT `"completed"`. Final completion happens through the Review Queue UI. Do NOT use `update_todo` with `status: "completed"` to bypass review.
 
 **Valid Projects**: See `VALID_PROJECTS` list in `tools.py` - includes madness_interactive, omnispindle, swarmonomicon, todomill_projectorium, etc.
 
@@ -314,7 +343,7 @@ OMNISPINDLE_MODE="api" python test_api_client.py
 
 **Logging**: Comprehensive logging with audit trail via `todo_log_service.py`.
 
-**Testing**: Pytest-based test suite in `tests/` directory covering tools, database operations, and server functionality.
+**Testing**: Pytest-based test suite in `tests/` directory. Key guard: `tests/test_schema_consistency.py` validates that `mcp_handler.py` TOOL_SCHEMAS stays in sync with `tools.py` function signatures, all params have descriptions, and valid status values are consistent. Run after any tool signature changes.
 
 **Git Workflow**: Deployment handled through git hooks - commit when ready to deploy.
 
@@ -325,12 +354,12 @@ OMNISPINDLE_MODE="api" python test_api_client.py
 Omnispindle supports variable tool loadouts to reduce token usage for AI agents. Configure via the `OMNISPINDLE_TOOL_LOADOUT` environment variable:
 
 **Available Loadouts**:
-- `full` (default) - All 22 tools available
+- `full` (default) - All 33 tools available
 - `basic` - Essential todo management (7 tools): add_todo, query_todos, update_todo, get_todo, mark_todo_complete, list_todos_by_status, list_project_todos
 - `minimal` - Core functionality only (4 tools): add_todo, query_todos, get_todo, mark_todo_complete
 - `lessons` - Knowledge management focus (7 tools): add_lesson, get_lesson, update_lesson, delete_lesson, search_lessons, grep_lessons, list_lessons
-- `admin` - Administrative tools (6 tools): query_todos, update_todo, delete_todo, query_todo_logs, list_projects, explain, add_explanation
-- `hybrid_test` - Testing hybrid functionality (6 tools): add_todo, query_todos, get_todo, mark_todo_complete, get_hybrid_status, test_api_connectivity
+- `admin` - Administrative tools: query_todos, update_todo, delete_todo, query_todo_logs, list_projects, explain, add_explanation
+- `agent_preflight` - Session startup bundle (6 tools): get_context_bundle, preflight_rag, find_relevant, add_todo, mark_todo_complete, list_project_todos
 
 **Usage**:
 ```bash
