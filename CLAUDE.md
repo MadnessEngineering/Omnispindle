@@ -144,7 +144,7 @@ The server exposes standardized MCP tools that AI agents can call:
 - `update_todo` - Modify existing tasks. ALL fields go inside `updates` dict — flat args cause MCP -32603
 - `delete_todo` - Remove tasks
 - `get_todo` - Retrieve single task
-- `mark_todo_complete` - Stages to `review` (not `completed`). Always pass `comment=` — it's the only completion record
+- `complete_todo` - Stages to `review` (not `completed`). Always pass `comment=` — it's the only completion record
 - `list_todos_by_status` - Filter by status: `pending|completed|initial|blocked|in_progress|review`
 - `list_project_todos` - Get recent pending tasks for a project
 - `search_todos` - Tokenized regex search; `fields` param to target specific fields
@@ -200,11 +200,11 @@ The server exposes standardized MCP tools that AI agents can call:
 - `pending` - queued for work
 - `in_progress` - actively being worked
 - `blocked` - waiting on external dependency
-- `review` - done, staged for human review (this is what `mark_todo_complete` sets)
+- `review` - done, staged for human review (this is what `complete_todo` sets)
 - `completed` - fully done, after review queue approval
 - `cancelled` - abandoned
 
-**IMPORTANT**: `mark_todo_complete` sets status to `"review"`, NOT `"completed"`. Final completion happens through the Review Queue UI. Do NOT use `update_todo` with `status: "completed"` to bypass review.
+**IMPORTANT**: `complete_todo` sets status to `"review"`, NOT `"completed"`. Final completion happens through the Review Queue UI. Do NOT use `update_todo` with `status: "completed"` to bypass review.
 
 **Valid Projects**: See `VALID_PROJECTS` list in `tools.py` - includes madness_interactive, omnispindle, swarmonomicon, todomill_projectorium, etc.
 
@@ -355,11 +355,11 @@ Omnispindle supports variable tool loadouts to reduce token usage for AI agents.
 
 **Available Loadouts**:
 - `full` (default) - All 33 tools available
-- `basic` - Essential todo management (7 tools): add_todo, query_todos, update_todo, get_todo, mark_todo_complete, list_todos_by_status, list_project_todos
-- `minimal` - Core functionality only (4 tools): add_todo, query_todos, get_todo, mark_todo_complete
+- `basic` - Essential todo management (7 tools): add_todo, query_todos, update_todo, get_todo, complete_todo, list_todos_by_status, list_project_todos
+- `minimal` - Core functionality only (4 tools): add_todo, query_todos, get_todo, complete_todo
 - `lessons` - Knowledge management focus (7 tools): add_lesson, get_lesson, update_lesson, delete_lesson, search_lessons, grep_lessons, list_lessons
 - `admin` - Administrative tools: query_todos, update_todo, delete_todo, query_todo_logs, list_projects, explain, add_explanation
-- `agent_preflight` - Session startup bundle (6 tools): get_context_bundle, preflight_rag, find_relevant, add_todo, mark_todo_complete, list_project_todos
+- `agent_preflight` - Session startup bundle (6 tools): get_context_bundle, preflight_rag, find_relevant, add_todo, complete_todo, list_project_todos
 
 **Usage**:
 ```bash

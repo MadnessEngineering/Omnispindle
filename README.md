@@ -75,7 +75,7 @@ Full loadout is 32 tools across 6 categories. Control what's available — and y
 | `update_todo` | Patch any fields; tracks `updated_by` for audit trail |
 | `delete_todo` | Remove a task |
 | `get_todo` | Fetch a single task by ID |
-| `mark_todo_complete` | Complete with optional comment; writes to audit log |
+| `complete_todo` | Complete with optional comment; writes to audit log |
 | `list_todos_by_status` | Filter by status: pending, initial, completed |
 | `search_todos` | Tokenized multi-word fuzzy text search |
 | `list_project_todos` | Recent tasks for a specific project |

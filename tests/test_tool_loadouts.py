@@ -36,7 +36,7 @@ class TestToolLoadouts:
         assert "add_todo" in write_only
         assert "update_todo" in write_only
         assert "delete_todo" in write_only
-        assert "mark_todo_complete" in write_only
+        assert "complete_todo" in write_only
         assert "query_todos" not in write_only
         assert "get_todo" not in write_only
         assert len(write_only) == 6
@@ -61,7 +61,7 @@ class TestToolLoadouts:
         assert "add_todo" in lightweight
         assert "query_todos" in lightweight
         assert "get_todo" in lightweight
-        assert "mark_todo_complete" in lightweight
+        assert "complete_todo" in lightweight
 
     def test_basic_loadout(self):
         """Basic loadout should have 10 core CRUD + context + lesson lookup tools."""
@@ -71,7 +71,7 @@ class TestToolLoadouts:
         assert "query_todos" in basic
         assert "update_todo" in basic
         assert "get_todo" in basic
-        assert "mark_todo_complete" in basic
+        assert "complete_todo" in basic
         assert "get_lesson" in basic
         assert "search_lessons" in basic
 
@@ -82,7 +82,7 @@ class TestToolLoadouts:
         assert "add_todo" in minimal
         assert "query_todos" in minimal
         assert "get_todo" in minimal
-        assert "mark_todo_complete" in minimal
+        assert "complete_todo" in minimal
 
     def test_lessons_loadout(self):
         """Lessons loadout should have 7 knowledge management tools."""

@@ -93,7 +93,7 @@ All tools automatically inherit user context from:
 
 **Returns**: Complete todo object
 
-### mark_todo_complete
+### complete_todo
 **Description**: Mark todo as completed with optional completion comment.
 
 **Parameters**:

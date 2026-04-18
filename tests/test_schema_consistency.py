@@ -26,7 +26,7 @@ TOOL_FUNCTION_MAP = {
     "update_todo": tools_module.update_todo,
     "delete_todo": tools_module.delete_todo,
     "get_todo": tools_module.get_todo,
-    "mark_todo_complete": tools_module.mark_todo_complete,
+    "complete_todo": tools_module.complete_todo,
     "list_todos_by_status": tools_module.list_todos_by_status,
     "search_todos": tools_module.search_todos,
     "list_project_todos": tools_module.list_project_todos,

@@ -63,7 +63,7 @@ class TestToolMetadata:
     def test_has_feature_git_metadata(self):
         """Tools with git metadata should be detected."""
         assert has_feature("add_todo", ToolFeature.AUTO_GIT_METADATA) is True
-        assert has_feature("mark_todo_complete", ToolFeature.AUTO_GIT_METADATA) is True
+        assert has_feature("complete_todo", ToolFeature.AUTO_GIT_METADATA) is True
         assert has_feature("get_todo", ToolFeature.AUTO_GIT_METADATA) is True
         assert has_feature("query_todos", ToolFeature.AUTO_GIT_METADATA) is False
 
@@ -100,7 +100,7 @@ class TestToolMetadata:
         """Get tools with git metadata feature."""
         git_tools = get_tools_with_feature(ToolFeature.AUTO_GIT_METADATA)
         assert "add_todo" in git_tools
-        assert "mark_todo_complete" in git_tools
+        assert "complete_todo" in git_tools
         assert "get_todo" in git_tools
         assert len(git_tools) == 3
 
@@ -121,7 +121,7 @@ class TestToolMetadata:
         """All common tools should have access level defined."""
         common_tools = [
             "add_todo", "query_todos", "update_todo", "delete_todo", "get_todo",
-            "mark_todo_complete", "add_lesson", "get_lesson", "search_lessons",
+            "complete_todo", "add_lesson", "get_lesson", "search_lessons",
             "bring_your_own", "list_projects"
         ]
         for tool in common_tools:

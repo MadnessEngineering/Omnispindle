@@ -684,7 +684,7 @@ scheduler = TodoScheduler()
 #             "modifiers": deadline_modifiers,
 #             "weekend_adjustment": weekend_adjustment
 #         },
-#         "possible_next_actions": ["update_todo", "mark_todo_complete", "suggest_time_slot"]
+#         "possible_next_actions": ["update_todo", "complete_todo", "suggest_time_slot"]
 #     }
 #
 #     # MQTT publish as confirmation after generating a deadline suggestion

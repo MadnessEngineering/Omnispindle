@@ -702,23 +702,23 @@ async def update_todo(todo_id: str, updates: dict, ctx: Optional[Context] = None
         update_todo(todo_id="abc-123", status="in_progress")   # flat args rejected
         update_todo(todo_id="abc-123", notes="...")             # same mistake
 
-    Do NOT set status="completed" here — use mark_todo_complete() instead.
+    Do NOT set status="completed" here — use complete_todo() instead.
     """
     # Check for read-only mode (unauthenticated demo users)
     if _is_read_only_user(ctx):
         return create_response(False, message="Demo mode: Todo updates are disabled. Please authenticate to modify todos.")
 
-    # Completion must go through mark_todo_complete — not update_todo
+    # Completion must go through complete_todo — not update_todo
     if updates.get("status", "").lower() == "completed":
         return create_response(
             False,
             message=(
-                f"Use mark_todo_complete to complete a todo — not update_todo.\n\n"
-                f"Why: mark_todo_complete records git context (branch & commit at completion), "
+                f"Use complete_todo to complete a todo — not update_todo.\n\n"
+                f"Why: complete_todo records git context (branch & commit at completion), "
                 f"calculates duration, stores a completion comment in metadata, and writes a "
                 f"proper audit log entry. Bypassing it via update_todo loses all of that.\n\n"
                 f"Correct call:\n"
-                f"  mark_todo_complete(todo_id=\"{todo_id}\", comment=\"what you finished and why\")\n\n"
+                f"  complete_todo(todo_id=\"{todo_id}\", comment=\"what you finished and why\")\n\n"
                 f"The comment parameter is optional but strongly encouraged — it is the only "
                 f"place to capture what was actually accomplished."
             ),
@@ -935,7 +935,7 @@ async def get_todo(todo_id: str, ctx: Optional[Context] = None) -> str:
         logger.error(f"Failed to get todo: {str(e)}")
         return create_response(False, message=str(e))
 
-async def mark_todo_complete(todo_id: str, comment: Optional[str] = None, ctx: Optional[Context] = None) -> str:
+async def complete_todo(todo_id: str, comment: Optional[str] = None, ctx: Optional[Context] = None) -> str:
     """
     Mark a todo as completed. Records git context, calculates duration, and writes an audit log entry.
 

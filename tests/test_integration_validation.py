@@ -119,7 +119,7 @@ class TestMCPClientDetailLevelHandling:
     def test_real_world_mcp_client_token_usage(self):
         """Test realistic token usage for different MCP client types."""
         # Calculate total documentation token usage for common tools
-        common_tools = ["add_todo", "query_todos", "update_todo", "get_todo", "mark_todo_complete"]
+        common_tools = ["add_todo", "query_todos", "update_todo", "get_todo", "complete_todo"]
 
         minimal_total = 0
         full_total = 0

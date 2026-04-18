@@ -16,7 +16,7 @@ _BASE_LOADOUTS: Dict[str, List[str]] = {
     "full": [
         # Todo management (9 tools)
         "add_todo", "query_todos", "update_todo", "delete_todo", "get_todo",
-        "mark_todo_complete", "list_todos_by_status", "search_todos", "list_project_todos",
+        "complete_todo", "list_todos_by_status", "search_todos", "list_project_todos",
 
         # Lessons (7 tools)
         "add_lesson", "get_lesson", "update_lesson", "delete_lesson", "search_lessons",
@@ -46,14 +46,14 @@ _BASE_LOADOUTS: Dict[str, List[str]] = {
 
     "basic": [
         # Core CRUD + context + lesson lookup (10 tools)
-        "add_todo", "query_todos", "update_todo", "get_todo", "mark_todo_complete",
+        "add_todo", "query_todos", "update_todo", "get_todo", "complete_todo",
         "list_todos_by_status", "list_project_todos", "get_context_bundle",
         "get_lesson", "search_lessons"
     ],
 
     "minimal": [
         # Absolute minimum (4 tools)
-        "add_todo", "query_todos", "get_todo", "mark_todo_complete"
+        "add_todo", "query_todos", "get_todo", "complete_todo"
     ],
 
     "lessons": [
@@ -75,7 +75,7 @@ _BASE_LOADOUTS: Dict[str, List[str]] = {
     "write_only": [
         # Create/Update/Delete only (6 tools)
         "add_todo", "update_todo", "delete_todo",
-        "mark_todo_complete", "add_lesson", "update_lesson"
+        "complete_todo", "add_lesson", "update_lesson"
     ],
 
     "read_only": [
@@ -92,7 +92,7 @@ _BASE_LOADOUTS: Dict[str, List[str]] = {
         # Token-optimized core functionality (12 tools)
         # These will use COMPACT documentation level for minimal token usage
         "add_todo", "query_todos", "update_todo", "get_todo",
-        "mark_todo_complete", "add_lesson", "get_lesson",
+        "complete_todo", "add_lesson", "get_lesson",
         "search_lessons", "inventorium_sessions_list", "inventorium_sessions_create",
         "get_context_bundle", "find_relevant", "preflight_rag"
     ],

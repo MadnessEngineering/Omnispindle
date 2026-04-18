@@ -83,8 +83,8 @@ TOOL_SCHEMAS = {
             "required": ["todo_id"]
         }
     },
-    "mark_todo_complete": {
-        "name": "mark_todo_complete",
+    "complete_todo": {
+        "name": "complete_todo",
         "description": "Set status=review (staged for review). Optional closing comment. Prefer over update_todo for completions.",
         "inputSchema": {
             "type": "object",
@@ -540,7 +540,7 @@ async def mcp_handler(request: Request, get_current_user: Callable[[], Coroutine
                 "update_todo": tools.update_todo,
                 "delete_todo": tools.delete_todo,
                 "get_todo": tools.get_todo,
-                "mark_todo_complete": tools.mark_todo_complete,
+                "complete_todo": tools.complete_todo,
                 "list_todos_by_status": tools.list_todos_by_status,
                 "search_todos": tools.search_todos,
                 "list_project_todos": tools.list_project_todos,

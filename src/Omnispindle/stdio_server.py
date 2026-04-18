@@ -262,9 +262,9 @@ class OmniSpindleStdioServer:
                 "func": tools.get_todo,
                 "doc": get_tool_doc("get_todo")
             },
-            "mark_todo_complete": {
-                "func": tools.mark_todo_complete,
-                "doc": get_tool_doc("mark_todo_complete")
+            "complete_todo": {
+                "func": tools.complete_todo,
+                "doc": get_tool_doc("complete_todo")
             },
             "list_todos_by_status": {
                 "func": tools.list_todos_by_status,
@@ -447,16 +447,16 @@ class OmniSpindleStdioServer:
                                 return await func(todo_id, ctx=ctx)
                             return get_todo
 
-                        elif name == "mark_todo_complete":
+                        elif name == "complete_todo":
                             @self.server.tool()
-                            async def mark_todo_complete(
+                            async def complete_todo(
                                 todo_id: Annotated[str, Field(description="Todo ID")],
                                 comment: Annotated[Optional[str], Field(description="Optional completion comment")] = None
                             ) -> str:
                                 """Mark completed. Optional comment."""
                                 ctx = _create_context()
                                 return await func(todo_id, comment, ctx=ctx)
-                            return mark_todo_complete
+                            return complete_todo
 
                         elif name == "list_todos_by_status":
                             @self.server.tool()

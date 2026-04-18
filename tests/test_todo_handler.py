@@ -230,14 +230,14 @@ async def test_get_todo_not_found(todo_server):
     todo_server.collection.find_one.assert_called_once_with({"id": todo_id})
 
 @pytest.mark.asyncio
-async def test_mark_todo_complete_success(todo_server):
+async def test_complete_todo_success(todo_server):
     # Mock a todo in the database
     todo_id = "test_id"
     todo_server.collection.update_one.return_value = MagicMock(modified_count=1)
 
     # Call handler through FastMCP
     response = await todo_server.server.call_tool(
-        "mark_todo_complete",
+        "complete_todo",
         {
             "todo_id": todo_id
         }
@@ -254,14 +254,14 @@ async def test_mark_todo_complete_success(todo_server):
     )
 
 @pytest.mark.asyncio
-async def test_mark_todo_complete_not_found(todo_server):
+async def test_complete_todo_not_found(todo_server):
     # Mock a todo not found in the database
     todo_id = "test_id"
     todo_server.collection.update_one.return_value = MagicMock(modified_count=0)
 
     # Call handler through FastMCP
     response = await todo_server.server.call_tool(
-        "mark_todo_complete",
+        "complete_todo",
         {
             "todo_id": todo_id
         }
@@ -613,7 +613,7 @@ async def test_integration_get_todo(integration_todo_server, mongo_client):
     assert result["todo"]["completed_at"] == todo["completed_at"]
 
 @pytest.mark.asyncio
-async def test_integration_mark_todo_complete(integration_todo_server, mongo_client):
+async def test_integration_complete_todo(integration_todo_server, mongo_client):
     # Add a todo to the database
     todo_id = "integration_test_id"
     todo = {
@@ -634,7 +634,7 @@ async def test_integration_mark_todo_complete(integration_todo_server, mongo_cli
 
     # Call handler through FastMCP
     response = await integration_todo_server.server.call_tool(
-        "mark_todo_complete",
+        "complete_todo",
         {
             "todo_id": todo_id
         }
@@ -643,7 +643,7 @@ async def test_integration_mark_todo_complete(integration_todo_server, mongo_cli
     # Parse response
     result = json.loads(response[0].text)
     if result["status"] == "error":
-        print(f"Error in test_integration_mark_todo_complete: {result['message']}")
+        print(f"Error in test_integration_complete_todo: {result['message']}")
     assert result["status"] == "success"
 
     # Verify the todo was actually marked as completed in MongoDB

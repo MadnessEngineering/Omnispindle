@@ -45,7 +45,7 @@ TOOL_ACCESS_LEVELS: Dict[str, ToolAccessLevel] = {
     "update_todo": ToolAccessLevel.REMOTE_SAFE,
     "delete_todo": ToolAccessLevel.REMOTE_SAFE,
     "get_todo": ToolAccessLevel.REMOTE_SAFE,
-    "mark_todo_complete": ToolAccessLevel.REMOTE_SAFE,
+    "complete_todo": ToolAccessLevel.REMOTE_SAFE,
     "list_todos_by_status": ToolAccessLevel.REMOTE_SAFE,
     "search_todos": ToolAccessLevel.REMOTE_SAFE,
     "list_project_todos": ToolAccessLevel.REMOTE_SAFE,
@@ -87,7 +87,7 @@ TOOL_FEATURES: Dict[str, Set[ToolFeature]] = {
         ToolFeature.AUTO_GIT_METADATA,  # Only in local mode
         ToolFeature.DATABASE_READ,
     },
-    "mark_todo_complete": {
+    "complete_todo": {
         ToolFeature.AUTO_GIT_METADATA,  # Only in local mode
         ToolFeature.DATABASE_WRITE,
     },

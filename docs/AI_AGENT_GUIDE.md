@@ -139,7 +139,7 @@ tags = metadata.get("tags", [])
 | `query_todos_tool` | Search/filter | `query_or_filter`, `fields_or_projection` | Search matches or filtered results |
 | `add_todo_tool` | Create todo | `description`, `project` | `{success, todo_id, message}` |
 | `update_todo_tool` | Modify todo | `todo_id`, `updates` | `{success, message}` |
-| `mark_todo_complete_tool` | Complete todo | `todo_id`, `comment` | `{todo_id, completed_at, duration}` |
+| `complete_todo_tool` | Complete todo | `todo_id`, `comment` | `{todo_id, completed_at, duration}` |
 | `list_todos_by_status_tool` | Get by status | `status`, `limit` | `{count, status, items[]}` |
 
 ## Common Workflows
@@ -162,7 +162,7 @@ update_todo_tool(handoff_todo_id, {
 
 ```python
 # Mark current phase complete
-mark_todo_complete_tool(current_todo_id, 
+complete_todo_tool(current_todo_id, 
     "Completed Phase 1: Authentication system implemented. See commit abc123.")
 
 # Create next phase todo

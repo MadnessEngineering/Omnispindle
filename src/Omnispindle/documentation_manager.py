@@ -141,7 +141,7 @@ for audit purposes. The updated_at timestamp is automatically set."""
         "full": "Get a specific todo by ID. Returns the complete todo object including all metadata fields, completion tracking, and audit information."
     },
     
-    "mark_todo_complete": {
+    "complete_todo": {
         "minimal": "Stage todo for review",
         "basic": "Mark done → status=review. Pass comment= with what was accomplished.",
         "admin": "Sets status=review. Calculates duration, logs event, stores comment in metadata.",

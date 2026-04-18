@@ -221,12 +221,12 @@ if "get_todo" in selected_tools:
         auth_ctx = await get_authenticated_context_from_mcp(ctx, user_ctx)
         return await tools.get_todo(todo_id, auth_ctx)
 
-if "mark_todo_complete" in selected_tools:
+if "complete_todo" in selected_tools:
     @mcp.tool()
-    async def mark_todo_complete(todo_id: str, comment: Optional[str] = None, user_ctx: Optional[Dict[str, Any]] = None, ctx: MCPContext = None):
+    async def complete_todo(todo_id: str, comment: Optional[str] = None, user_ctx: Optional[Dict[str, Any]] = None, ctx: MCPContext = None):
         """Set status=completed. Optional closing comment. Returns updated todo."""
         auth_ctx = await get_authenticated_context_from_mcp(ctx, user_ctx)
-        return await tools.mark_todo_complete(todo_id, comment, auth_ctx)
+        return await tools.complete_todo(todo_id, comment, auth_ctx)
 
 if "update_todo" in selected_tools:
     @mcp.tool()

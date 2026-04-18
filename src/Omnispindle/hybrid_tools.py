@@ -257,12 +257,12 @@ async def get_todo(todo_id: str, ctx: Optional[Context] = None) -> str:
         ctx=ctx
     )
 
-async def mark_todo_complete(todo_id: str, comment: Optional[str] = None, ctx: Optional[Context] = None) -> str:
+async def complete_todo(todo_id: str, comment: Optional[str] = None, ctx: Optional[Context] = None) -> str:
     """Complete todo using hybrid mode"""
     return await _execute_with_fallback(
-        "mark_todo_complete",
-        api_tools.mark_todo_complete,
-        local_tools.mark_todo_complete,
+        "complete_todo",
+        api_tools.complete_todo,
+        local_tools.complete_todo,
         todo_id, comment,
         ctx=ctx
     )

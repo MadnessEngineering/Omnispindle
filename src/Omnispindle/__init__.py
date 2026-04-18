@@ -27,17 +27,17 @@ load_dotenv()
 TOOL_LOADOUTS = {
     "full": [
         "add_todo", "query_todos", "update_todo", "delete_todo", "get_todo",
-        "mark_todo_complete", "list_todos_by_status", "search_todos", "list_project_todos",
+        "complete_todo", "list_todos_by_status", "search_todos", "list_project_todos",
         "add_lesson", "get_lesson", "update_lesson", "delete_lesson", "search_lessons",
         "grep_lessons", "list_lessons", "query_todo_logs", "list_projects",
         "explain", "add_explanation", "point_out_obvious"
     ],
     "basic": [
-        "add_todo", "query_todos", "update_todo", "get_todo", "mark_todo_complete",
+        "add_todo", "query_todos", "update_todo", "get_todo", "complete_todo",
         "list_todos_by_status", "list_project_todos"
     ],
     "minimal": [
-        "add_todo", "query_todos", "get_todo", "mark_todo_complete"
+        "add_todo", "query_todos", "get_todo", "complete_todo"
     ],
     "lessons": [
         "add_lesson", "get_lesson", "update_lesson", "delete_lesson", "search_lessons",
@@ -48,7 +48,7 @@ TOOL_LOADOUTS = {
         "list_projects", "explain", "add_explanation"
     ],
     "hybrid_test": [
-        "add_todo", "query_todos", "get_todo", "mark_todo_complete",
+        "add_todo", "query_todos", "get_todo", "complete_todo",
         "get_hybrid_status", "test_api_connectivity"
     ]
 }
@@ -147,7 +147,7 @@ class Omnispindle:
             "update_todo": (tools_module.update_todo, get_tool_doc("update_todo")),
             "delete_todo": (tools_module.delete_todo, get_tool_doc("delete_todo")),
             "get_todo": (tools_module.get_todo, get_tool_doc("get_todo")),
-            "mark_todo_complete": (tools_module.mark_todo_complete, get_tool_doc("mark_todo_complete")),
+            "complete_todo": (tools_module.complete_todo, get_tool_doc("complete_todo")),
             "list_todos_by_status": (tools_module.list_todos_by_status, get_tool_doc("list_todos_by_status")),
             "search_todos": (tools_module.search_todos, get_tool_doc("search_todos")),
             "list_project_todos": (tools_module.list_project_todos, get_tool_doc("list_project_todos")),
