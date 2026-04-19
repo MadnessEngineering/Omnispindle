@@ -2,7 +2,7 @@
 
 **A todo system that went wonderfully, intentionally wrong.**
 
-Omnispindle is the coordination spine of the Madness Interactive ecosystem — a Python FastMCP server with 32 tools that lets AI agents manage tasks, capture knowledge, coordinate sessions, and navigate the whole workshop from a single, standardized interface. PyPI packaged. Auth0 integrated. Runs anywhere a MCP config lives.
+Omnispindle is the coordination spine of the Madness Interactive ecosystem — a Python FastMCP server with 33 tools that lets AI agents manage tasks, capture knowledge, coordinate sessions, and navigate the whole workshop from a single, standardized interface. PyPI packaged. Auth0 integrated. Runs anywhere a MCP config lives.
 
 It started as "let's do todos properly." It became the central nervous system for a multi-project AI-assisted development lab. Both of these things are fine.
 
@@ -65,18 +65,18 @@ python -m src.Omnispindle.stdio_server
 
 ## Tools
 
-Full loadout is 32 tools across 6 categories. Control what's available — and your agent's token budget — with `OMNISPINDLE_TOOL_LOADOUT`.
+Full loadout is 33 tools across 6 categories. Control what's available — and your agent's token budget — with `OMNISPINDLE_TOOL_LOADOUT`.
 
 ### Todo Management (9 tools)
 | Tool | What it does |
 |------|-------------|
 | `add_todo` | Create a task with project, priority, target agent, notes, and metadata |
-| `query_todos` | MongoDB-style filter queries with projection, limit, offset, and `since` change detection |
-| `update_todo` | Patch any fields; tracks `updated_by` for audit trail |
+| `query_todos` | MongoDB-style filter queries with projection, limit, offset, `since` change detection, and `graph_root` for dependency subgraph traversal |
+| `update_todo` | Patch any fields; metadata is deep-merged. Supports `$push`/`$pull` on array fields (e.g. `metadata.blockers`) for dependency linking |
 | `delete_todo` | Remove a task |
 | `get_todo` | Fetch a single task by ID |
-| `complete_todo` | Complete with optional comment; writes to audit log |
-| `list_todos_by_status` | Filter by status: pending, initial, completed |
+| `complete_todo` | Stage for review with optional comment; writes to audit log. Sets status to `review`, not `completed` |
+| `list_todos_by_status` | Filter by status: `pending` `initial` `in_progress` `blocked` `review` `completed` |
 | `search_todos` | Tokenized multi-word fuzzy text search |
 | `list_project_todos` | Recent tasks for a specific project |
 
@@ -130,15 +130,15 @@ Set `OMNISPINDLE_TOOL_LOADOUT` to control what's registered:
 
 | Loadout | Tools | Use case |
 |---------|-------|----------|
-| `full` | 32 | Everything |
-| `basic` | 8 | Core todo CRUD + `get_context_bundle` |
+| `full` | 33 | Everything |
+| `basic` | 10 | Core todo CRUD + `get_context_bundle` |
 | `minimal` | 4 | Add, query, get, mark complete |
 | `lessons` | 7 | Knowledge management only |
-| `admin` | 13 | Admin tasks + session management |
+| `admin` | 14 | Admin tasks + session management |
 | `write_only` | 6 | Create/update/delete only |
-| `read_only` | 10 | Query/get only |
-| `lightweight` | 12 | Token-optimized core |
-| `hybrid_test` | 6 | API connectivity testing |
+| `read_only` | 15 | Query/get only |
+| `lightweight` | 13 | Token-optimized core |
+| `agent_preflight` | 6 | Session startup: context bundle, RAG check, todo ops |
 
 ---
 
@@ -267,7 +267,7 @@ This is a working system for our lab. For yours, make it yours.
 
 ## Philosophy
 
-Most people build a todo app with 5 features. We built one with 32 MCP tools, three operation modes, session genealogy trees, vector embeddings, zero-config OAuth, and a roadmap that includes walking through your code in VR.
+Most people build a todo app with 5 features. We built one with 33 MCP tools, three operation modes, session genealogy trees, vector embeddings, zero-config OAuth, and a roadmap that includes walking through your code in VR.
 
 This is the right amount of complexity. Every piece is load-bearing.
 
