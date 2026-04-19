@@ -69,6 +69,11 @@ def deep_merge_metadata(existing: dict, updates: dict) -> dict:
     Deep merge metadata updates with existing metadata.
     Preserves existing fields that aren't being updated.
 
+    Supports array mutation operators for list fields (e.g. blockers, tags):
+        {"blockers": {"$push": "uuid"}}   — append one item (deduped)
+        {"blockers": {"$pull": "uuid"}}   — remove one item
+        {"blockers": ["a", "b"]}          — replace the whole list
+
     Args:
         existing: Existing metadata dict
         updates: New metadata updates to merge
@@ -84,7 +89,20 @@ def deep_merge_metadata(existing: dict, updates: dict) -> dict:
     merged = existing.copy()
 
     for key, value in updates.items():
-        if key in merged and isinstance(merged[key], dict) and isinstance(value, dict):
+        if isinstance(value, dict) and ("$push" in value or "$pull" in value):
+            # Array mutation operators
+            current = merged.get(key) or []
+            if not isinstance(current, list):
+                current = [current] if current else []
+            if "$push" in value:
+                item = value["$push"]
+                if item not in current:
+                    current = current + [item]
+            if "$pull" in value:
+                item = value["$pull"]
+                current = [x for x in current if x != item]
+            merged[key] = current
+        elif key in merged and isinstance(merged[key], dict) and isinstance(value, dict):
             # Recursively merge nested dicts
             merged[key] = deep_merge_metadata(merged[key], value)
         else:
@@ -619,7 +637,7 @@ async def add_todo(description: str, project: str, priority: str = "Medium", tar
         logger.error(f"Failed to create todo: {str(e)}")
         return create_response(False, message=str(e))
 
-async def query_todos(filter: Optional[Dict[str, Any]] = None, projection: Optional[Dict[str, Any]] = None, limit: int = 100, offset: int = 0, exclude_completed: bool = True, since: Optional[int] = None, ctx: Optional[Context] = None) -> str:
+async def query_todos(filter: Optional[Dict[str, Any]] = None, projection: Optional[Dict[str, Any]] = None, limit: int = 100, offset: int = 0, exclude_completed: bool = True, since: Optional[int] = None, graph_root: Optional[str] = None, ctx: Optional[Context] = None) -> str:
     """
     Query todos with flexible filtering options and pagination.
     - Authenticated users: returns their personal todos
@@ -627,6 +645,10 @@ async def query_todos(filter: Optional[Dict[str, Any]] = None, projection: Optio
     - By default, excludes completed items (set exclude_completed=False to include them)
     - Supports pagination via offset parameter
     - Use 'since' (unix timestamp) to get only items modified after that time
+    - Use 'graph_root' (todo ID or short prefix) to return a dependency subgraph:
+        Returns nodes (todos) and edges (blocker relationships) starting from that todo,
+        traversing metadata.blockers in both directions up to 2 hops.
+        Response shape: {"nodes": [...], "edges": [{"from": id, "to": id, "relation": "blocks"}], "root": id}
     """
     try:
         user_context = ctx.user if ctx else None
@@ -641,6 +663,13 @@ async def query_todos(filter: Optional[Dict[str, Any]] = None, projection: Optio
             collections = db_connection.get_collections(None)  # None = shared database
             todos_collection = collections['todos']
             database_source = "shared (read-only demo)"
+
+        # Graph traversal mode
+        if graph_root is not None:
+            resolved_root = _resolve_todo_id(graph_root, user_context, db_connection)
+            if resolved_root is None:
+                return create_response(False, message=f"graph_root todo '{graph_root}' not found.")
+            return _query_todo_graph(todos_collection, resolved_root)
 
         # Build query filter
         query_filter = filter.copy() if filter else {}
@@ -661,6 +690,56 @@ async def query_todos(filter: Optional[Dict[str, Any]] = None, projection: Optio
     except Exception as e:
         logger.error(f"Failed to query todos: {str(e)}")
         return create_response(False, message=str(e))
+
+
+def _query_todo_graph(todos_collection, root_id: str, max_hops: int = 2) -> str:
+    """
+    Traverse the dependency graph from root_id using metadata.blockers links.
+    Collects nodes within max_hops and builds an edge list.
+    """
+    visited = {}   # id → todo doc
+    edges = []
+    frontier = [root_id]
+
+    for _ in range(max_hops):
+        if not frontier:
+            break
+        next_frontier = []
+        for node_id in frontier:
+            if node_id in visited:
+                continue
+            doc = todos_collection.find_one({"id": node_id})
+            if not doc:
+                continue
+            visited[node_id] = doc
+
+            blockers = (doc.get("metadata") or {}).get("blockers") or []
+            for blocker_id in blockers:
+                edges.append({"from": blocker_id, "to": node_id, "relation": "blocks"})
+                if blocker_id not in visited:
+                    next_frontier.append(blocker_id)
+
+            # Also find todos that this node blocks (reverse direction)
+            blocked_by_this = todos_collection.find({"metadata.blockers": node_id}, {"id": 1, "metadata.blockers": 1})
+            for downstream in blocked_by_this:
+                d_id = downstream.get("id")
+                if d_id and d_id not in visited:
+                    edges.append({"from": node_id, "to": d_id, "relation": "blocks"})
+                    next_frontier.append(d_id)
+
+        frontier = next_frontier
+
+    nodes = list(visited.values())
+    # Deduplicate edges
+    seen_edges = set()
+    unique_edges = []
+    for e in edges:
+        key = (e["from"], e["to"], e["relation"])
+        if key not in seen_edges:
+            seen_edges.add(key)
+            unique_edges.append(e)
+
+    return json.dumps({"root": root_id, "nodes": nodes, "edges": unique_edges, "count": len(nodes)}, cls=MongoJSONEncoder)
 
 def _resolve_todo_id(todo_id: str, user_context, db_conn) -> Optional[str]:
     """
@@ -697,6 +776,11 @@ async def update_todo(todo_id: str, updates: dict, ctx: Optional[Context] = None
     Correct usage:
         update_todo(todo_id="abc-123", updates={"status": "in_progress", "priority": "High"})
         update_todo(todo_id="abc-123", updates={"notes": "blocked on auth", "metadata": {"pr": "42"}})
+
+    Dependency linking via metadata.blockers (array of todo IDs that block this todo):
+        update_todo(todo_id="abc-123", updates={"metadata": {"blockers": {"$push": "uuid-of-blocker"}}})
+        update_todo(todo_id="abc-123", updates={"metadata": {"blockers": {"$pull": "uuid-of-blocker"}}})
+        update_todo(todo_id="abc-123", updates={"metadata": {"blockers": ["uuid-1", "uuid-2"]}})  # replace
 
     Wrong (causes MCP -32603 internal error):
         update_todo(todo_id="abc-123", status="in_progress")   # flat args rejected

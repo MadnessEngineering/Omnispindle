@@ -36,7 +36,7 @@ TOOL_SCHEMAS = {
     },
     "query_todos": {
         "name": "query_todos",
-        "description": "Query todos with pagination. Excludes completed items by default. Use 'since' for change detection.",
+        "description": "Query todos with pagination. Excludes completed items by default. Use 'since' for change detection. Use 'graph_root' to return a dependency subgraph.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -45,7 +45,8 @@ TOOL_SCHEMAS = {
                 "offset": {"type": "number", "description": "Skip N results for pagination (default: 0)"},
                 "exclude_completed": {"type": "boolean", "description": "Exclude completed items (default: true)"},
                 "since": {"type": "number", "description": "Unix timestamp — only return items modified after this time"},
-                "projection": {"type": "object", "description": "{field: 1} to include, {field: 0} to exclude"}
+                "projection": {"type": "object", "description": "{field: 1} to include, {field: 0} to exclude"},
+                "graph_root": {"type": "string", "description": "Todo ID or short prefix — returns dependency subgraph: {root, nodes, edges} traversing metadata.blockers up to 2 hops in both directions"}
             }
         }
     },
