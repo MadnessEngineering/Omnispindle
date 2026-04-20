@@ -1,0 +1,16 @@
+#!/bin/bash
+# post-checkout: auto-pull when switching to main/master
+#
+# Args from git: $1=prev HEAD, $2=new HEAD, $3=1(branch switch) or 0(file checkout)
+# Only fires on branch switches, not file checkouts.
+
+BRANCH_SWITCH=$3
+if [ "$BRANCH_SWITCH" != "1" ]; then
+    exit 0
+fi
+
+CURRENT=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
+if [ "$CURRENT" = "main" ] || [ "$CURRENT" = "master" ]; then
+    echo "[post-checkout] On ${CURRENT} — pulling latest..."
+    git pull --ff-only 2>&1 || echo "[post-checkout] ff-only pull failed (diverged?), skipping auto-pull"
+fi
