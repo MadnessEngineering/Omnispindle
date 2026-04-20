@@ -1,0 +1,102 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+MSG_FILE="${1:-}"
+COMMIT_SOURCE="${2:-}"
+
+if [[ -z "$MSG_FILE" || ! -f "$MSG_FILE" ]]; then
+  exit 0
+fi
+
+# Skip auto-generated commit flows.
+case "$COMMIT_SOURCE" in
+  merge|squash|commit)
+    exit 0
+    ;;
+esac
+
+DEVICE_NAME="${DeNa:-macbook}"
+MQTT_HOST="${MADNESS_MQTT_HOST:-localhost}"
+GIT_CONTEXT_TOPIC="${MADNESS_GIT_CONTEXT_TOPIC:-status/${DEVICE_NAME}/claude/git/context}"
+GIT_CONTEXT_FILE="$(git rev-parse --git-dir 2>/dev/null)/claude-session-context.json"
+
+get_prefix_from_json() {
+  local payload="$1"
+  python3 - "$payload" <<'PY'
+import json
+import re
+import sys
+
+raw = sys.argv[1]
+try:
+    data = json.loads(raw)
+except Exception:
+    print("")
+    raise SystemExit(0)
+
+prefix = str(data.get("commit_prefix") or data.get("active_todo_id") or data.get("todo_short_id") or "").strip()
+if not prefix:
+    todo_id = str(data.get("active_todo_id") or "").strip()
+    if todo_id:
+        prefix = todo_id
+
+if prefix and re.fullmatch(r"[A-Za-z0-9_-]{8,}", prefix):
+    print(prefix)
+else:
+    print("")
+PY
+}
+
+PREFIX=""
+if [[ -f "$GIT_CONTEXT_FILE" ]]; then
+  PREFIX="$(get_prefix_from_json "$(python3 -c "import pathlib; print(pathlib.Path('$GIT_CONTEXT_FILE').read_text(encoding='utf-8'))" 2>/dev/null || true)")"
+fi
+
+if [[ -z "$PREFIX" ]]; then
+  RETAINED_PAYLOAD="$(mosquitto_sub -h "$MQTT_HOST" -t "$GIT_CONTEXT_TOPIC" -C 1 -W 1 2>/dev/null || true)"
+  if [[ -n "$RETAINED_PAYLOAD" ]]; then
+    PREFIX="$(get_prefix_from_json "$RETAINED_PAYLOAD")"
+  fi
+fi
+
+if [[ -z "$PREFIX" ]]; then
+  exit 0
+fi
+
+CURRENT_SUBJECT="$(python3 - "$MSG_FILE" <<'PY'
+import pathlib
+import sys
+path = pathlib.Path(sys.argv[1])
+for line in path.read_text(encoding="utf-8").splitlines():
+    s = line.strip()
+    if s and not s.startswith("#"):
+        print(s)
+        break
+PY
+)"
+
+if [[ -z "$CURRENT_SUBJECT" ]]; then
+  exit 0
+fi
+
+if [[ "$CURRENT_SUBJECT" == "$PREFIX"* ]]; then
+  exit 0
+fi
+
+python3 - "$MSG_FILE" "$PREFIX" <<'PY'
+import pathlib
+import sys
+
+path = pathlib.Path(sys.argv[1])
+prefix = sys.argv[2]
+lines = path.read_text(encoding="utf-8").splitlines()
+done = False
+for i, line in enumerate(lines):
+    stripped = line.strip()
+    if stripped and not stripped.startswith("#"):
+        lines[i] = f"{prefix} {stripped}"
+        done = True
+        break
+if done:
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+PY
