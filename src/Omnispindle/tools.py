@@ -1019,7 +1019,7 @@ async def get_todo(todo_id: str, ctx: Optional[Context] = None) -> str:
         logger.error(f"Failed to get todo: {str(e)}")
         return create_response(False, message=str(e))
 
-async def complete_todo(todo_id: str, comment: Optional[str] = None, ctx: Optional[Context] = None) -> str:
+async def complete_todo(todo_id: str, comment: Optional[str] = None, files: Optional[List[str]] = None, ctx: Optional[Context] = None) -> str:
     """
     Mark a todo as completed. Records git context, calculates duration, and writes an audit log entry.
 
@@ -1031,6 +1031,8 @@ async def complete_todo(todo_id: str, comment: Optional[str] = None, ctx: Option
         todo_id: The todo ID to complete.
         comment: What was actually finished and why. Strongly encouraged — omitting it loses
                  the completion context permanently.
+        files: List of file paths changed during this work. Feeds SwarmDesk connected buildings.
+               Example: ["src/components/TodoTab.jsx", "src/services/todoAPI.js"]
     """
     # Check for read-only mode (unauthenticated demo users)
     if _is_read_only_user(ctx):
@@ -1089,6 +1091,8 @@ async def complete_todo(todo_id: str, comment: Optional[str] = None, ctx: Option
             updates["metadata.completion_comment"] = comment
             user_email = ctx.user.get("email", "anonymous") if ctx and ctx.user else "anonymous"
             updates["metadata.completed_by"] = user_email
+        if files:
+            updates["metadata.files"] = files
 
         # Add git context on completion (branch and commit hash at completion time)
         git_metadata = enrich_metadata_with_git()

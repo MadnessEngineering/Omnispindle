@@ -451,11 +451,12 @@ class OmniSpindleStdioServer:
                             @self.server.tool()
                             async def complete_todo(
                                 todo_id: Annotated[str, Field(description="Todo ID")],
-                                comment: Annotated[Optional[str], Field(description="Optional completion comment")] = None
+                                comment: Annotated[Optional[str], Field(description="Optional completion comment")] = None,
+                                files: Annotated[Optional[List[str]], Field(description="File paths changed. Feeds SwarmDesk connected buildings.")] = None
                             ) -> str:
-                                """Mark completed. Optional comment."""
+                                """Mark completed. Optional comment and changed files list."""
                                 ctx = _create_context()
-                                return await func(todo_id, comment, ctx=ctx)
+                                return await func(todo_id, comment, files, ctx=ctx)
                             return complete_todo
 
                         elif name == "list_todos_by_status":

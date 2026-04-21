@@ -91,7 +91,8 @@ TOOL_SCHEMAS = {
             "type": "object",
             "properties": {
                 "todo_id": {"type": "string", "description": "Todo UUID"},
-                "comment": {"type": "string", "description": "What was accomplished — omitting loses completion context permanently"}
+                "comment": {"type": "string", "description": "What was accomplished — omitting loses completion context permanently"},
+                "files": {"type": "array", "items": {"type": "string"}, "description": "File paths changed during this work. Feeds SwarmDesk connected buildings. Example: [\"src/components/TodoTab.jsx\"]"}
             },
             "required": ["todo_id"]
         }
