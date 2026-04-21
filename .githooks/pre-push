@@ -1,0 +1,24 @@
+#!/bin/bash
+# Omnispindle pre-push hook
+# Pull + restart on eaws when pushing to main
+
+set -o pipefail
+
+branch=$(git rev-parse --abbrev-ref HEAD)
+if [ "$branch" != "main" ]; then
+    exit 0
+fi
+
+echo ""
+echo "🚀 Deploying Omnispindle to eaws..."
+
+ssh eaws "cd /home/ubuntu/Omnispindle && git pull origin main && pm2 restart Omnispindle-HTTP" 2>&1
+status=$?
+
+if [ $status -eq 0 ]; then
+    echo "✅ Omnispindle deployed and restarted."
+else
+    echo "❌ Deploy failed (exit $status). Push still succeeded — fix manually with: ssh eaws 'cd /home/ubuntu/Omnispindle && git pull && pm2 restart Omnispindle-HTTP'"
+fi
+
+exit 0

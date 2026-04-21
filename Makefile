@@ -27,17 +27,17 @@ run-sse:
 run-stdio:
 	python3.11 -m src.Omnispindle.stdio_server
 
-# deploy
+# deploy — pull latest on eaws and restart
 deploy:
-	cd Todomill_projectorium && make deploy
+	ssh eaws "cd /home/ubuntu/Omnispindle && git pull origin main && pm2 restart Omnispindle-HTTP"
 
-# deploy-dry-run
+# deploy-dry-run — show what would change
 deploy-dry-run:
-	cd Todomill_projectorium && make deploy-dry-run
+	ssh eaws "cd /home/ubuntu/Omnispindle && git fetch origin main && git log HEAD..origin/main --oneline"
 
-# deploy-force
+# deploy-force — hard reset to origin/main then restart
 deploy-force:
-	cd Todomill_projectorium && make deploy-force
+	ssh eaws "cd /home/ubuntu/Omnispindle && git fetch origin main && git reset --hard origin/main && pm2 restart Omnispindle-HTTP"
 
 # Run tests
 test:
