@@ -26,70 +26,78 @@ AUTH_CONFIG = AuthConfig(
     client_id="U43kJwbd1xPcCzJsu3kZIIeNV1ygS7x1",
 )
 
+async def _check_api_key_in_collection(api_key: str, api_keys_collection, db_name: str) -> Optional[dict]:
+    """Check an API key against a single collection. Returns user dict or None."""
+    active_keys = list(api_keys_collection.find({
+        'is_active': True,
+        'expires_at': {'$gt': datetime.utcnow()}
+    }))
+
+    for key_record in active_keys:
+        if bcrypt.checkpw(api_key.encode('utf-8'), key_record['key_hash'].encode('utf-8')):
+            def update_last_used():
+                api_keys_collection.update_one(
+                    {'key_id': key_record['key_id']},
+                    {'$set': {'last_used': datetime.utcnow()}}
+                )
+            asyncio.create_task(asyncio.to_thread(update_last_used))
+
+            # Derive user database name from email if not already a user_* db
+            user_database = db_name
+            if db_name == 'swarmonomicon' and key_record.get('user_email'):
+                email = key_record['user_email']
+                user_database = 'user_' + email.replace('@', '_').replace('.', '_')
+
+            logger.info(f"🔑 API key verified for user: {key_record['user_email']} in database: {db_name}")
+
+            return {
+                'sub': key_record['user_id'],
+                'email': key_record['user_email'],
+                'name': key_record['user_email'],
+                'auth_method': 'api_key',
+                'key_id': key_record['key_id'],
+                'key_name': key_record['name'],
+                'user_database': user_database,
+                'scope': 'read:todos write:todos'
+            }
+    return None
+
+
 async def verify_api_key(api_key: str) -> Optional[dict]:
     """
-    Verify an API key against user databases and return user info
-    Searches across all user databases since API keys are stored per-user
+    Verify an API key and return user info.
+    Checks centralized swarmonomicon.api_keys first (where backend stores keys),
+    then falls back to per-user databases for legacy keys.
     """
     try:
-        # Import here to avoid circular imports
         from .database import db_connection
-
-        # Get MongoDB client to access all databases
         client = db_connection.client
 
-        # Get list of user databases (databases starting with 'user_')
+        # Fast path: check centralized api_keys collection first
+        try:
+            swarm_db = client['swarmonomicon']
+            result = await _check_api_key_in_collection(api_key, swarm_db['api_keys'], 'swarmonomicon')
+            if result:
+                return result
+            logger.debug("🔑 Key not found in swarmonomicon, checking user databases...")
+        except Exception as e:
+            logger.debug(f"Error checking swarmonomicon: {e}")
+
+        # Fallback: search per-user databases (legacy key storage)
         database_names = client.list_database_names()
         user_databases = [name for name in database_names if name.startswith('user_')]
-
         logger.info(f"🔑 Searching for API key across {len(user_databases)} user databases")
 
-        # Search each user database for the API key
         for db_name in user_databases:
             try:
-                user_db = client[db_name]
-                api_keys_collection = user_db['api_keys']
-
-                # Find active, non-expired API keys in this user's database
-                active_keys = list(api_keys_collection.find({
-                    'is_active': True,
-                    'expires_at': {'$gt': datetime.utcnow()}
-                }))
-
-                # Check each key against the provided key using bcrypt
-                for key_record in active_keys:
-                    if bcrypt.checkpw(api_key.encode('utf-8'), key_record['key_hash'].encode('utf-8')):
-                        # Update last_used timestamp in a separate thread (non-blocking)
-                        def update_last_used():
-                            api_keys_collection.update_one(
-                                {'key_id': key_record['key_id']},
-                                {'$set': {'last_used': datetime.utcnow()}}
-                            )
-
-                        # Run the update in background
-                        asyncio.create_task(asyncio.to_thread(update_last_used))
-
-                        logger.info(f"🔑 API key verified for user: {key_record['user_email']} in database: {db_name}")
-
-                        # Return user-like object compatible with Auth0 format
-                        return {
-                            'sub': key_record['user_id'],
-                            'email': key_record['user_email'],
-                            'name': key_record['user_email'],
-                            'auth_method': 'api_key',
-                            'key_id': key_record['key_id'],
-                            'key_name': key_record['name'],
-                            'user_database': db_name,  # Include which database this user uses
-                            # Add scope for compatibility
-                            'scope': 'read:todos write:todos'
-                        }
-
+                result = await _check_api_key_in_collection(api_key, client[db_name]['api_keys'], db_name)
+                if result:
+                    return result
             except Exception as db_error:
-                # Log but continue - some user databases might have issues
                 logger.debug(f"Error checking database {db_name}: {db_error}")
                 continue
 
-        logger.warning("❌ Invalid API key attempted - not found in any user database")
+        logger.warning("❌ Invalid API key attempted - not found in any database")
         return None
 
     except Exception as e:
