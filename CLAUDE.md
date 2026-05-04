@@ -360,6 +360,7 @@ Omnispindle supports variable tool loadouts to reduce token usage for AI agents.
 - `lessons` - Knowledge management focus (7 tools): add_lesson, get_lesson, update_lesson, delete_lesson, search_lessons, grep_lessons, list_lessons
 - `admin` - Administrative tools: query_todos, update_todo, delete_todo, query_todo_logs, list_projects, explain, add_explanation
 - `agent_preflight` - Session startup bundle (6 tools): get_context_bundle, preflight_rag, find_relevant, add_todo, complete_todo, list_project_todos
+- `refine` - Todo enrichment mode (13 tools): query/search/get + update_todo + context intelligence tools (find_relevant, preflight_rag, search_lessons) + session linking. Use when auditing and enriching existing todos with missing tags, files, district/coordinates, or dependency (blockers) metadata.
 
 **Usage**:
 ```bash

@@ -101,6 +101,24 @@ _BASE_LOADOUTS: Dict[str, List[str]] = {
         # Startup context for agents beginning work (6 tools)
         "get_context_bundle", "preflight_rag", "find_relevant",
         "query_todos", "get_todo", "get_lesson"
+    ],
+
+    "refine": [
+        # Discovery — find todos needing enrichment (5 tools)
+        "query_todos", "search_todos", "get_todo",
+        "list_todos_by_status", "list_project_todos",
+
+        # Enrichment — write improved metadata (1 tool)
+        "update_todo",
+
+        # Context & intelligence (4 tools)
+        "get_context_bundle", "find_relevant", "preflight_rag", "search_lessons",
+
+        # Coordination (2 tools)
+        "inventorium_todos_link_session", "inventorium_sessions_tree",
+
+        # Utility (1 tool)
+        "point_out_obvious",
     ]
 }
 
@@ -193,7 +211,8 @@ def get_loadout_info(loadout_name: str) -> Dict[str, any]:
         "write_only": "Create, update, delete operations only (6 tools)",
         "read_only": "Query, get, and search operations + sessions (15 tools)",
         "lightweight": "Token-optimized core functionality (13 tools)",
-        "agent_preflight": "Startup context for agents beginning work (6 tools)"
+        "agent_preflight": "Startup context for agents beginning work (6 tools)",
+        "refine": "Todo enrichment: audit + enrich metadata (tags, files, district, coordinates, blockers) for 3D visualization and dependency graph quality (13 tools)"
     }
 
     tools = _BASE_LOADOUTS.get(loadout_name, [])
