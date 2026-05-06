@@ -18,7 +18,7 @@ from .models.config import AuthConfig
 
 logger = logging.getLogger(__name__)
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token", auto_error=False)
 
 AUTH_CONFIG = AuthConfig(
     domain="dev-eoi0koiaujjbib20.us.auth0.com",
@@ -128,7 +128,7 @@ def get_jwks():
 async def get_current_user(
     security_scopes: SecurityScopes,
     request: Request,
-    token: str = Depends(oauth2_scheme)
+    token: Optional[str] = Depends(oauth2_scheme)
 ) -> Optional[dict]:
     """
     Dependency to get the current user from Auth0 JWT or API key.
