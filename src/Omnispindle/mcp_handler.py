@@ -125,7 +125,7 @@ TOOL_SCHEMAS = {
     },
     "list_project_todos": {
         "name": "list_project_todos",
-        "description": "Quick project filter. Returns recent pending todos for one project.",
+        "description": "Quick project filter. Returns recent pending and in_progress todos for one project.",
         "inputSchema": {
             "type": "object",
             "properties": {

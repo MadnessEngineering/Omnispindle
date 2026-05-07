@@ -491,7 +491,7 @@ class OmniSpindleStdioServer:
                                 limit: Annotated[int, Field(description="Max results")] = 5,
                                 offset: Annotated[int, Field(description="Skip N results for pagination")] = 0
                             ) -> str:
-                                """Quick project filter. Returns recent pending todos for one project."""
+                                """Quick project filter. Returns recent pending and in_progress todos for one project."""
                                 ctx = _create_context()
                                 return await func(project, limit, offset, ctx=ctx)
                             return list_project_todos
