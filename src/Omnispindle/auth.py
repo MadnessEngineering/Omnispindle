@@ -1,6 +1,8 @@
 
 import json
 import logging
+import hashlib
+import time
 from functools import lru_cache
 from typing import Optional
 from datetime import datetime
@@ -25,6 +27,45 @@ AUTH_CONFIG = AuthConfig(
     audience="https://madnessinteractive.cc/api",
     client_id="U43kJwbd1xPcCzJsu3kZIIeNV1ygS7x1",
 )
+
+# --- API Key Verification Cache ---
+# Maps sha256(api_key) -> (user_info_dict, expiry_timestamp)
+# Avoids repeated bcrypt checks (~150ms each) on every tool call.
+_api_key_cache: dict[str, tuple[dict, float]] = {}
+_API_KEY_CACHE_TTL = 300  # 5 minutes
+
+
+def _cache_key(api_key: str) -> str:
+    """Fast SHA-256 digest of raw key — used as cache lookup key."""
+    return hashlib.sha256(api_key.encode('utf-8')).hexdigest()
+
+
+def _get_cached_user(api_key: str) -> Optional[dict]:
+    """Return cached user info if present and not expired, else None."""
+    digest = _cache_key(api_key)
+    entry = _api_key_cache.get(digest)
+    if entry is None:
+        return None
+    user_info, expiry = entry
+    if time.monotonic() > expiry:
+        _api_key_cache.pop(digest, None)
+        return None
+    return user_info
+
+
+def _set_cached_user(api_key: str, user_info: dict) -> None:
+    """Cache a verified key result."""
+    digest = _cache_key(api_key)
+    _api_key_cache[digest] = (user_info, time.monotonic() + _API_KEY_CACHE_TTL)
+
+
+def invalidate_api_key_cache(api_key: Optional[str] = None) -> None:
+    """Invalidate a single key or flush entire cache (for revocation)."""
+    if api_key:
+        _api_key_cache.pop(_cache_key(api_key), None)
+    else:
+        _api_key_cache.clear()
+
 
 async def _check_api_key_in_collection(api_key: str, api_keys_collection, db_name: str) -> Optional[dict]:
     """Check an API key against a single collection. Returns user dict or None."""
@@ -66,9 +107,15 @@ async def _check_api_key_in_collection(api_key: str, api_keys_collection, db_nam
 async def verify_api_key(api_key: str) -> Optional[dict]:
     """
     Verify an API key and return user info.
-    Checks centralized swarmonomicon.api_keys first (where backend stores keys),
-    then falls back to per-user databases for legacy keys.
+    Uses SHA-256 cache to avoid repeated bcrypt on every call.
+    Falls back to centralized then per-user database lookup on cache miss.
     """
+    # Cache hit — skip DB + bcrypt entirely
+    cached = _get_cached_user(api_key)
+    if cached is not None:
+        logger.debug(f"🔑 API key cache hit for {cached.get('email', 'unknown')}")
+        return cached
+
     try:
         from .database import db_connection
         client = db_connection.client
@@ -78,6 +125,7 @@ async def verify_api_key(api_key: str) -> Optional[dict]:
             swarm_db = client['swarmonomicon']
             result = await _check_api_key_in_collection(api_key, swarm_db['api_keys'], 'swarmonomicon')
             if result:
+                _set_cached_user(api_key, result)
                 return result
             logger.debug("🔑 Key not found in swarmonomicon, checking user databases...")
         except Exception as e:
@@ -92,6 +140,7 @@ async def verify_api_key(api_key: str) -> Optional[dict]:
             try:
                 result = await _check_api_key_in_collection(api_key, client[db_name]['api_keys'], db_name)
                 if result:
+                    _set_cached_user(api_key, result)
                     return result
             except Exception as db_error:
                 logger.debug(f"Error checking database {db_name}: {db_error}")
