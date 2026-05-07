@@ -1494,13 +1494,13 @@ async def grep_lessons(pattern: str, limit: int = 20, ctx: Optional[Context] = N
 async def list_project_todos(project: str, limit: int = 5, offset: int = 0, ctx: Optional[Context] = None) -> str:
     """
     List recent active todos for a specific project with pagination support.
-    Only returns pending todos by default.
+    Returns pending and in_progress todos (excludes review, completed, cancelled).
     """
     return await query_todos(
-        filter={"project": validate_project_name(project, ctx), "status": "pending"},
+        filter={"project": validate_project_name(project, ctx), "status": {"$in": ["pending", "in_progress"]}},
         limit=limit,
         offset=offset,
-        exclude_completed=False,  # Already filtering to pending
+        exclude_completed=False,  # Already filtering by status
         ctx=ctx
     )
 

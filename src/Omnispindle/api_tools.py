@@ -178,11 +178,14 @@ async def query_todos(filter: Optional[Dict[str, Any]] = None, projection: Optio
             project = filter.get("project")
             status = filter.get("status")
             priority = filter.get("priority")
-        
+            # Convert MongoDB $in operator to comma-separated string for API
+            if isinstance(status, dict) and "$in" in status:
+                status = ",".join(status["$in"])
+
         async with MadnessAPIClient(auth_token=auth_token, api_key=api_key) as client:
             api_response = await client.get_todos(
                 project=project,
-                status=status, 
+                status=status,
                 priority=priority,
                 limit=limit
             )
@@ -384,7 +387,7 @@ async def list_project_todos(project: str, limit: int = 5, ctx: Optional[Context
     List recent active todos for a specific project.
     """
     return await query_todos(
-        filter={"project": project.lower(), "status": "pending"},
+        filter={"project": project.lower(), "status": {"$in": ["pending", "in_progress"]}},
         limit=limit,
         ctx=ctx
     )
