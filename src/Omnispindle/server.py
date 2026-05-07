@@ -49,7 +49,7 @@ from .middleware import (
     NoneTypeResponseMiddleware,
     create_asgi_error_handler
 )
-from .auth import get_current_user, get_current_user_from_query, AUTH_CONFIG  # Re-enabled for MCP endpoints
+from .auth import get_current_user, get_current_user_from_query, AUTH_CONFIG, invalidate_api_key_cache  # Re-enabled for MCP endpoints
 from fastapi import Depends, Request
 from .todo_log_service import start_service
 from .database import db_connection
@@ -261,6 +261,19 @@ class Omnispindle:
                     "client_id": AUTH_CONFIG.client_id,
                     "message": "Use the provided client_id for authentication"
                 }
+
+            # Internal endpoint — called by madness-backend on key revocation
+            @app.post("/internal/invalidate-api-key-cache")
+            async def invalidate_key_cache(request: Request):
+                """Flush API key verification cache. Called by backend after revoke/cleanup."""
+                remote = request.client.host if request.client else "unknown"
+                if remote not in ("127.0.0.1", "::1", "localhost"):
+                    logger.warning(f"Rejected cache invalidation from non-local source: {remote}")
+                    return JSONResponse({"error": "forbidden"}, status_code=403)
+
+                invalidate_api_key_cache()
+                logger.info(f"🔑 API key cache flushed (requested by backend @ {remote})")
+                return {"status": "ok", "message": "API key cache cleared"}
 
             logger.info("Server startup complete, returning ASGI application")
             return app
