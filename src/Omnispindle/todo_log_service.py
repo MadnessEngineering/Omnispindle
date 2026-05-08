@@ -145,7 +145,8 @@ class TodoLogService:
 
     async def log_todo_action(self, operation: str, todo_id: str, description: str,
                              project: str, changes: List[Dict] = None, user_agent: str = None,
-                             user_context: Optional[Dict[str, Any]] = None, completion_comment: str = None) -> bool:
+                             user_context: Optional[Dict[str, Any]] = None, completion_comment: str = None,
+                             notes: str = None, tags: List[str] = None) -> bool:
         """
         Log a todo action to the database and notify via MQTT.
 
@@ -186,6 +187,12 @@ class TodoLogService:
             # Add completion comment for complete operations
             if operation == 'complete' and completion_comment:
                 log_entry['completion_comment'] = completion_comment
+
+            # Add notes and tags if present
+            if notes:
+                log_entry['notes'] = notes
+            if tags and len(tags) > 0:
+                log_entry['tags'] = tags
 
             # Get the appropriate logs collection for the user context
             collections = db_connection.get_collections(user_context)
@@ -381,7 +388,9 @@ async def stop_service():
     await service.stop()
 
 # Direct logging functions for use in tools
-async def log_todo_create(todo_id: str, description: str, project: str, user_agent: str = None, user_context: Optional[Dict[str, Any]] = None) -> bool:
+async def log_todo_create(todo_id: str, description: str, project: str, user_agent: str = None,
+                         user_context: Optional[Dict[str, Any]] = None,
+                         notes: str = None, tags: List[str] = None) -> bool:
     """
     Log a todo creation action.
     """
@@ -393,7 +402,8 @@ async def log_todo_create(todo_id: str, description: str, project: str, user_age
         if not success:
             logger.warning("Failed to initialize TodoLogService for logging todo creation")
             return False
-    return await service.log_todo_action('create', todo_id, description, project, None, user_agent, user_context)
+    return await service.log_todo_action('create', todo_id, description, project, None, user_agent, user_context,
+                                        notes=notes, tags=tags)
 
 async def log_todo_update(todo_id: str, description: str, project: str,
                          changes: List[Dict] = None, user_agent: str = None, user_context: Optional[Dict[str, Any]] = None) -> bool:

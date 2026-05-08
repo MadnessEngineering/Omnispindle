@@ -604,7 +604,8 @@ async def add_todo(description: str, project: str, priority: str = "Medium", tar
 
         # Keep add_todo latency tight: schedule non-critical follow-up work in background.
         async def _background_log_create():
-            await log_todo_create(todo_id, description, project, user_email, ctx.user if ctx else None)
+            await log_todo_create(todo_id, description, project, user_email, ctx.user if ctx else None,
+                                 notes=todo.get('notes'), tags=todo.get('metadata', {}).get('tags'))
 
         async def _background_embedding_update():
             embed_text = embeddings.embedding_text_for_todo(todo)
