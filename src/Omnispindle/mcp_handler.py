@@ -422,6 +422,31 @@ TOOL_SCHEMAS = {
             },
             "required": ["intent"]
         }
+    },
+    "write_agent_journal": {
+        "name": "write_agent_journal",
+        "description": "Append a timestamped entry to an agent's persistent journal. Use to leave working notes, session context, or status updates visible in SwarmDesk's 3D world. Other agents can read your journal for cross-agent awareness.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "agent_name": {"type": "string", "description": "Agent identifier (e.g. 'claude', 'gemini', 'user')"},
+                "content": {"type": "string", "description": "Journal entry text (max 500 chars)"},
+                "entry_type": {"type": "string", "description": "Entry category: note|annotation|session_start|session_end (default: note)"}
+            },
+            "required": ["agent_name", "content"]
+        }
+    },
+    "read_agent_journal": {
+        "name": "read_agent_journal",
+        "description": "Read recent journal entries for any agent. Enables cross-agent awareness — read your own journal for continuity, or another agent's journal to see what they've been working on.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "agent_name": {"type": "string", "description": "Agent identifier to read (e.g. 'claude', 'gemini', 'user')"},
+                "limit": {"type": "number", "description": "Number of recent entries (default: 10, max: 50)"}
+            },
+            "required": ["agent_name"]
+        }
     }
 }
 
@@ -574,7 +599,10 @@ async def mcp_handler(request: Request, get_current_user: Callable[[], Coroutine
                 # Semantic search (Tier 2 RAG)
                 "find_relevant": tools.find_relevant,
                 # Preflight RAG (Pre-processing lessons lookup)
-                "preflight_rag": tools.preflight_rag
+                "preflight_rag": tools.preflight_rag,
+                # Agent Journal tools
+                "write_agent_journal": tools.write_agent_journal,
+                "read_agent_journal": tools.read_agent_journal
             }
 
             if tool_name not in tool_functions:

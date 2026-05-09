@@ -71,6 +71,8 @@ TOOL_ACCESS_LEVELS: Dict[str, ToolAccessLevel] = {
     "get_context_bundle": ToolAccessLevel.REMOTE_SAFE,
     "find_relevant": ToolAccessLevel.REMOTE_SAFE,
     "preflight_rag": ToolAccessLevel.REMOTE_SAFE,
+    "write_agent_journal": ToolAccessLevel.REMOTE_SAFE,
+    "read_agent_journal": ToolAccessLevel.REMOTE_SAFE,
 }
 
 
@@ -147,6 +149,12 @@ TOOL_FEATURES: Dict[str, Set[ToolFeature]] = {
         ToolFeature.DATABASE_READ,
     },
     "preflight_rag": {
+        ToolFeature.DATABASE_READ,
+    },
+    "write_agent_journal": {
+        ToolFeature.DATABASE_WRITE,
+    },
+    "read_agent_journal": {
         ToolFeature.DATABASE_READ,
     },
 }

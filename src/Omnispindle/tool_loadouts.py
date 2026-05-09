@@ -41,7 +41,10 @@ _BASE_LOADOUTS: Dict[str, List[str]] = {
         "find_relevant",
 
         # Preflight RAG (1 tool)
-        "preflight_rag"
+        "preflight_rag",
+
+        # Agent Journal (2 tools)
+        "write_agent_journal", "read_agent_journal"
     ],
 
     "basic": [
@@ -69,7 +72,8 @@ _BASE_LOADOUTS: Dict[str, List[str]] = {
         "inventorium_sessions_list", "inventorium_sessions_get",
         "inventorium_sessions_create", "inventorium_sessions_fork",
         "inventorium_sessions_genealogy", "inventorium_sessions_tree",
-        "inventorium_todos_link_session"
+        "inventorium_todos_link_session",
+        "write_agent_journal", "read_agent_journal"
     ],
 
     "write_only": [
@@ -85,7 +89,8 @@ _BASE_LOADOUTS: Dict[str, List[str]] = {
         "search_lessons", "list_lessons", "get_context_bundle",
         "find_relevant", "preflight_rag",
         "inventorium_sessions_list", "inventorium_sessions_get",
-        "inventorium_sessions_genealogy", "inventorium_sessions_tree"
+        "inventorium_sessions_genealogy", "inventorium_sessions_tree",
+        "read_agent_journal"
     ],
 
     "lightweight": [

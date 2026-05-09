@@ -422,6 +422,20 @@ if "preflight_rag" in selected_tools:
         auth_ctx = await get_authenticated_context_from_mcp(ctx, user_ctx)
         return await tools.preflight_rag(intent=intent, project=project, tags=tags, limit=limit, ctx=auth_ctx)
 
+if "write_agent_journal" in selected_tools:
+    @mcp.tool()
+    async def write_agent_journal(agent_name: str, content: str, entry_type: str = "note", user_ctx: Optional[Dict[str, Any]] = None, ctx: MCPContext = None):
+        """Append timestamped entry to agent's journal. Visible in SwarmDesk 3D world. Other agents can read it."""
+        auth_ctx = await get_authenticated_context_from_mcp(ctx, user_ctx)
+        return await tools.write_agent_journal(agent_name=agent_name, content=content, entry_type=entry_type, ctx=auth_ctx)
+
+if "read_agent_journal" in selected_tools:
+    @mcp.tool()
+    async def read_agent_journal(agent_name: str, limit: int = 10, user_ctx: Optional[Dict[str, Any]] = None, ctx: MCPContext = None):
+        """Read recent journal entries for any agent. Cross-agent awareness — see what peers are working on."""
+        auth_ctx = await get_authenticated_context_from_mcp(ctx, user_ctx)
+        return await tools.read_agent_journal(agent_name=agent_name, limit=limit, ctx=auth_ctx)
+
 # Log all registered tools
 logger.info(f"Registered {len([t for t in selected_tools])} tools for HTTP transport (remote mode)")
 

@@ -2544,3 +2544,86 @@ async def inventorium_sessions_genealogy(session_id: str, ctx: Optional[Context]
 
 async def inventorium_sessions_tree(project: Optional[str] = None, limit: int = 200, ctx: Optional[Context] = None) -> str:
     return await api_tools.inventorium_sessions_tree(project, limit, ctx=ctx)
+
+
+# ── Agent Journal tools ──────────────────────────────────────────────
+
+JOURNAL_COLLECTION = "agent_journals"
+JOURNAL_MAX_ENTRIES = 200
+
+async def write_agent_journal(agent_name: str, content: str, entry_type: str = "note", ctx: Optional[Context] = None) -> str:
+    """Append a timestamped entry to an agent's persistent journal.
+
+    AI agents call this to leave working notes visible in SwarmDesk's 3D world.
+    Entries are capped at JOURNAL_MAX_ENTRIES per agent.
+
+    Args:
+        agent_name: Agent identifier (e.g. "claude", "gemini", "user")
+        content: Journal entry text (max 500 chars)
+        entry_type: Entry category — "note", "annotation", "session_start", "session_end"
+        ctx: User context for database scoping
+    """
+    try:
+        collections = db_connection.get_collections(ctx.user if ctx else None)
+        db = collections["database"]
+        collection = db[JOURNAL_COLLECTION]
+
+        entry = {
+            "timestamp": int(datetime.now(timezone.utc).timestamp() * 1000),
+            "content": content[:500],
+            "type": entry_type[:20],
+            "author": agent_name[:50]
+        }
+
+        collection.update_one(
+            {"agent_type": agent_name},
+            {
+                "$push": {"entries": {"$each": [entry], "$slice": -JOURNAL_MAX_ENTRIES}},
+                "$set": {"agent_type": agent_name, "updated_at": int(datetime.now(timezone.utc).timestamp() * 1000)}
+            },
+            upsert=True
+        )
+
+        logger.info(f"📓 Journal entry for '{agent_name}': {content[:80]}")
+        return json.dumps({"success": True, "agent": agent_name, "entry": entry}, default=str)
+
+    except Exception as e:
+        logger.error(f"Failed to write agent journal: {e}")
+        return create_response(False, message=str(e))
+
+
+async def read_agent_journal(agent_name: str, limit: int = 10, ctx: Optional[Context] = None) -> str:
+    """Read recent journal entries for any agent. Enables cross-agent awareness.
+
+    Any agent can read any other agent's journal — this is how agents see
+    what their peers have been working on and coordinate without direct messaging.
+
+    Args:
+        agent_name: Agent identifier to read (e.g. "claude", "gemini", "user")
+        limit: Number of recent entries to return (default 10, max 50)
+        ctx: User context for database scoping
+    """
+    try:
+        limit = min(limit, 50)
+        collections = db_connection.get_collections(ctx.user if ctx else None)
+        db = collections["database"]
+        collection = db[JOURNAL_COLLECTION]
+
+        journal = collection.find_one({"agent_type": agent_name})
+
+        if not journal:
+            return json.dumps({"agent": agent_name, "entries": [], "count": 0})
+
+        entries = (journal.get("entries") or [])[-limit:]
+
+        return json.dumps({
+            "agent": agent_name,
+            "entries": entries,
+            "count": len(entries),
+            "total": len(journal.get("entries") or []),
+            "updated_at": journal.get("updated_at")
+        }, default=str)
+
+    except Exception as e:
+        logger.error(f"Failed to read agent journal: {e}")
+        return create_response(False, message=str(e))

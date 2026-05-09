@@ -395,6 +395,30 @@ Search strategy:
 2. If project specified, project-specific lessons are boosted to top
 3. If tags specified, results are re-ranked by tag overlap
 4. Results classified as lessons vs pitfalls by keyword analysis"""
+    },
+    "write_agent_journal": {
+        "minimal": "Write agent journal entry",
+        "compact": "Append timestamped entry to agent's persistent journal. Visible in SwarmDesk 3D. Params: agent_name (required), content (required), entry_type.",
+        "basic": "Append a timestamped entry to an agent's persistent journal. Entries are visible in SwarmDesk's 3D world and readable by other agents for cross-agent awareness.",
+        "full": """Append a timestamped entry to an agent's persistent journal.
+
+AI agents call this to leave working notes, session context, or status updates
+that are visible in SwarmDesk's 3D workspace. Other agents can read your journal
+entries via read_agent_journal for cross-agent coordination.
+
+Entry types: note (default), annotation, session_start, session_end.
+Entries are capped at 200 per agent (oldest dropped)."""
+    },
+    "read_agent_journal": {
+        "minimal": "Read agent journal",
+        "compact": "Read recent journal entries for any agent. Cross-agent awareness. Params: agent_name (required), limit.",
+        "basic": "Read recent journal entries for any agent. Read your own journal for session continuity, or another agent's journal to see what they've been working on.",
+        "full": """Read recent journal entries for any agent. Enables cross-agent awareness.
+
+Any agent can read any other agent's journal — this is how agents see
+what their peers have been working on and coordinate without direct messaging.
+
+Returns: agent name, entries array (timestamp, content, type, author), count, total entries."""
     }
 }
 

@@ -373,6 +373,14 @@ class OmniSpindleStdioServer:
             "preflight_rag": {
                 "func": tools.preflight_rag,
                 "doc": get_tool_doc("preflight_rag")
+            },
+            "write_agent_journal": {
+                "func": tools.write_agent_journal,
+                "doc": get_tool_doc("write_agent_journal")
+            },
+            "read_agent_journal": {
+                "func": tools.read_agent_journal,
+                "doc": get_tool_doc("read_agent_journal")
             }
         }
 
@@ -777,6 +785,29 @@ class OmniSpindleStdioServer:
                                 ctx = _create_context()
                                 return await func(intent=intent, project=project, tags=tags, limit=limit, ctx=ctx)
                             return preflight_rag
+
+                        elif name == "write_agent_journal":
+                            @self.server.tool()
+                            async def write_agent_journal(
+                                agent_name: Annotated[str, Field(description="Agent identifier (e.g. 'claude', 'gemini', 'user')")],
+                                content: Annotated[str, Field(description="Journal entry text (max 500 chars)")],
+                                entry_type: Annotated[str, Field(description="Entry category: note|annotation|session_start|session_end")] = "note"
+                            ) -> str:
+                                """Append timestamped entry to agent's journal. Visible in SwarmDesk 3D world. Other agents can read it."""
+                                ctx = _create_context()
+                                return await func(agent_name=agent_name, content=content, entry_type=entry_type, ctx=ctx)
+                            return write_agent_journal
+
+                        elif name == "read_agent_journal":
+                            @self.server.tool()
+                            async def read_agent_journal(
+                                agent_name: Annotated[str, Field(description="Agent identifier to read (e.g. 'claude', 'gemini', 'user')")],
+                                limit: Annotated[int, Field(description="Number of recent entries (default: 10, max: 50)")] = 10
+                            ) -> str:
+                                """Read recent journal entries for any agent. Cross-agent awareness — see what peers are working on."""
+                                ctx = _create_context()
+                                return await func(agent_name=agent_name, limit=limit, ctx=ctx)
+                            return read_agent_journal
 
                     return create_wrapper()
 
