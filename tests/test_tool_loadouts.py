@@ -21,14 +21,14 @@ class TestToolLoadouts:
         full = get_loadout("full", mode="local")
         assert "bring_your_own" in full
         assert "list_projects" in full
-        assert len(full) == 33  # All tools
+        assert len(full) == 35  # All tools
 
     def test_remote_mode_filters_local_only(self):
         """Remote mode should exclude local-only tools."""
         full = get_loadout("full", mode="remote")
         assert "bring_your_own" not in full
         assert "list_projects" not in full
-        assert len(full) == 31  # Excluding 2 local-only
+        assert len(full) == 33  # Excluding 2 local-only
 
     def test_write_only_loadout(self):
         """Write-only loadout should only have create/update/delete tools."""
@@ -51,7 +51,7 @@ class TestToolLoadouts:
         assert "add_todo" not in read_only
         assert "update_todo" not in read_only
         assert "delete_todo" not in read_only
-        assert len(read_only) == 15
+        assert len(read_only) == 16
 
     def test_lightweight_has_minimal_token_cost(self):
         """Lightweight loadout should have 13 tools for token optimization."""
@@ -95,7 +95,7 @@ class TestToolLoadouts:
     def test_admin_loadout(self):
         """Admin loadout should have administrative and session tools."""
         admin = get_loadout("admin", mode="local")
-        assert len(admin) == 14
+        assert len(admin) == 16
         assert "query_todo_logs" in admin
         assert "inventorium_sessions_list" in admin
         assert "inventorium_sessions_fork" in admin

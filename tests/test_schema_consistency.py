@@ -54,6 +54,8 @@ TOOL_FUNCTION_MAP = {
     "get_context_bundle": tools_module.get_context_bundle,
     "find_relevant": tools_module.find_relevant,
     "preflight_rag": tools_module.preflight_rag,
+    "write_agent_journal": tools_module.write_agent_journal,
+    "read_agent_journal": tools_module.read_agent_journal,
 }
 
 # Canonical set of valid todo statuses — update here when statuses change,
