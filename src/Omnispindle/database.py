@@ -120,7 +120,8 @@ class Database:
             'tags_cache': db["tags_cache"],
             'projects': db["projects"],
             'explanations': db["explanations"],
-            'logs': db["todo_logs"]
+            'logs': db["todo_logs"],
+            'quests': db["quests"]
         }
         # Add database reference for custom collection access
         collections_dict['database'] = db

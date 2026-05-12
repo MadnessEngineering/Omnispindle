@@ -408,6 +408,42 @@ if "inventorium_todos_link_session" in selected_tools:
         auth_ctx = await get_authenticated_context_from_mcp(ctx, user_ctx)
         return await tools.inventorium_todos_link_session(todo_id, session_id, auth_ctx)
 
+# Quest tools
+if "create_quest" in selected_tools:
+    @mcp.tool()
+    async def create_quest(name: str, description: str, project: str, chains: str = "[]", tags: str = "", success_criteria: str = "", user_ctx: Optional[Dict[str, Any]] = None, ctx: MCPContext = None):
+        """Create a quest — epic container for todo chains with progress tracking. chains: JSON array of [{label, todos: [uuid,...], parallel: bool, gate_todo: uuid|null}]."""
+        auth_ctx = await get_authenticated_context_from_mcp(ctx, user_ctx)
+        return await tools.create_quest(name, description, project, chains, tags, success_criteria, auth_ctx)
+
+if "check_quest" in selected_tools:
+    @mcp.tool()
+    async def check_quest(quest_id: str, user_ctx: Optional[Dict[str, Any]] = None, ctx: MCPContext = None):
+        """Agent orientation tool. Returns quest progress, per-chain status, next actions, blockers, and natural language summary."""
+        auth_ctx = await get_authenticated_context_from_mcp(ctx, user_ctx)
+        return await tools.check_quest(quest_id, auth_ctx)
+
+if "list_quests" in selected_tools:
+    @mcp.tool()
+    async def list_quests(status: str = "active", project: str = "", limit: int = 20, user_ctx: Optional[Dict[str, Any]] = None, ctx: MCPContext = None):
+        """List quests filtered by status (active|completed|archived|all) and project."""
+        auth_ctx = await get_authenticated_context_from_mcp(ctx, user_ctx)
+        return await tools.list_quests(status, project, limit, auth_ctx)
+
+if "link_quest" in selected_tools:
+    @mcp.tool()
+    async def link_quest(quest_id: str, todo_id: str, chain_label: str, position: int = -1, user_ctx: Optional[Dict[str, Any]] = None, ctx: MCPContext = None):
+        """Add a todo to an existing quest chain retroactively. position=-1 appends."""
+        auth_ctx = await get_authenticated_context_from_mcp(ctx, user_ctx)
+        return await tools.link_quest(quest_id, todo_id, chain_label, position, auth_ctx)
+
+if "update_quest" in selected_tools:
+    @mcp.tool()
+    async def update_quest(quest_id: str, updates: str = "{}", user_ctx: Optional[Dict[str, Any]] = None, ctx: MCPContext = None):
+        """Update quest fields (name, description, status, success_criteria, metadata). updates: JSON string."""
+        auth_ctx = await get_authenticated_context_from_mcp(ctx, user_ctx)
+        return await tools.update_quest(quest_id, updates, auth_ctx)
+
 # RAG / Context tools
 if "get_context_bundle" in selected_tools:
     @mcp.tool()

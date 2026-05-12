@@ -2558,6 +2558,314 @@ async def inventorium_sessions_tree(project: Optional[str] = None, limit: int = 
     return await api_tools.inventorium_sessions_tree(project, limit, ctx=ctx)
 
 
+# ── Quest tools ─────────────────────────────────────────────────────
+
+async def create_quest(name: str, description: str, project: str,
+                       chains: str = "[]", tags: str = "",
+                       success_criteria: str = "",
+                       ctx: Optional[Context] = None) -> str:
+    """Create a quest — an epic container for todo chains with progress tracking.
+
+    Args:
+        name: Quest name, e.g. "Tag System Overhaul"
+        description: Goal statement
+        project: Project scope
+        chains: JSON array of chain objects: [{"label": "...", "todos": ["uuid", ...], "parallel": false, "gate_todo": null}]
+        tags: Comma-separated tags
+        success_criteria: Comma-separated success criteria
+    """
+    try:
+        collections = db_connection.get_collections(ctx.user if ctx else None)
+        quests_col = collections['quests']
+
+        parsed_chains = json.loads(chains) if isinstance(chains, str) else chains
+        parsed_tags = [t.strip() for t in tags.split(",") if t.strip()] if tags else []
+        parsed_criteria = [c.strip() for c in success_criteria.split(",") if c.strip()] if success_criteria else []
+
+        now = int(datetime.now(timezone.utc).timestamp())
+        quest_id = str(uuid.uuid4())
+
+        chain_docs = []
+        total_todos = 0
+        for chain in parsed_chains:
+            chain_doc = {
+                "label": chain.get("label", "unnamed"),
+                "todos": chain.get("todos", []),
+                "parallel": chain.get("parallel", False),
+                "gate_todo": chain.get("gate_todo"),
+                "status": "pending",
+            }
+            total_todos += len(chain_doc["todos"])
+            chain_docs.append(chain_doc)
+
+        quest_doc = {
+            "id": quest_id,
+            "name": name,
+            "description": description,
+            "project": project.lower().strip(),
+            "status": "active",
+            "created_at": now,
+            "updated_at": now,
+            "completed_at": None,
+            "success_criteria": parsed_criteria,
+            "chains": chain_docs,
+            "metadata": {"tags": parsed_tags},
+        }
+
+        quests_col.insert_one(quest_doc)
+
+        # Backlink: tag each referenced todo with quest_id
+        todos_col = collections['todos']
+        all_todo_ids = [tid for c in chain_docs for tid in c["todos"]]
+        if all_todo_ids:
+            todos_col.update_many(
+                {"id": {"$in": all_todo_ids}},
+                {"$set": {"metadata.quest_id": quest_id}}
+            )
+
+        return create_response(True, {
+            "id": quest_id,
+            "name": name,
+            "chain_count": len(chain_docs),
+            "todo_count": total_todos,
+        }, message=f"Quest '{name}' created with {len(chain_docs)} chains, {total_todos} todos")
+
+    except Exception as e:
+        logger.error(f"Failed to create quest: {str(e)}")
+        return create_response(False, message=f"Error creating quest: {str(e)}")
+
+
+async def check_quest(quest_id: str, ctx: Optional[Context] = None) -> str:
+    """Check quest progress — the agent orientation tool.
+
+    Returns overall progress, per-chain status, next actions, blockers, and a
+    natural language summary an agent can use to orient itself.
+    """
+    try:
+        collections = db_connection.get_collections(ctx.user if ctx else None)
+        quests_col = collections['quests']
+        todos_col = collections['todos']
+
+        quest = quests_col.find_one({"id": quest_id})
+        if not quest:
+            return create_response(False, message=f"Quest {quest_id} not found")
+
+        # Fetch all referenced todos in one query
+        all_todo_ids = [tid for c in quest.get("chains", []) for tid in c.get("todos", [])]
+        todo_docs = {t["id"]: t for t in todos_col.find({"id": {"$in": all_todo_ids}})} if all_todo_ids else {}
+
+        chains_report = []
+        total_done = 0
+        total_count = 0
+        total_blocked = 0
+        all_blockers = []
+        summary_parts = []
+
+        for chain in quest.get("chains", []):
+            chain_todos = [todo_docs.get(tid, {"id": tid, "status": "missing", "description": f"[missing: {tid[:8]}]"}) for tid in chain.get("todos", [])]
+            done = [t for t in chain_todos if t.get("status") in ("completed", "review")]
+            blocked = [t for t in chain_todos if t.get("status") == "blocked"]
+            in_progress = [t for t in chain_todos if t.get("status") == "in_progress"]
+            remaining = [t for t in chain_todos if t.get("status") not in ("completed", "review")]
+
+            # Determine next action(s)
+            next_actions = []
+            if chain.get("parallel") and chain.get("gate_todo"):
+                gate = todo_docs.get(chain["gate_todo"], {})
+                if gate.get("status") not in ("completed", "review"):
+                    next_actions = [{"id": gate.get("id", chain["gate_todo"]), "description": gate.get("description", "gate todo"), "status": gate.get("status", "unknown")}]
+                else:
+                    next_actions = [{"id": t["id"], "description": t.get("description", ""), "status": t.get("status", "")} for t in remaining]
+            elif chain.get("parallel"):
+                next_actions = [{"id": t["id"], "description": t.get("description", ""), "status": t.get("status", "")} for t in remaining]
+            else:
+                nxt = next((t for t in chain_todos if t.get("status") not in ("completed", "review")), None)
+                if nxt:
+                    next_actions = [{"id": nxt["id"], "description": nxt.get("description", ""), "status": nxt.get("status", "")}]
+
+            # Chain status
+            chain_len = len(chain_todos)
+            done_len = len(done)
+            if done_len == chain_len and chain_len > 0:
+                chain_status = "completed"
+            elif len(blocked) == len(remaining) and len(remaining) > 0:
+                chain_status = "blocked"
+            elif done_len > 0 or len(in_progress) > 0:
+                chain_status = "in_progress"
+            else:
+                chain_status = "pending"
+
+            chain_report = {
+                "label": chain.get("label", "unnamed"),
+                "progress": f"{done_len}/{chain_len}",
+                "status": chain_status,
+                "parallel": chain.get("parallel", False),
+                "next_actions": next_actions,
+                "completed": [t["id"] for t in done],
+                "blocked": [{"id": t["id"], "description": t.get("description", "")} for t in blocked],
+            }
+            chains_report.append(chain_report)
+
+            total_done += done_len
+            total_count += chain_len
+            total_blocked += len(blocked)
+
+            for b in blocked:
+                all_blockers.append({"id": b["id"], "description": b.get("description", ""), "chain": chain.get("label", "")})
+
+            # Summary part
+            next_desc = next_actions[0]["description"][:60] if next_actions else "done"
+            summary_parts.append(f"Chain '{chain.get('label')}' {done_len}/{chain_len} {chain_status}, next: {next_desc}")
+
+        denominator = total_count - total_blocked
+        progress_pct = int(total_done / denominator * 100) if denominator > 0 else 0
+
+        result = {
+            "quest_id": quest["id"],
+            "quest": quest["name"],
+            "project": quest.get("project"),
+            "status": quest.get("status"),
+            "progress_pct": progress_pct,
+            "total": f"{total_done}/{total_count}",
+            "chains": chains_report,
+            "blockers": all_blockers,
+            "success_criteria": quest.get("success_criteria", []),
+            "summary": " | ".join(summary_parts),
+        }
+
+        return json.dumps(result, cls=MongoJSONEncoder)
+
+    except Exception as e:
+        logger.error(f"Failed to check quest: {str(e)}")
+        return create_response(False, message=f"Error checking quest: {str(e)}")
+
+
+async def list_quests(status: str = "active", project: str = "",
+                      limit: int = 20, ctx: Optional[Context] = None) -> str:
+    """List quests, optionally filtered by status and project."""
+    try:
+        collections = db_connection.get_collections(ctx.user if ctx else None)
+        quests_col = collections['quests']
+
+        query = {}
+        if status and status != "all":
+            query["status"] = status
+        if project:
+            query["project"] = project.lower().strip()
+
+        quests = list(quests_col.find(query).sort("updated_at", -1).limit(limit))
+
+        items = []
+        for q in quests:
+            total = sum(len(c.get("todos", [])) for c in q.get("chains", []))
+            items.append({
+                "id": q["id"],
+                "name": q["name"],
+                "project": q.get("project"),
+                "status": q.get("status"),
+                "chain_count": len(q.get("chains", [])),
+                "todo_count": total,
+                "updated_at": q.get("updated_at"),
+            })
+
+        return create_response(True, {"quests": items, "count": len(items)},
+                               message=f"Found {len(items)} quests")
+
+    except Exception as e:
+        logger.error(f"Failed to list quests: {str(e)}")
+        return create_response(False, message=f"Error listing quests: {str(e)}")
+
+
+async def link_quest(quest_id: str, todo_id: str, chain_label: str,
+                     position: int = -1, ctx: Optional[Context] = None) -> str:
+    """Add a todo to an existing quest chain retroactively."""
+    try:
+        collections = db_connection.get_collections(ctx.user if ctx else None)
+        quests_col = collections['quests']
+        todos_col = collections['todos']
+
+        quest = quests_col.find_one({"id": quest_id})
+        if not quest:
+            return create_response(False, message=f"Quest {quest_id} not found")
+
+        # Find the chain
+        chains = quest.get("chains", [])
+        target_chain = None
+        chain_idx = None
+        for i, c in enumerate(chains):
+            if c.get("label") == chain_label:
+                target_chain = c
+                chain_idx = i
+                break
+
+        if target_chain is None:
+            return create_response(False, message=f"Chain '{chain_label}' not found in quest")
+
+        todos_list = target_chain.get("todos", [])
+        if todo_id in todos_list:
+            return create_response(False, message=f"Todo {todo_id} already in chain '{chain_label}'")
+
+        if position < 0 or position >= len(todos_list):
+            todos_list.append(todo_id)
+            pos = len(todos_list) - 1
+        else:
+            todos_list.insert(position, todo_id)
+            pos = position
+
+        now = int(datetime.now(timezone.utc).timestamp())
+        quests_col.update_one(
+            {"id": quest_id},
+            {"$set": {f"chains.{chain_idx}.todos": todos_list, "updated_at": now}}
+        )
+
+        # Backlink todo
+        todos_col.update_one({"id": todo_id}, {"$set": {"metadata.quest_id": quest_id}})
+
+        return create_response(True, {
+            "chain": chain_label,
+            "todo_count": len(todos_list),
+            "position": pos,
+        }, message=f"Linked todo to chain '{chain_label}' at position {pos}")
+
+    except Exception as e:
+        logger.error(f"Failed to link quest: {str(e)}")
+        return create_response(False, message=f"Error linking quest: {str(e)}")
+
+
+async def update_quest(quest_id: str, updates: str = "{}",
+                       ctx: Optional[Context] = None) -> str:
+    """Update quest fields (name, description, status, success_criteria, metadata)."""
+    try:
+        collections = db_connection.get_collections(ctx.user if ctx else None)
+        quests_col = collections['quests']
+
+        quest = quests_col.find_one({"id": quest_id})
+        if not quest:
+            return create_response(False, message=f"Quest {quest_id} not found")
+
+        parsed = json.loads(updates) if isinstance(updates, str) else updates
+        allowed = {"name", "description", "status", "success_criteria", "metadata"}
+        set_fields = {k: v for k, v in parsed.items() if k in allowed}
+
+        if not set_fields:
+            return create_response(False, message="No valid fields to update")
+
+        now = int(datetime.now(timezone.utc).timestamp())
+        set_fields["updated_at"] = now
+
+        if set_fields.get("status") == "completed":
+            set_fields["completed_at"] = now
+
+        quests_col.update_one({"id": quest_id}, {"$set": set_fields})
+
+        return create_response(True, {"id": quest_id, "updated_fields": list(set_fields.keys())},
+                               message=f"Quest updated: {', '.join(set_fields.keys())}")
+
+    except Exception as e:
+        logger.error(f"Failed to update quest: {str(e)}")
+        return create_response(False, message=f"Error updating quest: {str(e)}")
+
+
 # ── Agent Journal tools ──────────────────────────────────────────────
 
 JOURNAL_COLLECTION = "agent_journals"

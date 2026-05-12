@@ -44,7 +44,10 @@ _BASE_LOADOUTS: Dict[str, List[str]] = {
         "preflight_rag",
 
         # Agent Journal (2 tools)
-        "write_agent_journal", "read_agent_journal"
+        "write_agent_journal", "read_agent_journal",
+
+        # Quest system (5 tools)
+        "create_quest", "check_quest", "list_quests", "link_quest", "update_quest"
     ],
 
     "basic": [
