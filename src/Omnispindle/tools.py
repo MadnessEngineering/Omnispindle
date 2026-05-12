@@ -74,6 +74,9 @@ def deep_merge_metadata(existing: dict, updates: dict) -> dict:
         {"blockers": {"$pull": "uuid"}}   — remove one item
         {"blockers": ["a", "b"]}          — replace the whole list
 
+    Tag-specific: $push normalizes tags (lowercase, retired→canonical, dedup).
+    Full list replacement on 'tags' key also normalizes.
+
     Args:
         existing: Existing metadata dict
         updates: New metadata updates to merge
@@ -81,6 +84,8 @@ def deep_merge_metadata(existing: dict, updates: dict) -> dict:
     Returns:
         Merged metadata dict
     """
+    from Omnispindle.config.canonical_tags import normalize_tag, normalize_tags
+
     if not existing:
         return updates.copy() if updates else {}
     if not updates:
@@ -96,15 +101,22 @@ def deep_merge_metadata(existing: dict, updates: dict) -> dict:
                 current = [current] if current else []
             if "$push" in value:
                 item = value["$push"]
+                if key == "tags":
+                    item = normalize_tag(item)
                 if item not in current:
                     current = current + [item]
             if "$pull" in value:
                 item = value["$pull"]
+                if key == "tags":
+                    item = normalize_tag(item)
                 current = [x for x in current if x != item]
             merged[key] = current
         elif key in merged and isinstance(merged[key], dict) and isinstance(value, dict):
             # Recursively merge nested dicts
             merged[key] = deep_merge_metadata(merged[key], value)
+        elif key == "tags" and isinstance(value, list):
+            # Full tag list replacement — normalize
+            merged[key] = normalize_tags(value)
         else:
             # Replace/add the value
             merged[key] = value

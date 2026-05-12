@@ -7,6 +7,8 @@ from typing import Optional, List, Dict, Any, Union
 from pydantic import BaseModel, Field, field_validator, ConfigDict
 from enum import Enum
 
+from Omnispindle.config.canonical_tags import normalize_tags
+
 
 class PriorityLevel(str, Enum):
     """Valid priority levels for todos."""
@@ -73,12 +75,21 @@ class TodoMetadata(BaseModel):
     completed_by: Optional[str] = Field(default=None, description="Email or agent ID of completer")
     completion_comment: Optional[str] = Field(default=None, description="Comments on completion")
     
-    @field_validator('files', 'components', 'deliverables', 'acceptance_criteria', 'tags', 'blockers')
+    @field_validator('files', 'components', 'deliverables', 'acceptance_criteria', 'blockers')
     @classmethod
     def validate_arrays(cls, v):
         """Ensure arrays don't contain empty strings."""
         if v is not None:
             return [item for item in v if item and item.strip()]
+        return v
+
+    @field_validator('tags')
+    @classmethod
+    def validate_and_normalize_tags(cls, v):
+        """Normalize tags: lowercase, retire-to-canonical, deduplicate."""
+        if v is not None:
+            cleaned = [item for item in v if item and item.strip()]
+            return normalize_tags(cleaned)
         return v
     
     @field_validator('confidence')

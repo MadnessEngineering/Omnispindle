@@ -203,7 +203,11 @@ logger.info(f"Loading '{loadout_name}' loadout (remote mode, {len(selected_tools
 if "add_todo" in selected_tools:
     @mcp.tool()
     async def add_todo(description: str, project: str, priority: str = "Medium", target_agent: str = "user", notes: str = "", ticket: str = "", metadata: Optional[Dict[str, Any]] = None, user_ctx: Optional[Dict[str, Any]] = None, ctx: MCPContext = None):
-        """Create task with priority/agent. Returns created todo. Use for new work tracking."""
+        """Create task with priority/agent. Returns created todo. Use for new work tracking.
+
+        metadata.tags rules: lowercase+hyphens only, min 3 tags per todo.
+        Canonical tags: ai, api, agents, audit, auth, automation, backend, bug, bugfix, chat, chronomancy, cleanup, code-quality, data-quality, database, deployment, docs, eaws, enhancement, floating-panels, frontend, git, hooks, hotkeys, locales, mcp, mindmap, mobile, monitoring, omnispindle, performance, phase-1, phase-2, phase-3, phase-4, planning, refactor, security, swarmdesk, testing, theme, three.js, todos, tooling, translations, ui, uml, visualization, wip.
+        Retired aliases (e.g. bug-fix, theming, mcp-tools) auto-normalize on write."""
         auth_ctx = await get_authenticated_context_from_mcp(ctx, user_ctx)
         return await tools.add_todo(description, project, priority, target_agent, notes, ticket, metadata, auth_ctx)
 
@@ -231,7 +235,11 @@ if "complete_todo" in selected_tools:
 if "update_todo" in selected_tools:
     @mcp.tool()
     async def update_todo(todo_id: str, updates: Dict[str, Any], user_ctx: Optional[Dict[str, Any]] = None, ctx: MCPContext = None):
-        """Modify existing task fields. Returns updated todo object."""
+        """Modify existing task fields. Returns updated todo object.
+
+        metadata.tags rules: lowercase+hyphens only, min 3 tags per todo.
+        Canonical tags: ai, api, agents, audit, auth, automation, backend, bug, bugfix, chat, chronomancy, cleanup, code-quality, data-quality, database, deployment, docs, eaws, enhancement, floating-panels, frontend, git, hooks, hotkeys, locales, mcp, mindmap, mobile, monitoring, omnispindle, performance, phase-1, phase-2, phase-3, phase-4, planning, refactor, security, swarmdesk, testing, theme, three.js, todos, tooling, translations, ui, uml, visualization, wip.
+        Retired aliases (e.g. bug-fix, theming, mcp-tools) auto-normalize on write."""
         auth_ctx = await get_authenticated_context_from_mcp(ctx, user_ctx)
         return await tools.update_todo(todo_id, updates, auth_ctx)
 
