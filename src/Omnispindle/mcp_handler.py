@@ -447,6 +447,72 @@ TOOL_SCHEMAS = {
             },
             "required": ["agent_name"]
         }
+    },
+    # Quest tools
+    "create_quest": {
+        "name": "create_quest",
+        "description": "Create a quest — epic container for todo chains with progress tracking. Quests group related todos into ordered chains with optional parallel execution and gate dependencies.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string", "description": "Quest name, e.g. 'Tag System Overhaul'"},
+                "description": {"type": "string", "description": "Goal statement"},
+                "project": {"type": "string", "description": "Project scope"},
+                "chains": {"type": "string", "description": "JSON array of chain objects: [{\"label\": \"...\", \"todos\": [\"uuid\", ...], \"parallel\": false, \"gate_todo\": null}]"},
+                "tags": {"type": "string", "description": "Comma-separated tags"},
+                "success_criteria": {"type": "string", "description": "Comma-separated success criteria"}
+            },
+            "required": ["name", "description", "project"]
+        }
+    },
+    "check_quest": {
+        "name": "check_quest",
+        "description": "Agent orientation tool. Returns quest progress, per-chain status, next actions, blockers, and natural language summary.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "quest_id": {"type": "string", "description": "Quest UUID"}
+            },
+            "required": ["quest_id"]
+        }
+    },
+    "list_quests": {
+        "name": "list_quests",
+        "description": "List quests filtered by status (active|completed|archived|all) and project.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "status": {"type": "string", "description": "Filter by status: active|completed|archived|abandoned|all (default: active)"},
+                "project": {"type": "string", "description": "Filter by project name (optional)"},
+                "limit": {"type": "number", "description": "Max results (default: 20)"}
+            }
+        }
+    },
+    "link_quest": {
+        "name": "link_quest",
+        "description": "Add a todo to an existing quest chain retroactively. position=-1 appends.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "quest_id": {"type": "string", "description": "Quest UUID"},
+                "todo_id": {"type": "string", "description": "Todo UUID to add"},
+                "chain_label": {"type": "string", "description": "Name of the chain to add to"},
+                "position": {"type": "number", "description": "Insert position (-1 = append, default: -1)"}
+            },
+            "required": ["quest_id", "todo_id", "chain_label"]
+        }
+    },
+    "update_quest": {
+        "name": "update_quest",
+        "description": "Update quest fields (name, description, status, success_criteria, metadata). Pass updates as JSON string.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "quest_id": {"type": "string", "description": "Quest UUID"},
+                "updates": {"type": "string", "description": "JSON string of fields to update: {\"name\": \"...\", \"status\": \"completed\", ...}"}
+            },
+            "required": ["quest_id"]
+        }
     }
 }
 
@@ -602,7 +668,13 @@ async def mcp_handler(request: Request, get_current_user: Callable[[], Coroutine
                 "preflight_rag": tools.preflight_rag,
                 # Agent Journal tools
                 "write_agent_journal": tools.write_agent_journal,
-                "read_agent_journal": tools.read_agent_journal
+                "read_agent_journal": tools.read_agent_journal,
+                # Quest tools
+                "create_quest": tools.create_quest,
+                "check_quest": tools.check_quest,
+                "list_quests": tools.list_quests,
+                "link_quest": tools.link_quest,
+                "update_quest": tools.update_quest
             }
 
             if tool_name not in tool_functions:
