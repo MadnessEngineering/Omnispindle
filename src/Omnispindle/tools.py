@@ -84,7 +84,7 @@ def deep_merge_metadata(existing: dict, updates: dict) -> dict:
     Returns:
         Merged metadata dict
     """
-    from Omnispindle.config.canonical_tags import normalize_tag, normalize_tags
+    from .config.canonical_tags import normalize_tag, normalize_tags
 
     if not existing:
         return updates.copy() if updates else {}

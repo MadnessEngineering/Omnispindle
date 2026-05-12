@@ -7,7 +7,7 @@ from typing import Optional, List, Dict, Any, Union
 from pydantic import BaseModel, Field, field_validator, ConfigDict
 from enum import Enum
 
-from Omnispindle.config.canonical_tags import normalize_tags
+from ..config.canonical_tags import normalize_tags
 
 
 class PriorityLevel(str, Enum):
