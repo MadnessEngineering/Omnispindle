@@ -381,6 +381,26 @@ class OmniSpindleStdioServer:
             "read_agent_journal": {
                 "func": tools.read_agent_journal,
                 "doc": get_tool_doc("read_agent_journal")
+            },
+            "create_quest": {
+                "func": tools.create_quest,
+                "doc": get_tool_doc("create_quest")
+            },
+            "check_quest": {
+                "func": tools.check_quest,
+                "doc": get_tool_doc("check_quest")
+            },
+            "list_quests": {
+                "func": tools.list_quests,
+                "doc": get_tool_doc("list_quests")
+            },
+            "link_quest": {
+                "func": tools.link_quest,
+                "doc": get_tool_doc("link_quest")
+            },
+            "update_quest": {
+                "func": tools.update_quest,
+                "doc": get_tool_doc("update_quest")
             }
         }
 
@@ -808,6 +828,67 @@ class OmniSpindleStdioServer:
                                 ctx = _create_context()
                                 return await func(agent_name=agent_name, limit=limit, ctx=ctx)
                             return read_agent_journal
+
+                        elif name == "create_quest":
+                            @self.server.tool()
+                            async def create_quest(
+                                name: Annotated[str, Field(description="Quest name, e.g. 'Tag System Overhaul'")],
+                                description: Annotated[str, Field(description="Goal statement")],
+                                project: Annotated[str, Field(description="Project scope")],
+                                chains: Annotated[str, Field(description="JSON array of chain objects: [{\"label\": \"...\", \"todos\": [\"uuid\", ...], \"parallel\": false, \"gate_todo\": null}]")] = "[]",
+                                tags: Annotated[str, Field(description="Comma-separated tags")] = "",
+                                success_criteria: Annotated[str, Field(description="Comma-separated success criteria")] = ""
+                            ) -> str:
+                                """Create a quest — epic container for todo chains with progress tracking."""
+                                ctx = _create_context()
+                                return await func(name=name, description=description, project=project, chains=chains, tags=tags, success_criteria=success_criteria, ctx=ctx)
+                            return create_quest
+
+                        elif name == "check_quest":
+                            @self.server.tool()
+                            async def check_quest(
+                                quest_id: Annotated[str, Field(description="Quest UUID")]
+                            ) -> str:
+                                """Agent orientation tool. Returns quest progress, per-chain status, next actions, blockers, and summary."""
+                                ctx = _create_context()
+                                return await func(quest_id=quest_id, ctx=ctx)
+                            return check_quest
+
+                        elif name == "list_quests":
+                            @self.server.tool()
+                            async def list_quests(
+                                status: Annotated[str, Field(description="Filter: active|completed|archived|abandoned|all")] = "active",
+                                project: Annotated[str, Field(description="Filter by project (optional)")] = "",
+                                limit: Annotated[int, Field(description="Max results")] = 20
+                            ) -> str:
+                                """List quests filtered by status and project."""
+                                ctx = _create_context()
+                                return await func(status=status, project=project, limit=limit, ctx=ctx)
+                            return list_quests
+
+                        elif name == "link_quest":
+                            @self.server.tool()
+                            async def link_quest(
+                                quest_id: Annotated[str, Field(description="Quest UUID")],
+                                todo_id: Annotated[str, Field(description="Todo UUID to add")],
+                                chain_label: Annotated[str, Field(description="Name of the chain to add to")],
+                                position: Annotated[int, Field(description="Insert position (-1 = append)")] = -1
+                            ) -> str:
+                                """Add a todo to an existing quest chain retroactively."""
+                                ctx = _create_context()
+                                return await func(quest_id=quest_id, todo_id=todo_id, chain_label=chain_label, position=position, ctx=ctx)
+                            return link_quest
+
+                        elif name == "update_quest":
+                            @self.server.tool()
+                            async def update_quest(
+                                quest_id: Annotated[str, Field(description="Quest UUID")],
+                                updates: Annotated[str, Field(description="JSON string of fields to update")] = "{}"
+                            ) -> str:
+                                """Update quest fields (name, description, status, success_criteria, metadata)."""
+                                ctx = _create_context()
+                                return await func(quest_id=quest_id, updates=updates, ctx=ctx)
+                            return update_quest
 
                     return create_wrapper()
 
