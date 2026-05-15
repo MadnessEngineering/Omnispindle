@@ -2385,20 +2385,67 @@ async def find_relevant(
 
 
 def _regex_search_todos(collection, query: str, limit: int) -> list:
-    """Regex fallback for todo search — tokenizes query into keywords."""
-    token_query = _build_tokenized_search_query(query, ["description", "project", "notes"])
-    search_query = {**token_query, "status": {"$ne": "completed"}}
+    """Regex fallback for todo search — extracts keywords, uses broad OR matching."""
+    keywords = _extract_keywords(query)
+    search_query = {**_broad_search_query(keywords, ["description", "project", "notes"]), "status": {"$ne": "completed"}}
     projection = {"_id": 0, "id": 1, "description": 1, "priority": 1, "status": 1, "project": 1, "created_at": 1}
-    cursor = collection.find(search_query, projection).sort("created_at", -1).limit(limit)
-    return [strip_empty_fields(doc) for doc in cursor]
+    cursor = collection.find(search_query, projection).sort("created_at", -1).limit(limit * 3)
+    results = [strip_empty_fields(doc) for doc in cursor]
+    def score(doc):
+        text = f"{doc.get('description', '')} {doc.get('project', '')} {doc.get('notes', '')}".lower()
+        return sum(1 for kw in keywords if re.search(kw, text, re.IGNORECASE))
+    results.sort(key=score, reverse=True)
+    return results[:limit]
+
+
+_STOP_WORDS = frozenset({
+    "a", "an", "the", "in", "on", "at", "to", "for", "of", "with", "by",
+    "from", "up", "about", "into", "is", "are", "was", "were", "be", "been",
+    "being", "have", "has", "had", "do", "does", "did", "will", "would",
+    "could", "should", "may", "might", "shall", "can", "need", "must",
+    "and", "or", "but", "not", "no", "nor", "so", "yet", "both", "either",
+    "neither", "each", "every", "all", "any", "few", "more", "most", "some",
+    "such", "than", "too", "very", "just", "also", "now", "then", "here",
+    "there", "when", "where", "why", "how", "what", "which", "who", "whom",
+    "this", "that", "these", "those", "it", "its", "my", "our", "your",
+    "his", "her", "their", "i", "we", "you", "he", "she", "they", "me",
+    "us", "him", "them", "if", "else", "while", "as", "until", "after",
+    "before", "because", "since", "during", "without", "between", "through",
+    "add", "fix", "update", "create", "remove", "change", "make", "get",
+    "set", "use", "new", "existing",
+})
+
+
+def _extract_keywords(text: str) -> list:
+    """Extract meaningful keywords from natural language, stripping stop words."""
+    tokens = [re.escape(t) for t in text.split() if t.strip() and t.lower() not in _STOP_WORDS and len(t) > 2]
+    return tokens if tokens else [re.escape(t) for t in text.split() if t.strip()]
+
+
+def _broad_search_query(keywords: list, fields: list) -> dict:
+    """Build an OR query — match ANY keyword in ANY field. For broad recall on long intents."""
+    if not keywords:
+        return {"$or": [{field: {"$regex": "", "$options": "i"}} for field in fields]}
+    return {"$or": [
+        {field: {"$regex": kw, "$options": "i"}}
+        for kw in keywords
+        for field in fields
+    ]}
 
 
 def _regex_search_lessons(collection, query: str, limit: int) -> list:
-    """Regex fallback for lesson search — tokenizes intent into keywords."""
-    search_query = _build_tokenized_search_query(query, ["topic", "lesson_learned", "tags"])
+    """Regex fallback for lesson search — extracts keywords, uses broad OR matching."""
+    keywords = _extract_keywords(query)
+    search_query = _broad_search_query(keywords, ["topic", "lesson_learned", "tags"])
     projection = {"_id": 0, "id": 1, "topic": 1, "language": 1, "tags": 1, "lesson_learned": 1}
-    cursor = collection.find(search_query, projection).limit(limit)
-    return [strip_empty_fields(doc) for doc in cursor]
+    cursor = collection.find(search_query, projection).limit(limit * 3)  # over-fetch for ranking
+    results = [strip_empty_fields(doc) for doc in cursor]
+    # Rank by keyword overlap count
+    def score(doc):
+        text = f"{doc.get('topic', '')} {doc.get('lesson_learned', '')} {' '.join(doc.get('tags', []))}".lower()
+        return sum(1 for kw in keywords if re.search(kw, text, re.IGNORECASE))
+    results.sort(key=score, reverse=True)
+    return results[:limit]
 
 
 # --- Preflight RAG (Pre-processing lessons lookup) ---
