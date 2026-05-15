@@ -2385,29 +2385,17 @@ async def find_relevant(
 
 
 def _regex_search_todos(collection, query: str, limit: int) -> list:
-    """Regex fallback for todo search."""
-    search_query = {
-        "$or": [
-            {"description": {"$regex": re.escape(query), "$options": "i"}},
-            {"project": {"$regex": re.escape(query), "$options": "i"}},
-            {"notes": {"$regex": re.escape(query), "$options": "i"}},
-        ],
-        "status": {"$ne": "completed"},
-    }
+    """Regex fallback for todo search — tokenizes query into keywords."""
+    token_query = _build_tokenized_search_query(query, ["description", "project", "notes"])
+    search_query = {**token_query, "status": {"$ne": "completed"}}
     projection = {"_id": 0, "id": 1, "description": 1, "priority": 1, "status": 1, "project": 1, "created_at": 1}
     cursor = collection.find(search_query, projection).sort("created_at", -1).limit(limit)
     return [strip_empty_fields(doc) for doc in cursor]
 
 
 def _regex_search_lessons(collection, query: str, limit: int) -> list:
-    """Regex fallback for lesson search."""
-    search_query = {
-        "$or": [
-            {"topic": {"$regex": re.escape(query), "$options": "i"}},
-            {"lesson_learned": {"$regex": re.escape(query), "$options": "i"}},
-            {"tags": {"$regex": re.escape(query), "$options": "i"}},
-        ]
-    }
+    """Regex fallback for lesson search — tokenizes intent into keywords."""
+    search_query = _build_tokenized_search_query(query, ["topic", "lesson_learned", "tags"])
     projection = {"_id": 0, "id": 1, "topic": 1, "language": 1, "tags": 1, "lesson_learned": 1}
     cursor = collection.find(search_query, projection).limit(limit)
     return [strip_empty_fields(doc) for doc in cursor]
