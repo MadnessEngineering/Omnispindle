@@ -801,6 +801,15 @@ async def update_todo(todo_id: str, updates: dict, ctx: Optional[Context] = None
 
     Do NOT set status="completed" here — use complete_todo() instead.
     """
+    # Guard: ai_chat_mobile (and other clients) may send updates as a JSON string instead of dict
+    if isinstance(updates, str):
+        try:
+            updates = json.loads(updates)
+        except (json.JSONDecodeError, ValueError):
+            return create_response(False, message="updates must be a dict or valid JSON object string")
+    if not isinstance(updates, dict):
+        return create_response(False, message="updates must be a dict")
+
     # Check for read-only mode (unauthenticated demo users)
     if _is_read_only_user(ctx):
         return create_response(False, message="Demo mode: Todo updates are disabled. Please authenticate to modify todos.")
