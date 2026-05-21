@@ -545,6 +545,23 @@ def _is_read_only_user(ctx: Optional[Context]) -> bool:
     """
     return not ctx or not ctx.user or not ctx.user.get('sub')
 
+
+def _normalize_updates(updates, label: str = "updates") -> tuple:
+    """Coerce updates to dict. Returns (dict, None) on success or (None, error_msg) on failure.
+
+    Handles the case where MCP/HTTP clients (e.g. ai_chat_mobile) send
+    a JSON-encoded string instead of a dict for the `updates` parameter.
+    """
+    if isinstance(updates, str):
+        try:
+            updates = json.loads(updates)
+        except (json.JSONDecodeError, ValueError):
+            return None, f"{label} must be a dict or valid JSON object string"
+    if not isinstance(updates, dict):
+        return None, f"{label} must be a dict"
+    return updates, None
+
+
 async def add_todo(description: str, project: str, priority: str = "Medium", target_agent: str = "user", notes: str = "", ticket: str = "", metadata: Optional[Dict[str, Any]] = None, ctx: Optional[Context] = None) -> str:
     """
     Creates a task in the specified project with the given priority and target agent.
@@ -801,14 +818,9 @@ async def update_todo(todo_id: str, updates: dict, ctx: Optional[Context] = None
 
     Do NOT set status="completed" here — use complete_todo() instead.
     """
-    # Guard: ai_chat_mobile (and other clients) may send updates as a JSON string instead of dict
-    if isinstance(updates, str):
-        try:
-            updates = json.loads(updates)
-        except (json.JSONDecodeError, ValueError):
-            return create_response(False, message="updates must be a dict or valid JSON object string")
-    if not isinstance(updates, dict):
-        return create_response(False, message="updates must be a dict")
+    updates, err = _normalize_updates(updates)
+    if err:
+        return create_response(False, message=err)
 
     # Check for read-only mode (unauthenticated demo users)
     if _is_read_only_user(ctx):
@@ -1207,6 +1219,10 @@ async def update_lesson(lesson_id: str, updates: dict, ctx: Optional[Context] = 
     """
     Update an existing lesson.
     """
+    updates, err = _normalize_updates(updates)
+    if err:
+        return create_response(False, message=err)
+
     try:
         # Get user-scoped collections
         collections = db_connection.get_collections(ctx.user if ctx else None)
@@ -1687,6 +1703,10 @@ async def get_explanation(topic: str, ctx: Optional[Context] = None) -> str:
 
 async def update_explanation(topic: str, updates: dict, ctx: Optional[Context] = None) -> str:
     """Update an existing explanation."""
+    updates, err = _normalize_updates(updates)
+    if err:
+        return create_response(False, message=err)
+
     try:
         # Get user-scoped collections
         collections = db_connection.get_collections(ctx.user if ctx else None)

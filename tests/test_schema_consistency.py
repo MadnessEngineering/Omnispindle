@@ -56,6 +56,11 @@ TOOL_FUNCTION_MAP = {
     "preflight_rag": tools_module.preflight_rag,
     "write_agent_journal": tools_module.write_agent_journal,
     "read_agent_journal": tools_module.read_agent_journal,
+    "create_quest": tools_module.create_quest,
+    "check_quest": tools_module.check_quest,
+    "list_quests": tools_module.list_quests,
+    "link_quest": tools_module.link_quest,
+    "update_quest": tools_module.update_quest,
 }
 
 # Canonical set of valid todo statuses — update here when statuses change,
