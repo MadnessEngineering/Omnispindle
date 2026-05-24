@@ -74,7 +74,7 @@ def dedupe_logs_for_database(client, db_name):
 
     Args:
         client: MongoDB client
-        db_name: Database name
+        db_name: gmail based user_email_adress_gmail
 
     Returns:
         Number of logs removed
