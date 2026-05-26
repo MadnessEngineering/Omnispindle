@@ -604,6 +604,10 @@ async def delete_lesson(lesson_id: str, ctx: Optional[Context] = None) -> str:
     """Delete a lesson by its ID - API not yet available"""
     return create_response(False, message="Lesson management not yet available via API. Use local mode.")
 
+async def regenerate_embedding(lesson_id: str, ctx: Optional[Context] = None) -> str:
+    """Regenerate embedding for a lesson - API not yet available"""
+    return create_response(False, message="Lesson management not yet available via API. Use local mode.")
+
 async def search_lessons(query: str, fields: Optional[list] = None, limit: int = 100, brief: bool = False, ctx: Optional[Context] = None) -> str:
     """Search lessons with text search capabilities - API not yet available"""
     return create_response(False, message="Lesson management not yet available via API. Use local mode.")

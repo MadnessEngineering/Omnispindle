@@ -1240,6 +1240,44 @@ async def update_lesson(lesson_id: str, updates: dict, ctx: Optional[Context] = 
         logger.error(f"Failed to update lesson: {str(e)}")
         return create_response(False, message=str(e))
 
+async def regenerate_embedding(lesson_id: str, ctx: Optional[Context] = None) -> str:
+    """
+    Recompute the vector embedding for a lesson and stamp embedding_updated_at.
+
+    Used by the Lessons Exploratory Viewer (RFC: Inventorium docs/RFC_LESSONS_EXPLORATORY_VIEWER.md)
+    to refresh stale embeddings after edits or on demand. Optional fields written to the document:
+      - embedding (list[float], 768 dims via Gemini text-embedding-004)
+      - embedding_updated_at (unix seconds)
+
+    Returns JSON: { id, embedding_updated_at, embedded: bool }
+    """
+    try:
+        if not embeddings.is_available():
+            return create_response(False, message="Embeddings unavailable (GEMINI_API_KEY not configured)")
+
+        collections = db_connection.get_collections(ctx.user if ctx else None)
+        lessons_collection = collections['lessons']
+
+        lesson = lessons_collection.find_one({"id": lesson_id})
+        if not lesson:
+            return create_response(False, message=f"Lesson {lesson_id} not found")
+
+        embed_text = embeddings.embedding_text_for_lesson(lesson)
+        new_embedding = await embeddings.generate_embedding(embed_text)
+        if not new_embedding:
+            return create_response(False, message="Embedding generation returned empty result")
+
+        now = int(datetime.now(timezone.utc).timestamp())
+        lessons_collection.update_one(
+            {"id": lesson_id},
+            {"$set": {"embedding": new_embedding, "embedding_updated_at": now}}
+        )
+        return json.dumps({"id": lesson_id, "embedding_updated_at": now, "embedded": True})
+    except Exception as e:
+        logger.error(f"Failed to regenerate embedding for {lesson_id}: {e}")
+        return create_response(False, message=str(e))
+
+
 async def delete_lesson(lesson_id: str, ctx: Optional[Context] = None) -> str:
     """
     Delete a lesson by its ID.

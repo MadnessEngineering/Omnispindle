@@ -301,6 +301,13 @@ if "delete_lesson" in selected_tools:
         auth_ctx = await get_authenticated_context_from_mcp(ctx, user_ctx)
         return await tools.delete_lesson(lesson_id, auth_ctx)
 
+if "regenerate_embedding" in selected_tools:
+    @mcp.tool()
+    async def regenerate_embedding(lesson_id: str, user_ctx: Optional[Dict[str, Any]] = None, ctx: MCPContext = None):
+        """Recompute vector embedding for a lesson and stamp embedding_updated_at."""
+        auth_ctx = await get_authenticated_context_from_mcp(ctx, user_ctx)
+        return await tools.regenerate_embedding(lesson_id, auth_ctx)
+
 if "search_lessons" in selected_tools:
     @mcp.tool()
     async def search_lessons(query: str, fields: Optional[list] = None, limit: int = 50, user_ctx: Optional[Dict[str, Any]] = None, ctx: MCPContext = None):

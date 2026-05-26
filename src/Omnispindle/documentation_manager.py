@@ -222,6 +222,13 @@ Special formats:
         "full": "Delete a lesson by its ID from the knowledge base. The lesson tag cache is automatically invalidated after deletion."
     },
 
+    "regenerate_embedding": {
+        "minimal": "Refresh lesson embedding",
+        "basic": "Recompute vector embedding for a lesson",
+        "admin": "Regenerate embedding via Gemini text-embedding-004; stamps embedding_updated_at.",
+        "full": "Recompute the 768-dim vector embedding for a lesson and stamp embedding_updated_at. Used by the Lessons Exploratory Viewer to refresh stale or missing embeddings on demand or after edits."
+    },
+
     "search_lessons": {
         "minimal": "Search lessons",
         "basic": "Text search lessons",

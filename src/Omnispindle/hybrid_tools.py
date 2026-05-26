@@ -325,6 +325,10 @@ async def delete_lesson(lesson_id: str, ctx: Optional[Context] = None) -> str:
     """Delete lesson - local only for now"""
     return await local_tools.delete_lesson(lesson_id, ctx=ctx)
 
+async def regenerate_embedding(lesson_id: str, ctx: Optional[Context] = None) -> str:
+    """Regenerate embedding for a lesson - local only for now"""
+    return await local_tools.regenerate_embedding(lesson_id, ctx=ctx)
+
 async def search_lessons(query: str, fields: Optional[list] = None, limit: int = 100, brief: bool = False, ctx: Optional[Context] = None) -> str:
     """Search lessons - local only for now"""
     return await local_tools.search_lessons(query, fields, limit, brief, ctx=ctx)

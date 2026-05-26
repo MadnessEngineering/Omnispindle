@@ -184,6 +184,17 @@ TOOL_SCHEMAS = {
             "required": ["lesson_id"]
         }
     },
+    "regenerate_embedding": {
+        "name": "regenerate_embedding",
+        "description": "Recompute vector embedding for a lesson and stamp embedding_updated_at. Use after edits or to fix stale/missing embeddings.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "lesson_id": {"type": "string", "description": "Lesson UUID"}
+            },
+            "required": ["lesson_id"]
+        }
+    },
     "search_lessons": {
         "name": "search_lessons",
         "description": "Text search across lesson topic, content, and tags. For broader semantic search, use find_relevant.",
@@ -642,6 +653,7 @@ async def mcp_handler(request: Request, get_current_user: Callable[[], Coroutine
                 "get_lesson": tools.get_lesson,
                 "update_lesson": tools.update_lesson,
                 "delete_lesson": tools.delete_lesson,
+                "regenerate_embedding": tools.regenerate_embedding,
                 "search_lessons": tools.search_lessons,
                 "grep_lessons": tools.grep_lessons,
                 "list_lessons": tools.list_lessons,

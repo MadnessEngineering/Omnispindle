@@ -53,6 +53,7 @@ TOOL_ACCESS_LEVELS: Dict[str, ToolAccessLevel] = {
     "get_lesson": ToolAccessLevel.REMOTE_SAFE,
     "update_lesson": ToolAccessLevel.REMOTE_SAFE,
     "delete_lesson": ToolAccessLevel.REMOTE_SAFE,
+    "regenerate_embedding": ToolAccessLevel.REMOTE_SAFE,
     "search_lessons": ToolAccessLevel.REMOTE_SAFE,
     "grep_lessons": ToolAccessLevel.REMOTE_SAFE,
     "list_lessons": ToolAccessLevel.REMOTE_SAFE,
@@ -128,6 +129,9 @@ TOOL_FEATURES: Dict[str, Set[ToolFeature]] = {
         ToolFeature.DATABASE_WRITE,
     },
     "delete_lesson": {
+        ToolFeature.DATABASE_WRITE,
+    },
+    "regenerate_embedding": {
         ToolFeature.DATABASE_WRITE,
     },
     "search_lessons": {

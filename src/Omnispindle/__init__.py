@@ -28,8 +28,8 @@ TOOL_LOADOUTS = {
     "full": [
         "add_todo", "query_todos", "update_todo", "delete_todo", "get_todo",
         "complete_todo", "list_todos_by_status", "search_todos", "list_project_todos",
-        "add_lesson", "get_lesson", "update_lesson", "delete_lesson", "search_lessons",
-        "grep_lessons", "list_lessons", "query_todo_logs", "list_projects",
+        "add_lesson", "get_lesson", "update_lesson", "delete_lesson", "regenerate_embedding",
+        "search_lessons", "grep_lessons", "list_lessons", "query_todo_logs", "list_projects",
         "explain", "add_explanation", "point_out_obvious"
     ],
     "basic": [
@@ -40,8 +40,8 @@ TOOL_LOADOUTS = {
         "add_todo", "query_todos", "get_todo", "complete_todo"
     ],
     "lessons": [
-        "add_lesson", "get_lesson", "update_lesson", "delete_lesson", "search_lessons",
-        "grep_lessons", "list_lessons"
+        "add_lesson", "get_lesson", "update_lesson", "delete_lesson", "regenerate_embedding",
+        "search_lessons", "grep_lessons", "list_lessons"
     ],
     "admin": [
         "query_todos", "update_todo", "delete_todo", "query_todo_logs",
@@ -155,6 +155,7 @@ class Omnispindle:
             "get_lesson": (tools_module.get_lesson, get_tool_doc("get_lesson")),
             "update_lesson": (tools_module.update_lesson, get_tool_doc("update_lesson")),
             "delete_lesson": (tools_module.delete_lesson, get_tool_doc("delete_lesson")),
+            "regenerate_embedding": (tools_module.regenerate_embedding, get_tool_doc("regenerate_embedding")),
             "search_lessons": (tools_module.search_lessons, get_tool_doc("search_lessons")),
             "grep_lessons": (tools_module.grep_lessons, get_tool_doc("grep_lessons")),
             "list_lessons": (tools_module.list_lessons, get_tool_doc("list_lessons")),

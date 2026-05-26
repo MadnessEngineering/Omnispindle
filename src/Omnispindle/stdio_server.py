@@ -294,6 +294,10 @@ class OmniSpindleStdioServer:
                 "func": tools.delete_lesson,
                 "doc": get_tool_doc("delete_lesson")
             },
+            "regenerate_embedding": {
+                "func": tools.regenerate_embedding,
+                "doc": get_tool_doc("regenerate_embedding")
+            },
             "search_lessons": {
                 "func": tools.search_lessons,
                 "doc": get_tool_doc("search_lessons")
@@ -567,6 +571,16 @@ class OmniSpindleStdioServer:
                                 ctx = _create_context()
                                 return await func(lesson_id, ctx=ctx)
                             return delete_lesson
+
+                        elif name == "regenerate_embedding":
+                            @self.server.tool()
+                            async def regenerate_embedding(
+                                lesson_id: Annotated[str, Field(description="Lesson ID")]
+                            ) -> str:
+                                """Recompute embedding for a lesson and stamp embedding_updated_at"""
+                                ctx = _create_context()
+                                return await func(lesson_id, ctx=ctx)
+                            return regenerate_embedding
 
                         elif name == "search_lessons":
                             @self.server.tool()

@@ -18,9 +18,9 @@ _BASE_LOADOUTS: Dict[str, List[str]] = {
         "add_todo", "query_todos", "update_todo", "delete_todo", "get_todo",
         "complete_todo", "list_todos_by_status", "search_todos", "list_project_todos",
 
-        # Lessons (7 tools)
-        "add_lesson", "get_lesson", "update_lesson", "delete_lesson", "search_lessons",
-        "grep_lessons", "list_lessons",
+        # Lessons (8 tools)
+        "add_lesson", "get_lesson", "update_lesson", "delete_lesson", "regenerate_embedding",
+        "search_lessons", "grep_lessons", "list_lessons",
 
         # Admin/System (5 tools)
         "query_todo_logs", "list_projects", "explain", "add_explanation", "point_out_obvious",
@@ -63,9 +63,9 @@ _BASE_LOADOUTS: Dict[str, List[str]] = {
     ],
 
     "lessons": [
-        # Knowledge management focus (7 tools)
-        "add_lesson", "get_lesson", "update_lesson", "delete_lesson", "search_lessons",
-        "grep_lessons", "list_lessons"
+        # Knowledge management focus (8 tools)
+        "add_lesson", "get_lesson", "update_lesson", "delete_lesson", "regenerate_embedding",
+        "search_lessons", "grep_lessons", "list_lessons"
     ],
 
     "admin": [
@@ -214,7 +214,7 @@ def get_loadout_info(loadout_name: str) -> Dict[str, any]:
         "full": "All available tools (33 local, 31 remote after filtering)",
         "basic": "Core CRUD + context + lesson lookup (10 tools)",
         "minimal": "Absolute minimum functionality (4 tools)",
-        "lessons": "Knowledge management focus (7 tools)",
+        "lessons": "Knowledge management focus (8 tools)",
         "admin": "Administrative tools and session management (14 tools)",
         "write_only": "Create, update, delete operations only (6 tools)",
         "read_only": "Query, get, and search operations + sessions (15 tools)",
