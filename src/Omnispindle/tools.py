@@ -63,6 +63,49 @@ def strip_empty_fields(obj):
         return [strip_empty_fields(item) for item in obj if item not in (None, "", [], {})]
     return obj
 
+
+# Metadata keys never useful to AI consumers — stripped from every MCP response
+_AI_NOISE_METADATA_KEYS = {"user_id", "user_email", "created_by_ai", "chat_context"}
+
+# Keys kept in compact metadata when brief mode is on
+_BRIEF_METADATA_KEEP = {"blockers", "files", "complexity"}
+
+
+def compact_todo(doc: dict, brief: bool = False) -> dict:
+    """
+    Reduce todo doc to MCP-friendly shape. Always: drop _id, drop per-doc source,
+    strip noise metadata keys, dedupe metadata.tags against top-level tags.
+    If brief=True: drop notes and reduce metadata to a small whitelist.
+
+    See compact_todo_list() for list-level handling (envelope source).
+    """
+    if not isinstance(doc, dict):
+        return doc
+    out = {k: v for k, v in doc.items() if k not in ("_id", "source")}
+
+    md = out.get("metadata")
+    if isinstance(md, dict):
+        md = {k: v for k, v in md.items() if k not in _AI_NOISE_METADATA_KEYS}
+        # Dedupe metadata.tags if it duplicates top-level tags
+        if "tags" in md and md["tags"] == out.get("tags"):
+            md.pop("tags", None)
+        if brief:
+            md = {k: v for k, v in md.items() if k in _BRIEF_METADATA_KEEP}
+        if md:
+            out["metadata"] = md
+        else:
+            out.pop("metadata", None)
+
+    if brief:
+        out.pop("notes", None)
+        out.pop("updated_at", None)
+    return out
+
+
+def compact_todo_list(docs: list, brief: bool = False) -> list:
+    """Apply compact_todo to each item in a list."""
+    return [compact_todo(d, brief=brief) for d in docs if d]
+
 # Helper function for deep merging metadata
 def deep_merge_metadata(existing: dict, updates: dict) -> dict:
     """
@@ -667,7 +710,7 @@ async def add_todo(description: str, project: str, priority: str = "Medium", tar
         logger.error(f"Failed to create todo: {str(e)}")
         return create_response(False, message=str(e))
 
-async def query_todos(filter: Optional[Dict[str, Any]] = None, projection: Optional[Dict[str, Any]] = None, limit: int = 100, offset: int = 0, exclude_completed: bool = True, since: Optional[int] = None, graph_root: Optional[str] = None, ctx: Optional[Context] = None) -> str:
+async def query_todos(filter: Optional[Dict[str, Any]] = None, projection: Optional[Dict[str, Any]] = None, limit: int = 100, offset: int = 0, exclude_completed: bool = True, since: Optional[int] = None, graph_root: Optional[str] = None, brief: bool = False, ctx: Optional[Context] = None) -> str:
     """
     Query todos with flexible filtering options and pagination.
     - Authenticated users: returns their personal todos
@@ -715,8 +758,9 @@ async def query_todos(filter: Optional[Dict[str, Any]] = None, projection: Optio
         cursor = todos_collection.find(query_filter, projection).sort("created_at", -1).skip(offset).limit(limit)
         results = list(cursor)
 
-        logger.info(f"Query returned {len(results)} todos from {database_source} database (offset={offset}, limit={limit}, exclude_completed={exclude_completed}, since={since})")
-        return json.dumps({"items": results, "count": len(results)}, cls=MongoJSONEncoder)
+        logger.info(f"Query returned {len(results)} todos from {database_source} database (offset={offset}, limit={limit}, exclude_completed={exclude_completed}, since={since}, brief={brief})")
+        compacted = compact_todo_list(results, brief=brief)
+        return json.dumps({"items": compacted, "count": len(compacted), "source": database_source}, cls=MongoJSONEncoder)
     except Exception as e:
         logger.error(f"Failed to query todos: {str(e)}")
         return create_response(False, message=str(e))
@@ -1025,11 +1069,9 @@ async def get_todo(todo_id: str, ctx: Optional[Context] = None) -> str:
 
             todo = user_todos_collection.find_one({"id": todo_id})
             if todo:
-                todo['source'] = 'user'
-                # Remove MongoDB _id and strip empty fields
-                if '_id' in todo:
-                    del todo['_id']
-                return json.dumps(strip_empty_fields(todo))
+                compacted = compact_todo(todo)
+                compacted['source'] = 'user'
+                return json.dumps(strip_empty_fields(compacted))
 
         # If not found in user database (or no user database), try shared database
         shared_collections = db_connection.get_collections(None)  # None = shared database
@@ -1039,11 +1081,9 @@ async def get_todo(todo_id: str, ctx: Optional[Context] = None) -> str:
 
         todo = shared_todos_collection.find_one({"id": todo_id})
         if todo:
-            todo['source'] = 'shared'
-            # Remove MongoDB _id and strip empty fields
-            if '_id' in todo:
-                del todo['_id']
-            return json.dumps(strip_empty_fields(todo))
+            compacted = compact_todo(todo)
+            compacted['source'] = 'shared'
+            return json.dumps(strip_empty_fields(compacted))
 
         # Not found in any database
         searched_locations = " and ".join(searched_databases)
@@ -1150,14 +1190,15 @@ async def complete_todo(todo_id: str, comment: Optional[str] = None, files: Opti
         return create_response(False, message=str(e))
 
 
-async def list_todos_by_status(status: str, limit: int = 100, offset: int = 0, ctx: Optional[Context] = None) -> str:
+async def list_todos_by_status(status: str, limit: int = 100, offset: int = 0, brief: bool = True, ctx: Optional[Context] = None) -> str:
     """
     List todos filtered by their status with pagination support.
+    Defaults to brief=True for token efficiency — pass brief=false for full notes/metadata.
     """
     if status.lower() not in ['pending', 'completed', 'initial', 'blocked', 'in_progress', 'review']:
         return create_response(False, message="Invalid status. Must be one of 'pending', 'completed', 'initial', 'blocked', 'in_progress', 'review'.")
     # When querying by status, don't apply the default completed filter
-    return await query_todos(filter={"status": status.lower()}, limit=limit, offset=offset, exclude_completed=False, ctx=ctx)
+    return await query_todos(filter={"status": status.lower()}, limit=limit, offset=offset, exclude_completed=False, brief=brief, ctx=ctx)
 
 async def add_lesson(language: str, topic: str, lesson_learned: str, tags: Optional[list] = None, ctx: Optional[Context] = None) -> str:
     """
@@ -1298,19 +1339,20 @@ async def delete_lesson(lesson_id: str, ctx: Optional[Context] = None) -> str:
         logger.error(f"Failed to delete lesson: {str(e)}")
         return create_response(False, message=str(e))
 
-async def search_todos(query: str, fields: Optional[list] = None, limit: int = 100, ctx: Optional[Context] = None) -> str:
+async def search_todos(query: str, fields: Optional[list] = None, limit: int = 100, brief: bool = False, ctx: Optional[Context] = None) -> str:
     """
     Search todos with text search capabilities.
+    Pass brief=true for a compact summary (id/description/status/priority only).
     """
     if fields is None:
         fields = ["description", "project"]
     search_query = _build_tokenized_search_query(query, fields)
 
     user_id = ctx.user.get('sub') if ctx and ctx.user else 'anonymous'
-    logger.info(f"search_todos called by {user_id}: query='{query}', fields={fields}, limit={limit}")
+    logger.info(f"search_todos called by {user_id}: query='{query}', fields={fields}, limit={limit}, brief={brief}")
     logger.debug(f"MongoDB query: {search_query}")
 
-    result = await query_todos(filter=search_query, limit=limit, ctx=ctx)
+    result = await query_todos(filter=search_query, limit=limit, brief=brief, ctx=ctx)
 
     # Parse result to log count
     try:
@@ -1567,16 +1609,19 @@ async def grep_lessons(pattern: str, limit: int = 20, ctx: Optional[Context] = N
         logger.error(f"Failed to grep lessons: {str(e)}")
         return create_response(False, message=str(e))
 
-async def list_project_todos(project: str, limit: int = 5, offset: int = 0, ctx: Optional[Context] = None) -> str:
+async def list_project_todos(project: str, limit: int = 5, offset: int = 0, brief: bool = True, projection: Optional[Dict[str, Any]] = None, ctx: Optional[Context] = None) -> str:
     """
     List recent active todos for a specific project with pagination support.
     Returns pending and in_progress todos (excludes review, completed, cancelled).
+    Defaults to brief=True for token efficiency — pass brief=false for full notes/metadata.
     """
     return await query_todos(
         filter={"project": validate_project_name(project, ctx), "status": {"$in": ["pending", "in_progress"]}},
+        projection=projection,
         limit=limit,
         offset=offset,
         exclude_completed=False,  # Already filtering by status
+        brief=brief,
         ctx=ctx
     )
 

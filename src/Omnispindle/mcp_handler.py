@@ -46,7 +46,8 @@ TOOL_SCHEMAS = {
                 "exclude_completed": {"type": "boolean", "description": "Exclude completed items (default: true)"},
                 "since": {"type": "number", "description": "Unix timestamp — only return items modified after this time"},
                 "projection": {"type": "object", "description": "{field: 1} to include, {field: 0} to exclude"},
-                "graph_root": {"type": "string", "description": "Todo ID or short prefix — returns dependency subgraph: {root, nodes, edges} traversing metadata.blockers up to 2 hops in both directions"}
+                "graph_root": {"type": "string", "description": "Todo ID or short prefix — returns dependency subgraph: {root, nodes, edges} traversing metadata.blockers up to 2 hops in both directions"},
+                "brief": {"type": "boolean", "description": "Strip notes + non-essential metadata for token efficiency (default: false)"}
             }
         }
     },
@@ -99,13 +100,14 @@ TOOL_SCHEMAS = {
     },
     "list_todos_by_status": {
         "name": "list_todos_by_status",
-        "description": "Quick status filter. Returns todos matching a single status with pagination.",
+        "description": "Quick status filter. Returns todos matching a single status with pagination. Brief by default — pass brief=false for full notes/metadata.",
         "inputSchema": {
             "type": "object",
             "properties": {
                 "status": {"type": "string", "description": "pending|completed|initial|blocked|in_progress|review"},
                 "limit": {"type": "number", "description": "Max results (default: 100)"},
-                "offset": {"type": "number", "description": "Skip N results for pagination (default: 0)"}
+                "offset": {"type": "number", "description": "Skip N results for pagination (default: 0)"},
+                "brief": {"type": "boolean", "description": "Strip notes + non-essential metadata (default: true)"}
             },
             "required": ["status"]
         }
@@ -118,20 +120,23 @@ TOOL_SCHEMAS = {
             "properties": {
                 "query": {"type": "string", "description": "Search text. Tokenized regex across description+project."},
                 "limit": {"type": "number", "description": "Max results (default: 100)"},
-                "fields": {"type": "array", "description": "Fields to search (default: description, project)"}
+                "fields": {"type": "array", "description": "Fields to search (default: description, project)"},
+                "brief": {"type": "boolean", "description": "Strip notes + non-essential metadata (default: false)"}
             },
             "required": ["query"]
         }
     },
     "list_project_todos": {
         "name": "list_project_todos",
-        "description": "Quick project filter. Returns recent pending and in_progress todos for one project.",
+        "description": "Quick project filter. Returns recent pending and in_progress todos for one project. Brief by default — pass brief=false for full notes/metadata.",
         "inputSchema": {
             "type": "object",
             "properties": {
                 "project": {"type": "string", "description": "Project name"},
                 "limit": {"type": "number", "description": "Max results (default: 5)"},
-                "offset": {"type": "number", "description": "Skip N results for pagination (default: 0)"}
+                "offset": {"type": "number", "description": "Skip N results for pagination (default: 0)"},
+                "brief": {"type": "boolean", "description": "Strip notes + non-essential metadata (default: true)"},
+                "projection": {"type": "object", "description": "{field: 1} include / {field: 0} exclude — passes through to MongoDB"}
             },
             "required": ["project"]
         }

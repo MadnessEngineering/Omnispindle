@@ -496,11 +496,12 @@ class OmniSpindleStdioServer:
                             async def list_todos_by_status(
                                 status: Annotated[str, Field(description="pending|completed|initial|blocked|in_progress|review")],
                                 limit: Annotated[int, Field(description="Max results")] = 100,
-                                offset: Annotated[int, Field(description="Skip N results for pagination")] = 0
+                                offset: Annotated[int, Field(description="Skip N results for pagination")] = 0,
+                                brief: Annotated[bool, Field(description="Strip notes + non-essential metadata")] = True
                             ) -> str:
-                                """Quick status filter. Returns todos matching a single status with pagination."""
+                                """Quick status filter. Returns todos matching a single status with pagination. Brief by default."""
                                 ctx = _create_context()
-                                return await func(status, limit, offset, ctx=ctx)
+                                return await func(status, limit, offset, brief, ctx=ctx)
                             return list_todos_by_status
 
                         elif name == "search_todos":
@@ -509,11 +510,12 @@ class OmniSpindleStdioServer:
                                 query: Annotated[str, Field(description="Search text. Use 'project:Name' for project filter")],
                                 fields: Annotated[Optional[list], Field(description="Fields to search")] = None,
                                 limit: Annotated[int, Field(description="Max results")] = 100,
+                                brief: Annotated[bool, Field(description="Strip notes + non-essential metadata")] = False,
                                 ctx: Annotated[Optional[str], Field(description="Additional context")] = None
                             ) -> str:
                                 """Text search shorthand. Tokenized regex on description+project. Use 'project:Name' for project filter."""
                                 context = _create_context()
-                                return await func(query, fields, limit, ctx=context)
+                                return await func(query, fields, limit, brief, ctx=context)
                             return search_todos
 
                         elif name == "list_project_todos":
@@ -521,11 +523,13 @@ class OmniSpindleStdioServer:
                             async def list_project_todos(
                                 project: Annotated[str, Field(description="Project name")],
                                 limit: Annotated[int, Field(description="Max results")] = 5,
-                                offset: Annotated[int, Field(description="Skip N results for pagination")] = 0
+                                offset: Annotated[int, Field(description="Skip N results for pagination")] = 0,
+                                brief: Annotated[bool, Field(description="Strip notes + non-essential metadata")] = True,
+                                projection: Annotated[Optional[Dict[str, Any]], Field(description="MongoDB projection passthrough")] = None
                             ) -> str:
-                                """Quick project filter. Returns recent pending and in_progress todos for one project."""
+                                """Quick project filter. Returns recent pending and in_progress todos for one project. Brief by default."""
                                 ctx = _create_context()
-                                return await func(project, limit, offset, ctx=ctx)
+                                return await func(project, limit, offset, brief, projection, ctx=ctx)
                             return list_project_todos
 
                         elif name == "add_lesson":
