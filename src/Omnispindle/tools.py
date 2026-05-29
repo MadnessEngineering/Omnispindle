@@ -646,7 +646,19 @@ async def add_todo(description: str, project: str, priority: str = "Medium", tar
         if stray_tags is not None:
             existing = metadata.get("tags")
             existing = existing if isinstance(existing, list) else ([existing] if existing else [])
-            incoming = stray_tags if isinstance(stray_tags, list) else [stray_tags]
+            # A stray top-level `tags` often arrives stringified (e.g. the JSON
+            # text '["a","b"]' or a CSV "a, b") rather than a real list — normalize.
+            if isinstance(stray_tags, str):
+                try:
+                    decoded = json.loads(stray_tags)
+                    incoming = decoded if isinstance(decoded, list) else [decoded]
+                except (ValueError, TypeError):
+                    incoming = [t.strip() for t in stray_tags.split(",") if t.strip()]
+            elif isinstance(stray_tags, list):
+                incoming = stray_tags
+            else:
+                incoming = [stray_tags]
+            incoming = [str(t).strip() for t in incoming if str(t).strip()]
             metadata["tags"] = list(dict.fromkeys([*existing, *incoming]))
         for key, value in extra.items():
             metadata.setdefault(key, value)
