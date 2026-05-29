@@ -23,6 +23,7 @@ search, duplicate detection). Editing/listing works without it.
 """
 
 import argparse
+import importlib.util
 import os
 import sys
 import time
@@ -38,13 +39,20 @@ from starlette.routing import Route
 
 load_dotenv()
 
-from src.Omnispindle.embeddings import (
-    generate_embedding,
-    embedding_text_for_lesson,
-    cosine_similarity,
-    is_available,
-    EMBEDDING_DIMS,
-)
+# Load embeddings.py directly by file path. Importing it via the package
+# (src.Omnispindle.embeddings) would execute src/Omnispindle/__init__.py, which
+# pulls in fastapi and the full MCP stack — deps this lightweight tool doesn't
+# need. embeddings.py is self-contained (httpx + numpy), so load it standalone.
+_emb_path = os.path.join(os.path.dirname(__file__), "..", "src", "Omnispindle", "embeddings.py")
+_emb_spec = importlib.util.spec_from_file_location("lr_embeddings", _emb_path)
+_emb = importlib.util.module_from_spec(_emb_spec)
+_emb_spec.loader.exec_module(_emb)
+
+generate_embedding = _emb.generate_embedding
+embedding_text_for_lesson = _emb.embedding_text_for_lesson
+cosine_similarity = _emb.cosine_similarity
+is_available = _emb.is_available
+EMBEDDING_DIMS = _emb.EMBEDDING_DIMS
 
 MONGODB_URI = os.getenv("MONGODB_URI", "mongodb://localhost:27017")
 SHARED_DB = os.getenv("MONGODB_DB", "swarmonomicon")
