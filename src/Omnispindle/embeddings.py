@@ -15,8 +15,12 @@ import numpy as np
 logger = logging.getLogger(__name__)
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-EMBEDDING_MODEL = "text-embedding-004"
+# text-embedding-004 was retired; gemini-embedding-001 is the current model.
+EMBEDDING_MODEL = "gemini-embedding-001"
 EMBEDDING_URL = f"https://generativelanguage.googleapis.com/v1beta/models/{EMBEDDING_MODEL}:embedContent"
+# gemini-embedding-001 defaults to 3072 dims; pin to 768 via outputDimensionality
+# to keep the stored-vector contract. (cosine is scale-invariant, so MRL
+# truncation to 768 is safe for similarity even though <3072 isn't auto-normalized.)
 EMBEDDING_DIMS = 768
 
 
@@ -27,7 +31,7 @@ def is_available() -> bool:
 
 async def generate_embedding(text: str) -> Optional[List[float]]:
     """
-    Generate a 768-dim embedding via Gemini text-embedding-004.
+    Generate a 768-dim embedding via Gemini gemini-embedding-001.
 
     Returns None on any failure (missing key, API error, timeout).
     """
@@ -42,12 +46,15 @@ async def generate_embedding(text: str) -> Optional[List[float]]:
 
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
+            # Key goes in the x-goog-api-key header, NOT a query param — keeps the
+            # secret out of error messages/logs (httpx echoes the URL on errors).
             resp = await client.post(
                 EMBEDDING_URL,
-                params={"key": GEMINI_API_KEY},
+                headers={"x-goog-api-key": GEMINI_API_KEY},
                 json={
                     "model": f"models/{EMBEDDING_MODEL}",
                     "content": {"parts": [{"text": truncated}]},
+                    "outputDimensionality": EMBEDDING_DIMS,
                 },
             )
             resp.raise_for_status()
