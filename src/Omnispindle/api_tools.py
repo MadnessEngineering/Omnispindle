@@ -210,19 +210,9 @@ async def query_todos(filter: Optional[Dict[str, Any]] = None, projection: Optio
         return create_response(False, message=f"API error: {str(e)}")
 
 async def _resolve_todo_id_api(todo_id: str, client: "MadnessAPIClient") -> Optional[str]:
-    """Resolve a short 8-char ID prefix to a full UUID via API search."""
-    if len(todo_id) > 8:
-        return todo_id
-    api_response = await client.get_todos(limit=500)
-    if not api_response.success:
-        return None
-    api_data = api_response.data
-    todos_list = api_data.get('todos', api_data) if isinstance(api_data, dict) else api_data
-    for todo in (todos_list if isinstance(todos_list, list) else []):
-        full_id = todo.get('id', '')
-        if full_id.startswith(todo_id):
-            return full_id
-    return None
+    """Pass the todo ID through as-is. Full UUIDs only — short-id prefixes removed
+    (numeric-looking short ids overflowed to float inf before validation)."""
+    return str(todo_id) if todo_id is not None else None
 
 
 async def update_todo(todo_id: str, updates: dict, ctx: Optional[Context] = None) -> str:

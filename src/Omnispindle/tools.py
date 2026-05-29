@@ -847,28 +847,13 @@ def _query_todo_graph(todos_collection, root_id: str, max_hops: int = 2) -> str:
 
 def _resolve_todo_id(todo_id: str, user_context, db_conn) -> Optional[str]:
     """
-    Resolve a short ID prefix (e.g. 'bbb92e6d') to a full UUID.
-    Returns the full ID if found, None otherwise.
-    Searches user DB first, then shared DB.
+    Pass the todo ID through as-is. Full UUIDs only.
+
+    Short-id prefix resolution was removed: numeric-looking short ids (e.g. '313e8715')
+    were JSON-parsed as floats and overflowed to inf before reaching validation, breaking
+    any id matching \\d+e\\d+. UUIDs contain hyphens so they never number-coerce.
     """
-    # Already looks like a full UUID — return as-is
-    if len(todo_id) > 8:
-        return todo_id
-
-    pattern = re.compile(f"^{re.escape(todo_id)}", re.IGNORECASE)
-
-    if user_context and user_context.get('sub'):
-        user_collections = db_conn.get_collections(user_context)
-        todo = user_collections['todos'].find_one({"id": pattern})
-        if todo:
-            return todo['id']
-
-    shared_collections = db_conn.get_collections(None)
-    todo = shared_collections['todos'].find_one({"id": pattern})
-    if todo:
-        return todo['id']
-
-    return None
+    return str(todo_id) if todo_id is not None else None
 
 
 async def update_todo(todo_id: str, updates: dict, ctx: Optional[Context] = None) -> str:
