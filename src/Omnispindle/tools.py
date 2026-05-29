@@ -605,7 +605,7 @@ def _normalize_updates(updates, label: str = "updates") -> tuple:
     return updates, None
 
 
-async def add_todo(description: str, project: str, priority: str = "Medium", target_agent: str = "user", notes: str = "", ticket: str = "", metadata: Optional[Dict[str, Any]] = None, ctx: Optional[Context] = None) -> str:
+async def add_todo(description: str, project: str, priority: str = "Medium", target_agent: str = "user", notes: str = "", ticket: str = "", metadata: Optional[Dict[str, Any]] = None, ctx: Optional[Context] = None, **extra) -> str:
     """
     Creates a task in the specified project with the given priority and target agent.
 
@@ -634,6 +634,24 @@ async def add_todo(description: str, project: str, priority: str = "Medium", tar
         validated_project = validate_project_name(project, ctx)
     else:
         validated_project = normalize_project_name(project)
+
+    # Tolerate misplaced/unknown top-level kwargs instead of failing with an opaque
+    # MCP -32603 (mcp_handler calls this fn directly with **tool_arguments, so any
+    # undeclared field raises TypeError). Common case: callers pass `tags=[...]` at
+    # the top level when it belongs in metadata.tags. Fold a stray `tags` into
+    # metadata and stash any other unexpected kwargs there too — nothing is dropped.
+    if extra:
+        metadata = dict(metadata) if isinstance(metadata, dict) else {}
+        stray_tags = extra.pop("tags", None)
+        if stray_tags is not None:
+            existing = metadata.get("tags")
+            existing = existing if isinstance(existing, list) else ([existing] if existing else [])
+            incoming = stray_tags if isinstance(stray_tags, list) else [stray_tags]
+            metadata["tags"] = list(dict.fromkeys([*existing, *incoming]))
+        for key, value in extra.items():
+            metadata.setdefault(key, value)
+        logger.info(f"tools.add_todo: folded stray top-level kwargs into metadata "
+                    f"(tags={stray_tags is not None}, other={list(extra.keys())})")
 
     # Validate metadata against schema if provided
     validated_metadata = {}
