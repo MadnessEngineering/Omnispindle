@@ -1,7 +1,7 @@
 
 # Environment and credentials
 .claude_temp/last_tool_use_id.txt
-.env*
+.env
 .env.local
 .env.production
 .env.development
@@ -15,7 +15,7 @@ AUTH0_TOKEN*
 config/*.json
 config/*secrets*
 *.credentials
-
+.gemini/
 # Python
 __pycache__/
 *.pyc
