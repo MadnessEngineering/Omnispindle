@@ -2879,6 +2879,39 @@ async def check_quest(quest_id: str, ctx: Optional[Context] = None) -> str:
             next_desc = next_actions[0]["description"][:60] if next_actions else "done"
             summary_parts.append(f"Chain '{chain.get('label')}' {done_len}/{chain_len} {chain_status}, next: {next_desc}")
 
+        # Fallback: no chains → count todos tagged with this quest ID
+        metadata_fallback = False
+        if total_count == 0:
+            metadata_fallback_todos = list(todos_col.find({
+                "$or": [
+                    {"metadata.quest_id": quest_id},
+                    {"metadata.quest": quest_id},
+                ]
+            }))
+            if metadata_fallback_todos:
+                metadata_fallback = True
+                fb_done = sum(1 for t in metadata_fallback_todos if t.get("status") in ("completed", "review"))
+                fb_blocked = sum(1 for t in metadata_fallback_todos if t.get("status") == "blocked")
+                fb_total = len(metadata_fallback_todos)
+                total_count = fb_total
+                total_done = fb_done
+                total_blocked = fb_blocked
+                all_blockers = [
+                    {"id": t["id"], "description": t.get("description", ""), "chain": "metadata-fallback"}
+                    for t in metadata_fallback_todos if t.get("status") == "blocked"
+                ]
+                fb_next = next((t for t in metadata_fallback_todos if t.get("status") not in ("completed", "review")), None)
+                chains_report = [{
+                    "label": "metadata-fallback",
+                    "progress": f"{fb_done}/{fb_total}",
+                    "status": "in_progress" if fb_done < fb_total else "completed",
+                    "parallel": True,
+                    "next_actions": [{"id": fb_next["id"], "description": fb_next.get("description", ""), "status": fb_next.get("status", "")}] if fb_next else [],
+                    "completed": [t["id"] for t in metadata_fallback_todos if t.get("status") in ("completed", "review")],
+                    "blocked": [{"id": t["id"], "description": t.get("description", "")} for t in metadata_fallback_todos if t.get("status") == "blocked"],
+                }]
+                summary_parts = [f"[metadata-fallback] {fb_done}/{fb_total} todos tagged with quest ID"]
+
         denominator = total_count - total_blocked
         progress_pct = int(total_done / denominator * 100) if denominator > 0 else 0
 
@@ -2893,6 +2926,7 @@ async def check_quest(quest_id: str, ctx: Optional[Context] = None) -> str:
             "blockers": all_blockers,
             "success_criteria": quest.get("success_criteria", []),
             "summary": " | ".join(summary_parts),
+            **({"progress_source": "metadata-fallback", "note": "No chains found — progress derived from todos tagged with this quest ID via metadata.quest_id / metadata.quest"} if metadata_fallback else {}),
         }
 
         return json.dumps(result, cls=MongoJSONEncoder)
@@ -2961,7 +2995,18 @@ async def link_quest(quest_id: str, todo_id: str, chain_label: str,
                 break
 
         if target_chain is None:
-            return create_response(False, message=f"Chain '{chain_label}' not found in quest")
+            # Create chain on demand — quests with no prior chains are otherwise permanently orphaned
+            new_chain = {
+                "label": chain_label,
+                "todos": [],
+                "parallel": False,
+                "gate_todo": None,
+                "status": "pending",
+            }
+            chains.append(new_chain)
+            chain_idx = len(chains) - 1
+            target_chain = new_chain
+            quests_col.update_one({"id": quest_id}, {"$set": {"chains": chains}})
 
         todos_list = target_chain.get("todos", [])
         if todo_id in todos_list:
