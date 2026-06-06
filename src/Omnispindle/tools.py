@@ -29,14 +29,38 @@ load_dotenv()
 # Get the logger
 logger = logging.getLogger(__name__)
 
+# Stop words stripped from tokenized/RAG searches to avoid matching on noise tokens.
+# Also includes common dev-action verbs that appear in nearly every todo.
+_STOP_WORDS = frozenset({
+    "a", "an", "the", "in", "on", "at", "to", "for", "of", "with", "by",
+    "from", "up", "about", "into", "is", "are", "was", "were", "be", "been",
+    "being", "have", "has", "had", "do", "does", "did", "will", "would",
+    "could", "should", "may", "might", "shall", "can", "need", "must",
+    "and", "or", "but", "not", "no", "nor", "so", "yet", "both", "either",
+    "neither", "each", "every", "all", "any", "few", "more", "most", "some",
+    "such", "than", "too", "very", "just", "also", "now", "then", "here",
+    "there", "when", "where", "why", "how", "what", "which", "who", "whom",
+    "this", "that", "these", "those", "it", "its", "my", "our", "your",
+    "his", "her", "their", "i", "we", "you", "he", "she", "they", "me",
+    "us", "him", "them", "if", "else", "while", "as", "until", "after",
+    "before", "because", "since", "during", "without", "between", "through",
+    "add", "fix", "update", "create", "remove", "change", "make", "get",
+    "set", "use", "new", "existing",
+})
+
+
 # Helper function to build tokenized search queries for fuzzy multi-word matching
 def _build_tokenized_search_query(query: str, fields: list) -> dict:
     """Build a MongoDB query that tokenizes multi-word queries for fuzzy matching.
 
-    Each word must match in at least one field (AND between tokens, OR across fields).
-    Single-word queries behave identically to the original regex approach.
+    Stop words are stripped so common verbs/articles don't inflate matches.
+    Each meaningful token must match in at least one field (AND logic).
+    Single-token queries behave identically to the original regex approach.
     """
-    tokens = [re.escape(t) for t in query.split() if t.strip()]
+    all_tokens = [t for t in query.split() if t.strip()]
+    # Strip stop words; fall back to all tokens if everything is a stop word
+    filtered = [re.escape(t) for t in all_tokens if t.lower() not in _STOP_WORDS and len(t) > 2]
+    tokens = filtered if filtered else [re.escape(t) for t in all_tokens if t.strip()]
 
     if not tokens:
         return {"$or": [{field: {"$regex": "", "$options": "i"}} for field in fields]}
@@ -2477,13 +2501,14 @@ async def find_relevant(
         if "todos" in types:
             todos_collection = collections['todos']
             if use_semantic:
-                # Check if any docs have embeddings
                 has_embeddings = todos_collection.find_one({"embedding": {"$exists": True}})
                 if has_embeddings:
                     items = await embeddings.find_similar(query, todos_collection, "todo", limit=limit)
-                    results["todos"] = {"items": items, "count": len(items), "method": "semantic"}
+                    # Semantic available: return whatever it found (may be empty if nothing above threshold)
+                    results["todos"] = {"items": items, "count": len(items), "method": "semantic",
+                                        **({"message": "no matches above similarity threshold"} if not items else {})}
                 else:
-                    # Fall back to regex
+                    # No embeddings stored yet — regex is the only option
                     items = _regex_search_todos(todos_collection, query, limit)
                     results["todos"] = {"items": items, "count": len(items), "method": "regex"}
             else:
@@ -2497,7 +2522,9 @@ async def find_relevant(
                     has_embeddings = lessons_collection.find_one({"embedding": {"$exists": True}})
                     if has_embeddings:
                         items = await embeddings.find_similar(query, lessons_collection, "lesson", limit=limit)
-                        results["lessons"] = {"items": items, "count": len(items), "method": "semantic"}
+                        # Semantic available: trust the threshold, don't pollute with regex fallback
+                        results["lessons"] = {"items": items, "count": len(items), "method": "semantic",
+                                              **({"message": "no matches above similarity threshold"} if not items else {})}
                     else:
                         items = _regex_search_lessons(lessons_collection, query, limit)
                         results["lessons"] = {"items": items, "count": len(items), "method": "regex"}
@@ -2523,24 +2550,6 @@ def _regex_search_todos(collection, query: str, limit: int) -> list:
         return sum(1 for kw in keywords if re.search(kw, text, re.IGNORECASE))
     results.sort(key=score, reverse=True)
     return results[:limit]
-
-
-_STOP_WORDS = frozenset({
-    "a", "an", "the", "in", "on", "at", "to", "for", "of", "with", "by",
-    "from", "up", "about", "into", "is", "are", "was", "were", "be", "been",
-    "being", "have", "has", "had", "do", "does", "did", "will", "would",
-    "could", "should", "may", "might", "shall", "can", "need", "must",
-    "and", "or", "but", "not", "no", "nor", "so", "yet", "both", "either",
-    "neither", "each", "every", "all", "any", "few", "more", "most", "some",
-    "such", "than", "too", "very", "just", "also", "now", "then", "here",
-    "there", "when", "where", "why", "how", "what", "which", "who", "whom",
-    "this", "that", "these", "those", "it", "its", "my", "our", "your",
-    "his", "her", "their", "i", "we", "you", "he", "she", "they", "me",
-    "us", "him", "them", "if", "else", "while", "as", "until", "after",
-    "before", "because", "since", "during", "without", "between", "through",
-    "add", "fix", "update", "create", "remove", "change", "make", "get",
-    "set", "use", "new", "existing",
-})
 
 
 def _extract_keywords(text: str) -> list:
@@ -2618,31 +2627,32 @@ async def preflight_rag(
         matched_lessons = []
 
         if use_semantic:
-            # Semantic search against the intent
             matched_lessons = await embeddings.find_similar(intent, lessons_collection, "lesson", limit=limit)
             results["method"] = "semantic"
+            # Semantic scored but found nothing above threshold — report honestly, no regex fallback
+            if not matched_lessons:
+                results["message"] = "No lessons above similarity threshold — no prior context for this intent."
+                results["suggestions"].append("No prior lessons found — charting new territory.")
+                return json.dumps(results, cls=MongoJSONEncoder)
         else:
-            # Regex fallback — tokenise intent into keywords
             matched_lessons = _regex_search_lessons(lessons_collection, intent, limit)
             results["method"] = "regex"
 
-        # If project specified, boost project-specific lessons by also searching with project scope
+        # If project specified, nudge score of project-relevant lessons so semantic ranking still dominates.
+        # Hard-prepend (old approach) flooded results with every project lesson regardless of topical match.
         if project and matched_lessons:
-            project_lessons = []
-            project_query = {
-                "$or": [
-                    {"project": {"$regex": f"^{re.escape(project)}$", "$options": "i"}},
-                    {"tags": {"$regex": re.escape(project), "$options": "i"}},
-                ]
-            }
-            projection = {"_id": 0, "id": 1, "topic": 1, "language": 1, "tags": 1, "lesson_learned": 1}
-            cursor = lessons_collection.find(project_query, projection).limit(limit)
-            project_lessons = [strip_empty_fields(doc) for doc in cursor]
-
-            # Merge: project lessons first, then general (deduped)
-            seen_ids = {l.get("id") for l in project_lessons}
-            merged = project_lessons + [l for l in matched_lessons if l.get("id") not in seen_ids]
-            matched_lessons = merged[:limit]
+            project_lower = project.lower()
+            for lesson in matched_lessons:
+                tags = lesson.get("tags", [])
+                if isinstance(tags, str):
+                    tags = [t.strip() for t in tags.split(",")]
+                project_match = (
+                    project_lower in lesson.get("topic", "").lower()
+                    or any(project_lower in t.lower() for t in tags)
+                )
+                if project_match:
+                    lesson["similarity_score"] = round(lesson.get("similarity_score", 0.0) + 0.08, 4)
+            matched_lessons.sort(key=lambda l: l.get("similarity_score", 0.0), reverse=True)
 
         # If tags provided, also filter/boost by tag overlap
         if tags and matched_lessons:
