@@ -54,7 +54,9 @@ _BASE_LOADOUTS: Dict[str, List[str]] = {
         # Core CRUD + context + lesson lookup (10 tools)
         "add_todo", "query_todos", "update_todo", "get_todo", "complete_todo",
         "list_todos_by_status", "list_project_todos", "get_context_bundle",
-        "get_lesson", "search_lessons"
+        "get_lesson", "search_lessons",
+        # Quest system — include so agents know epics exist (5 tools)
+        "create_quest", "check_quest", "list_quests", "link_quest", "update_quest",
     ],
 
     "minimal": [
@@ -212,7 +214,7 @@ def get_loadout_info(loadout_name: str) -> Dict[str, any]:
     """
     loadout_descriptions = {
         "full": "All available tools (33 local, 31 remote after filtering)",
-        "basic": "Core CRUD + context + lesson lookup (10 tools)",
+        "basic": "Core CRUD + context + lesson lookup + quest system (15 tools)",
         "minimal": "Absolute minimum functionality (4 tools)",
         "lessons": "Knowledge management focus (8 tools)",
         "admin": "Administrative tools and session management (14 tools)",

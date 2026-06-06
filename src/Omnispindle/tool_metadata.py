@@ -74,6 +74,12 @@ TOOL_ACCESS_LEVELS: Dict[str, ToolAccessLevel] = {
     "preflight_rag": ToolAccessLevel.REMOTE_SAFE,
     "write_agent_journal": ToolAccessLevel.REMOTE_SAFE,
     "read_agent_journal": ToolAccessLevel.REMOTE_SAFE,
+    # Quest system (Quest → Chains → Todos)
+    "create_quest": ToolAccessLevel.REMOTE_SAFE,
+    "check_quest": ToolAccessLevel.REMOTE_SAFE,
+    "list_quests": ToolAccessLevel.REMOTE_SAFE,
+    "link_quest": ToolAccessLevel.REMOTE_SAFE,
+    "update_quest": ToolAccessLevel.REMOTE_SAFE,
 }
 
 
@@ -160,6 +166,21 @@ TOOL_FEATURES: Dict[str, Set[ToolFeature]] = {
     },
     "read_agent_journal": {
         ToolFeature.DATABASE_READ,
+    },
+    "create_quest": {
+        ToolFeature.DATABASE_WRITE,
+    },
+    "check_quest": {
+        ToolFeature.DATABASE_READ,
+    },
+    "list_quests": {
+        ToolFeature.DATABASE_READ,
+    },
+    "link_quest": {
+        ToolFeature.DATABASE_WRITE,
+    },
+    "update_quest": {
+        ToolFeature.DATABASE_WRITE,
     },
 }
 

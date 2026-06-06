@@ -426,7 +426,110 @@ Any agent can read any other agent's journal — this is how agents see
 what their peers have been working on and coordinate without direct messaging.
 
 Returns: agent name, entries array (timestamp, content, type, author), count, total entries."""
-    }
+    },
+
+    # ── Quest system ────────────────────────────────────────────────────────
+    # Model: Quest → Chains → Todos
+    #   Quest   = the epic goal (e.g. "Ship auth overhaul")
+    #   Chain   = a named sequence/phase of todos (e.g. "Backend", "Frontend")
+    #   Todo    = one atomic task inside a chain (created with add_todo)
+    # Use create_quest when grouping multiple todos toward a shared objective.
+    # Use add_todo for individual tasks that don't belong to a multi-chain goal.
+
+    "create_quest": {
+        "minimal": "Create quest (epic goal container)",
+        "compact": "Create a Quest — an epic container grouping chains of todos toward a goal. Model: Quest→Chains→Todos. NOT a todo itself. Params: name, description, project, chains (JSON), tags, success_criteria.",
+        "basic": """Create a Quest — an epic goal container grouping chains of todos.
+Model: Quest → Chains (phases/workstreams) → Todos (atomic tasks).
+Use this when a goal spans multiple steps or workstreams. Do NOT use add_todo for epics.
+chains param: JSON array of {label, todos: [todo_id,...], parallel, gate_todo}.""",
+        "full": """Create a Quest — the top-level epic container in the Quest→Chain→Todo hierarchy.
+
+  Quest     = the goal (e.g. "Ship tag system overhaul")
+  Chain     = a named sequence or workstream (e.g. "Backend", "Testing", "Docs")
+  Todo      = one atomic task inside a chain, created with add_todo
+
+When to use create_quest vs add_todo:
+- Single atomic task → add_todo
+- Multi-step objective with phases or parallel workstreams → create_quest
+
+Workflow:
+1. create_quest (name the goal, optionally pre-load chains with existing todo IDs)
+2. add_todo for each atomic task (they get metadata.quest_id backlinked automatically)
+3. link_quest to add todos to chains retroactively
+4. check_quest to get progress summary and next actions
+
+chains param is a JSON array:
+[{"label": "Backend", "todos": ["uuid1", "uuid2"], "parallel": false, "gate_todo": null}]
+Omit chains to start empty; add todos later with link_quest."""
+    },
+
+    "check_quest": {
+        "minimal": "Check quest progress",
+        "compact": "Get quest progress: per-chain status, next actions, blockers, summary. Agent orientation tool. Param: quest_id.",
+        "basic": "Get quest progress: overall %, per-chain status, next actions, blockers. Call after create_quest or when re-orienting on a goal.",
+        "full": """Get a progress report for a quest — the agent orientation tool.
+
+Returns:
+- Overall completion % across all chains
+- Per-chain status (done/total, blocked todos, next actions)
+- Natural language summary an agent can use to orient itself
+- List of blockers with their blocking todo details
+- Suggested next_actions in priority order
+
+Call this at session start when resuming work on a quest, or any time
+you need to re-orient on the quest's current state."""
+    },
+
+    "list_quests": {
+        "minimal": "List quests",
+        "compact": "List quests by status/project. Params: status (active|completed|all), project, limit.",
+        "basic": "List quests filtered by status and project. Returns id, name, chain_count, todo_count, updated_at.",
+        "full": """List quests with optional filters.
+
+Returns lightweight quest summaries (id, name, project, status, chain_count, todo_count, updated_at).
+Use check_quest(quest_id) for full progress detail on a specific quest.
+
+Params:
+- status: active|completed|paused|all (default: active)
+- project: filter to one project
+- limit: max results (default: 20)"""
+    },
+
+    "link_quest": {
+        "minimal": "Link todo to quest chain",
+        "compact": "Add existing todo to a quest chain. Creates chain if not found. Params: quest_id, todo_id, chain_label, position.",
+        "basic": "Add an existing todo to a quest chain (creates chain on demand). Use after add_todo when you forgot to specify chains at create_quest time.",
+        "full": """Add an existing todo to a quest chain retroactively.
+
+Creates the chain if it doesn't exist (so you can start with create_quest(chains=[])
+then link todos in as you create them with add_todo).
+
+Backlinks the todo (sets metadata.quest_id) automatically.
+
+Params:
+- quest_id: the quest to add to
+- todo_id: an existing todo ID (create with add_todo first)
+- chain_label: name of the chain/phase (e.g. "Backend", "Testing")
+- position: index to insert at (-1 = append, default)"""
+    },
+
+    "update_quest": {
+        "minimal": "Update quest",
+        "compact": "Update quest fields (name, description, status, success_criteria, metadata). Param: quest_id, updates (JSON).",
+        "basic": "Update quest fields. Allowed: name, description, status, success_criteria, metadata. Pass updates as JSON string.",
+        "full": """Update quest-level fields.
+
+Allowed fields in updates JSON:
+- name: rename the quest
+- description: update the goal statement
+- status: active|completed|paused|cancelled
+- success_criteria: list of completion criteria strings
+- metadata: arbitrary key-value pairs (tags, etc.)
+
+To modify chains or todos within a quest, use link_quest instead.
+To mark a quest done: update_quest(quest_id, '{"status": "completed"}')"""
+    },
 }
 
 # Additional parameter hints for complex tools (only for basic+ levels)

@@ -2726,13 +2726,18 @@ async def create_quest(name: str, description: str, project: str,
                        chains: str = "[]", tags: str = "",
                        success_criteria: str = "",
                        ctx: Optional[Context] = None) -> str:
-    """Create a quest — an epic container for todo chains with progress tracking.
+    """Create a Quest — top-level epic container in the Quest→Chain→Todo hierarchy.
+
+    Model: Quest (goal) → Chains (phases/workstreams) → Todos (atomic tasks).
+    Use this for multi-step objectives. Use add_todo for single atomic tasks.
 
     Args:
         name: Quest name, e.g. "Tag System Overhaul"
-        description: Goal statement
+        description: Goal statement / success definition
         project: Project scope
-        chains: JSON array of chain objects: [{"label": "...", "todos": ["uuid", ...], "parallel": false, "gate_todo": null}]
+        chains: JSON array of chain objects:
+            [{"label": "Backend", "todos": ["uuid1", ...], "parallel": false, "gate_todo": null}]
+            Omit or pass "[]" to start empty; add todos later with link_quest.
         tags: Comma-separated tags
         success_criteria: Comma-separated success criteria
     """
@@ -2798,10 +2803,10 @@ async def create_quest(name: str, description: str, project: str,
 
 
 async def check_quest(quest_id: str, ctx: Optional[Context] = None) -> str:
-    """Check quest progress — the agent orientation tool.
+    """Check quest progress — agent orientation tool for a Quest→Chain→Todo goal.
 
-    Returns overall progress, per-chain status, next actions, blockers, and a
-    natural language summary an agent can use to orient itself.
+    Returns overall % complete, per-chain status, next actions, blockers, and
+    a natural language summary. Call at session start when resuming a quest.
     """
     try:
         collections = db_connection.get_collections(ctx.user if ctx else None)
@@ -2938,7 +2943,10 @@ async def check_quest(quest_id: str, ctx: Optional[Context] = None) -> str:
 
 async def list_quests(status: str = "active", project: str = "",
                       limit: int = 20, ctx: Optional[Context] = None) -> str:
-    """List quests, optionally filtered by status and project."""
+    """List quests filtered by status/project.
+
+    Quests are epic containers (Quest→Chains→Todos). Use check_quest for full detail.
+    """
     try:
         collections = db_connection.get_collections(ctx.user if ctx else None)
         quests_col = collections['quests']
@@ -2974,7 +2982,11 @@ async def list_quests(status: str = "active", project: str = "",
 
 async def link_quest(quest_id: str, todo_id: str, chain_label: str,
                      position: int = -1, ctx: Optional[Context] = None) -> str:
-    """Add a todo to an existing quest chain retroactively."""
+    """Add an existing todo to a quest chain retroactively (creates chain on demand).
+
+    Use after add_todo when adding tasks to a quest incrementally.
+    Backlinks the todo (sets metadata.quest_id) automatically.
+    """
     try:
         collections = db_connection.get_collections(ctx.user if ctx else None)
         quests_col = collections['quests']
@@ -3041,7 +3053,10 @@ async def link_quest(quest_id: str, todo_id: str, chain_label: str,
 
 async def update_quest(quest_id: str, updates: str = "{}",
                        ctx: Optional[Context] = None) -> str:
-    """Update quest fields (name, description, status, success_criteria, metadata)."""
+    """Update quest-level fields (name, description, status, success_criteria, metadata).
+
+    To add todos to chains use link_quest. To mark done: updates='{"status": "completed"}'.
+    """
     try:
         collections = db_connection.get_collections(ctx.user if ctx else None)
         quests_col = collections['quests']
