@@ -165,8 +165,15 @@ The server exposes standardized MCP tools that AI agents can call:
 
 **RAG / Context Tools**:
 - `get_context_bundle` - Session startup: returns slim todo/lesson/session summaries in one call. Use `since` for change detection
-- `find_relevant` - Semantic search across todos AND lessons (embeddings → regex fallback)
-- `preflight_rag` - Pre-task lessons check: call before starting work, classifies solutions vs pitfalls
+- `find_relevant` - Semantic search across todos AND lessons. Returns honest empty when nothing clears the similarity threshold — no regex fallback noise when embeddings are available
+- `preflight_rag` - Pre-task lessons check: call before starting work, classifies solutions vs pitfalls. Project scope is a soft boost (+0.08 score nudge), not a hard override of semantic ranking
+
+**Quest System** (Quest → Chains → Todos):
+- `create_quest` - Create an epic goal container (use instead of add_todo for multi-step objectives)
+- `check_quest` - Progress report: % complete, per-chain status, next actions, blockers
+- `list_quests` - List quests by status/project
+- `link_quest` - Add existing todo to a quest chain retroactively (creates chain on demand)
+- `update_quest` - Update quest fields (name, description, status, success_criteria, metadata)
 
 **System Integration**:
 - `list_projects` - Get available projects from filesystem
@@ -354,12 +361,12 @@ OMNISPINDLE_MODE="api" python test_api_client.py
 Omnispindle supports variable tool loadouts to reduce token usage for AI agents. Configure via the `OMNISPINDLE_TOOL_LOADOUT` environment variable:
 
 **Available Loadouts**:
-- `full` (default) - All 33 tools available
-- `basic` - Essential todo management (7 tools): add_todo, query_todos, update_todo, get_todo, complete_todo, list_todos_by_status, list_project_todos
+- `full` (default) - All 38 tools available
+- `basic` - Core todo CRUD + context + quest system (15 tools): add_todo, query_todos, update_todo, get_todo, complete_todo, list_todos_by_status, list_project_todos, get_context_bundle, get_lesson, search_lessons, create_quest, check_quest, list_quests, link_quest, update_quest
 - `minimal` - Core functionality only (4 tools): add_todo, query_todos, get_todo, complete_todo
-- `lessons` - Knowledge management focus (7 tools): add_lesson, get_lesson, update_lesson, delete_lesson, search_lessons, grep_lessons, list_lessons
-- `admin` - Administrative tools: query_todos, update_todo, delete_todo, query_todo_logs, list_projects, explain, add_explanation
-- `agent_preflight` - Session startup bundle (6 tools): get_context_bundle, preflight_rag, find_relevant, add_todo, complete_todo, list_project_todos
+- `lessons` - Knowledge management focus (8 tools): add_lesson, get_lesson, update_lesson, delete_lesson, regenerate_embedding, search_lessons, grep_lessons, list_lessons
+- `admin` - Administrative tools + sessions (16 tools): query_todos, update_todo, delete_todo, query_todo_logs, list_projects, explain, add_explanation + all session tools + agent journal
+- `agent_preflight` - Session startup bundle (6 tools): get_context_bundle, preflight_rag, find_relevant, query_todos, get_todo, get_lesson
 - `refine` - Todo enrichment mode (13 tools): query/search/get + update_todo + context intelligence tools (find_relevant, preflight_rag, search_lessons) + session linking. Use when auditing and enriching existing todos with missing tags, files, district/coordinates, or dependency (blockers) metadata.
 
 **Usage**:

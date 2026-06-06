@@ -2,7 +2,7 @@
 
 **A todo system that went wonderfully, intentionally wrong.**
 
-Omnispindle is the coordination spine of the Madness Interactive ecosystem — a Python FastMCP server with 33 tools that lets AI agents manage tasks, capture knowledge, coordinate sessions, and navigate the whole workshop from a single, standardized interface. PyPI packaged. Auth0 integrated. Runs anywhere a MCP config lives.
+Omnispindle is the coordination spine of the Madness Interactive ecosystem — a Python FastMCP server with 38 tools that lets AI agents manage tasks, capture knowledge, coordinate sessions, track epic goals (quests), and navigate the whole workshop from a single, standardized interface. PyPI packaged. Auth0 integrated. Runs anywhere a MCP config lives.
 
 It started as "let's do todos properly." It became the central nervous system for a multi-project AI-assisted development lab. Both of these things are fine.
 
@@ -65,7 +65,7 @@ python -m src.Omnispindle.stdio_server
 
 ## Tools
 
-Full loadout is 33 tools across 6 categories. Control what's available — and your agent's token budget — with `OMNISPINDLE_TOOL_LOADOUT`.
+Full loadout is 38 tools across 7 categories. Control what's available — and your agent's token budget — with `OMNISPINDLE_TOOL_LOADOUT`.
 
 ### Todo Management (9 tools)
 | Tool | What it does |
@@ -103,11 +103,22 @@ Full loadout is 33 tools across 6 categories. Control what's available — and y
 | `inventorium_sessions_tree` | Visual session tree for a project |
 | `inventorium_todos_link_session` | Link a todo to a session |
 
-### Context & Search (2 tools)
+### Quest System (5 tools)
+| Tool | What it does |
+|------|-------------|
+| `create_quest` | Create an epic goal container (Quest → Chains → Todos). Use instead of `add_todo` for multi-step objectives |
+| `check_quest` | Progress report: % complete, per-chain status, next actions, blockers. Agent orientation tool |
+| `list_quests` | List quests filtered by status/project |
+| `link_quest` | Add an existing todo to a quest chain retroactively (creates chain on demand) |
+| `update_quest` | Update quest fields: name, description, status, success_criteria, metadata |
+
+### Context & Search (4 tools)
 | Tool | What it does |
 |------|-------------|
 | `get_context_bundle` | One call: recent todos, lessons, session state, project stats for an agent's working context |
-| `find_relevant` | Semantic RAG search via vector embeddings — finds related todos and lessons by meaning |
+| `find_relevant` | Semantic similarity search across todos and lessons. Returns honest empty when nothing clears the relevance threshold — no regex fallback noise |
+| `preflight_rag` | Pre-task lessons check: call before starting work, classifies past solutions vs pitfalls |
+| `write_agent_journal` / `read_agent_journal` | Persistent agent journal — leave notes readable by other agents for cross-agent coordination |
 
 ### System / Admin (5 tools)
 | Tool | What it does |
@@ -130,15 +141,16 @@ Set `OMNISPINDLE_TOOL_LOADOUT` to control what's registered:
 
 | Loadout | Tools | Use case |
 |---------|-------|----------|
-| `full` | 33 | Everything |
-| `basic` | 10 | Core todo CRUD + `get_context_bundle` |
+| `full` | 38 | Everything |
+| `basic` | 15 | Core todo CRUD + context + quest system |
 | `minimal` | 4 | Add, query, get, mark complete |
-| `lessons` | 7 | Knowledge management only |
-| `admin` | 14 | Admin tasks + session management |
+| `lessons` | 8 | Knowledge management only |
+| `admin` | 16 | Admin tasks + session management |
 | `write_only` | 6 | Create/update/delete only |
-| `read_only` | 15 | Query/get only |
+| `read_only` | 16 | Query/get only |
 | `lightweight` | 13 | Token-optimized core |
 | `agent_preflight` | 6 | Session startup: context bundle, RAG check, todo ops |
+| `refine` | 13 | Todo enrichment: audit + fill missing metadata |
 
 ---
 
