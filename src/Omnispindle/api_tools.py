@@ -9,7 +9,7 @@ import logging
 from typing import Union, List, Dict, Optional, Any
 from datetime import datetime, timezone
 
-from .api_client import MadnessAPIClient, APIResponse, get_default_client
+from .api_client import MadnessAPIClient, APIResponse, get_default_client, get_cached_client
 from .context import Context
 from .utils import create_response
 
@@ -125,38 +125,38 @@ async def add_todo(description: str, project: str, priority: str = "Medium",
 
         logger.info(f"🐛 add_todo sending to API with metadata: {metadata}")
 
-        async with MadnessAPIClient(auth_token=auth_token, api_key=api_key) as client:
-            api_response = await client.create_todo(
-                description=description,
-                project=project,
-                priority=priority,
-                metadata=metadata
-            )
-            
-            if not api_response.success:
-                return create_response(False, message=api_response.error or "Failed to create todo")
-            
-            # Extract todo from API response
-            api_data = api_response.data
-            if isinstance(api_data, dict) and 'todo' in api_data:
-                todo_data = api_data['todo']
-            elif isinstance(api_data, dict) and 'data' in api_data:
-                todo_data = api_data['data']
-            else:
-                todo_data = api_data
-            
-            # Convert to MCP format
-            mcp_todo = _convert_api_todo_to_mcp_format(todo_data)
+        client = await get_cached_client(auth_token=auth_token, api_key=api_key)
+        api_response = await client.create_todo(
+            description=description,
+            project=project,
+            priority=priority,
+            metadata=metadata
+        )
+        
+        if not api_response.success:
+            return create_response(False, message=api_response.error or "Failed to create todo")
+        
+        # Extract todo from API response
+        api_data = api_response.data
+        if isinstance(api_data, dict) and 'todo' in api_data:
+            todo_data = api_data['todo']
+        elif isinstance(api_data, dict) and 'data' in api_data:
+            todo_data = api_data['data']
+        else:
+            todo_data = api_data
+        
+        # Convert to MCP format
+        mcp_todo = _convert_api_todo_to_mcp_format(todo_data)
 
-            # Return enriched response with agent context
-            return json.dumps({
-                "id": mcp_todo["id"],
-                "project": mcp_todo.get("project", project),
-                "priority": mcp_todo.get("priority", priority),
-                "target_agent": target_agent,
-                "created_at": mcp_todo.get("created_at"),
-            })
-            
+        # Return enriched response with agent context
+        return json.dumps({
+            "id": mcp_todo["id"],
+            "project": mcp_todo.get("project", project),
+            "priority": mcp_todo.get("priority", priority),
+            "target_agent": target_agent,
+            "created_at": mcp_todo.get("created_at"),
+        })
+        
     except Exception as e:
         logger.error(f"Failed to create todo via API: {str(e)}")
         return create_response(False, message=f"API error: {str(e)}")
@@ -182,29 +182,29 @@ async def query_todos(filter: Optional[Dict[str, Any]] = None, projection: Optio
             if isinstance(status, dict) and "$in" in status:
                 status = ",".join(status["$in"])
 
-        async with MadnessAPIClient(auth_token=auth_token, api_key=api_key) as client:
-            api_response = await client.get_todos(
-                project=project,
-                status=status,
-                priority=priority,
-                limit=limit
-            )
-            
-            if not api_response.success:
-                return create_response(False, message=api_response.error or "Failed to query todos")
-            
-            # Extract todos from API response
-            api_data = api_response.data
-            if isinstance(api_data, dict) and 'todos' in api_data:
-                todos_list = api_data['todos']
-            else:
-                todos_list = api_data if isinstance(api_data, list) else []
-            
-            # Convert each todo to MCP format
-            mcp_todos = [_convert_api_todo_to_mcp_format(todo) for todo in todos_list]
+        client = await get_cached_client(auth_token=auth_token, api_key=api_key)
+        api_response = await client.get_todos(
+            project=project,
+            status=status,
+            priority=priority,
+            limit=limit
+        )
+        
+        if not api_response.success:
+            return create_response(False, message=api_response.error or "Failed to query todos")
+        
+        # Extract todos from API response
+        api_data = api_response.data
+        if isinstance(api_data, dict) and 'todos' in api_data:
+            todos_list = api_data['todos']
+        else:
+            todos_list = api_data if isinstance(api_data, list) else []
+        
+        # Convert each todo to MCP format
+        mcp_todos = [_convert_api_todo_to_mcp_format(todo) for todo in todos_list]
 
-            return json.dumps({"items": mcp_todos, "count": len(mcp_todos)})
-            
+        return json.dumps({"items": mcp_todos, "count": len(mcp_todos)})
+        
     except Exception as e:
         logger.error(f"Failed to query todos via API: {str(e)}")
         return create_response(False, message=f"API error: {str(e)}")
@@ -238,15 +238,15 @@ async def update_todo(todo_id: str, updates: dict, ctx: Optional[Context] = None
     try:
         auth_token, api_key = _get_auth_from_context(ctx)
 
-        async with MadnessAPIClient(auth_token=auth_token, api_key=api_key) as client:
-            todo_id = await _resolve_todo_id_api(todo_id, client) or todo_id
-            api_response = await client.update_todo(todo_id, updates)
-            
-            if not api_response.success:
-                return create_response(False, message=api_response.error or f"Failed to update todo {todo_id}")
+        client = await get_cached_client(auth_token=auth_token, api_key=api_key)
+        todo_id = await _resolve_todo_id_api(todo_id, client) or todo_id
+        api_response = await client.update_todo(todo_id, updates)
+        
+        if not api_response.success:
+            return create_response(False, message=api_response.error or f"Failed to update todo {todo_id}")
 
-            return json.dumps({"id": todo_id})
-            
+        return json.dumps({"id": todo_id})
+        
     except Exception as e:
         logger.error(f"Failed to update todo via API: {str(e)}")
         return create_response(False, message=f"API error: {str(e)}")
@@ -258,15 +258,15 @@ async def delete_todo(todo_id: str, ctx: Optional[Context] = None) -> str:
     try:
         auth_token, api_key = _get_auth_from_context(ctx)
 
-        async with MadnessAPIClient(auth_token=auth_token, api_key=api_key) as client:
-            todo_id = await _resolve_todo_id_api(todo_id, client) or todo_id
-            api_response = await client.delete_todo(todo_id)
-            
-            if not api_response.success:
-                return create_response(False, message=api_response.error or f"Failed to delete todo {todo_id}")
+        client = await get_cached_client(auth_token=auth_token, api_key=api_key)
+        todo_id = await _resolve_todo_id_api(todo_id, client) or todo_id
+        api_response = await client.delete_todo(todo_id)
+        
+        if not api_response.success:
+            return create_response(False, message=api_response.error or f"Failed to delete todo {todo_id}")
 
-            return json.dumps({"id": todo_id})
-            
+        return json.dumps({"id": todo_id})
+        
     except Exception as e:
         logger.error(f"Failed to delete todo via API: {str(e)}")
         return create_response(False, message=f"API error: {str(e)}")
@@ -278,20 +278,20 @@ async def get_todo(todo_id: str, ctx: Optional[Context] = None) -> str:
     try:
         auth_token, api_key = _get_auth_from_context(ctx)
 
-        async with MadnessAPIClient(auth_token=auth_token, api_key=api_key) as client:
-            todo_id = await _resolve_todo_id_api(todo_id, client) or todo_id
-            api_response = await client.get_todo(todo_id)
-            
-            if not api_response.success:
-                return create_response(False, message=api_response.error or f"Todo with ID {todo_id} not found.")
+        client = await get_cached_client(auth_token=auth_token, api_key=api_key)
+        todo_id = await _resolve_todo_id_api(todo_id, client) or todo_id
+        api_response = await client.get_todo(todo_id)
+        
+        if not api_response.success:
+            return create_response(False, message=api_response.error or f"Todo with ID {todo_id} not found.")
 
-            # Convert to MCP format and strip empty fields
-            mcp_todo = _convert_api_todo_to_mcp_format(api_response.data)
-            # Remove MongoDB _id if present
-            if '_id' in mcp_todo:
-                del mcp_todo['_id']
-            return json.dumps(strip_empty_fields(mcp_todo))
-            
+        # Convert to MCP format and strip empty fields
+        mcp_todo = _convert_api_todo_to_mcp_format(api_response.data)
+        # Remove MongoDB _id if present
+        if '_id' in mcp_todo:
+            del mcp_todo['_id']
+        return json.dumps(strip_empty_fields(mcp_todo))
+        
     except Exception as e:
         logger.error(f"Failed to get todo via API: {str(e)}")
         return create_response(False, message=f"API error: {str(e)}")
@@ -303,15 +303,15 @@ async def complete_todo(todo_id: str, comment: Optional[str] = None, ctx: Option
     try:
         auth_token, api_key = _get_auth_from_context(ctx)
 
-        async with MadnessAPIClient(auth_token=auth_token, api_key=api_key) as client:
-            todo_id = await _resolve_todo_id_api(todo_id, client) or todo_id
-            api_response = await client.complete_todo(todo_id, comment)
-            
-            if not api_response.success:
-                return create_response(False, message=api_response.error or f"Failed to complete todo {todo_id}")
+        client = await get_cached_client(auth_token=auth_token, api_key=api_key)
+        todo_id = await _resolve_todo_id_api(todo_id, client) or todo_id
+        api_response = await client.complete_todo(todo_id, comment)
+        
+        if not api_response.success:
+            return create_response(False, message=api_response.error or f"Failed to complete todo {todo_id}")
 
-            return json.dumps({"id": todo_id})
-            
+        return json.dumps({"id": todo_id})
+        
     except Exception as e:
         logger.error(f"Failed to complete todo via API: {str(e)}")
         return create_response(False, message=f"API error: {str(e)}")
@@ -335,39 +335,39 @@ async def search_todos(query: str, fields: Optional[list] = None, limit: int = 1
         
         # For now, we'll fetch all todos and filter client-side
         # In future, the API should support text search parameters
-        async with MadnessAPIClient(auth_token=auth_token, api_key=api_key) as client:
-            api_response = await client.get_todos(limit=limit)
-            
-            if not api_response.success:
-                return create_response(False, message=api_response.error or "Failed to search todos")
-            
-            # Extract todos from API response
-            api_data = api_response.data
-            if isinstance(api_data, dict) and 'todos' in api_data:
-                todos_list = api_data['todos']
-            else:
-                todos_list = api_data if isinstance(api_data, list) else []
-            
-            # Client-side text search
-            if fields is None:
-                fields = ["description", "project"]
-            
-            filtered_todos = []
-            tokens = [t.lower() for t in query.split() if t.strip()]
+        client = await get_cached_client(auth_token=auth_token, api_key=api_key)
+        api_response = await client.get_todos(limit=limit)
+        
+        if not api_response.success:
+            return create_response(False, message=api_response.error or "Failed to search todos")
+        
+        # Extract todos from API response
+        api_data = api_response.data
+        if isinstance(api_data, dict) and 'todos' in api_data:
+            todos_list = api_data['todos']
+        else:
+            todos_list = api_data if isinstance(api_data, list) else []
+        
+        # Client-side text search
+        if fields is None:
+            fields = ["description", "project"]
+        
+        filtered_todos = []
+        tokens = [t.lower() for t in query.split() if t.strip()]
 
-            for todo in todos_list:
-                # Each token must match in at least one field (AND between tokens)
-                if all(
-                    any(
-                        token in str(todo.get(field, "")).lower()
-                        for field in fields
-                    )
-                    for token in tokens
-                ):
-                    filtered_todos.append(_convert_api_todo_to_mcp_format(todo))
-            
-            return create_response(True, {"items": filtered_todos})
-            
+        for todo in todos_list:
+            # Each token must match in at least one field (AND between tokens)
+            if all(
+                any(
+                    token in str(todo.get(field, "")).lower()
+                    for field in fields
+                )
+                for token in tokens
+            ):
+                filtered_todos.append(_convert_api_todo_to_mcp_format(todo))
+        
+        return create_response(True, {"items": filtered_todos})
+        
     except Exception as e:
         logger.error(f"Failed to search todos via API: {str(e)}")
         return create_response(False, message=f"API error: {str(e)}")
@@ -389,24 +389,24 @@ async def list_projects(include_details: Union[bool, str] = False, madness_root:
     try:
         auth_token, api_key = _get_auth_from_context(ctx)
         
-        async with MadnessAPIClient(auth_token=auth_token, api_key=api_key) as client:
-            api_response = await client.get_projects()
-            
-            if not api_response.success:
-                # Fallback to hardcoded projects if API fails
-                logger.warning(f"API projects fetch failed, using fallback: {api_response.error}")
-                return create_response(True, {"projects": FALLBACK_VALID_PROJECTS})
-            
-            # Extract projects from API response
-            api_data = api_response.data
-            if isinstance(api_data, dict) and 'projects' in api_data:
-                projects_list = api_data['projects']
-                # Extract just the project names for compatibility
-                project_names = [proj.get('id', proj.get('name', '')) for proj in projects_list]
-                return create_response(True, {"projects": project_names})
-            else:
-                return create_response(True, {"projects": FALLBACK_VALID_PROJECTS})
-            
+        client = await get_cached_client(auth_token=auth_token, api_key=api_key)
+        api_response = await client.get_projects()
+        
+        if not api_response.success:
+            # Fallback to hardcoded projects if API fails
+            logger.warning(f"API projects fetch failed, using fallback: {api_response.error}")
+            return create_response(True, {"projects": FALLBACK_VALID_PROJECTS})
+        
+        # Extract projects from API response
+        api_data = api_response.data
+        if isinstance(api_data, dict) and 'projects' in api_data:
+            projects_list = api_data['projects']
+            # Extract just the project names for compatibility
+            project_names = [proj.get('id', proj.get('name', '')) for proj in projects_list]
+            return create_response(True, {"projects": project_names})
+        else:
+            return create_response(True, {"projects": FALLBACK_VALID_PROJECTS})
+        
     except Exception as e:
         logger.error(f"Failed to get projects via API: {str(e)}")
         # Fallback to hardcoded projects
@@ -416,8 +416,8 @@ async def inventorium_sessions_list(project: Optional[str] = None, limit: int = 
     """List chat sessions scoped to the authenticated user."""
     try:
         auth_token, api_key = _require_api_auth(ctx)
-        async with MadnessAPIClient(auth_token=auth_token, api_key=api_key) as client:
-            response = await client.list_chat_sessions(project=project, limit=limit)
+        client = await get_cached_client(auth_token=auth_token, api_key=api_key)
+        response = await client.list_chat_sessions(project=project, limit=limit)
         if not response.success:
             return create_response(False, message=response.error or "Failed to list chat sessions")
         data = response.data or {}
@@ -431,8 +431,8 @@ async def inventorium_sessions_get(session_id: str, ctx: Optional[Context] = Non
     """Load a specific chat session by ID."""
     try:
         auth_token, api_key = _require_api_auth(ctx)
-        async with MadnessAPIClient(auth_token=auth_token, api_key=api_key) as client:
-            response = await client.get_chat_session(session_id)
+        client = await get_cached_client(auth_token=auth_token, api_key=api_key)
+        response = await client.get_chat_session(session_id)
         if not response.success:
             return create_response(False, message=response.error or f"Session {session_id} not found")
         session_data = response.data
@@ -457,8 +457,8 @@ async def inventorium_sessions_create(project: str, title: Optional[str] = None,
         if initial_prompt:
             payload["initial_prompt"] = initial_prompt
 
-        async with MadnessAPIClient(auth_token=auth_token, api_key=api_key) as client:
-            response = await client.create_chat_session(payload)
+        client = await get_cached_client(auth_token=auth_token, api_key=api_key)
+        response = await client.create_chat_session(payload)
         if not response.success:
             return create_response(False, message=response.error or "Failed to create chat session")
         session = response.data.get("session") if isinstance(response.data, dict) else response.data
@@ -473,24 +473,24 @@ async def inventorium_sessions_spawn(parent_session_id: str, prompt: str, todo_i
     """Spawn a child session (Phase 2 genealogy stub)."""
     try:
         auth_token, api_key = _require_api_auth(ctx)
-        async with MadnessAPIClient(auth_token=auth_token, api_key=api_key) as client:
-            parent_response = await client.get_chat_session(parent_session_id)
-            if not parent_response.success:
-                return create_response(False, message=parent_response.error or "Parent session not found")
+        client = await get_cached_client(auth_token=auth_token, api_key=api_key)
+        parent_response = await client.get_chat_session(parent_session_id)
+        if not parent_response.success:
+            return create_response(False, message=parent_response.error or "Parent session not found")
 
-            parent_session = parent_response.data or {}
-            payload: Dict[str, Any] = {
-                "project": parent_session.get("project"),
-                "agentic_tool": parent_session.get("agentic_tool", "claude-code"),
-                "parent_session_id": parent_session_id,
-                "forked_from_session_id": parent_session_id,
-                "initial_prompt": prompt,
-            }
-            payload["title"] = title or f"Child of {parent_session.get('title') or parent_session.get('short_id')}"
-            if todo_id:
-                payload["linked_todo_ids"] = [todo_id]
+        parent_session = parent_response.data or {}
+        payload: Dict[str, Any] = {
+            "project": parent_session.get("project"),
+            "agentic_tool": parent_session.get("agentic_tool", "claude-code"),
+            "parent_session_id": parent_session_id,
+            "forked_from_session_id": parent_session_id,
+            "initial_prompt": prompt,
+        }
+        payload["title"] = title or f"Child of {parent_session.get('title') or parent_session.get('short_id')}"
+        if todo_id:
+            payload["linked_todo_ids"] = [todo_id]
 
-            spawn_response = await client.create_chat_session(payload)
+        spawn_response = await client.create_chat_session(payload)
         if not spawn_response.success:
             return create_response(False, message=spawn_response.error or "Failed to spawn session")
         session = spawn_response.data.get("session") if isinstance(spawn_response.data, dict) else spawn_response.data
@@ -504,16 +504,16 @@ async def inventorium_todos_link_session(todo_id: str, session_id: str, ctx: Opt
     """Link an Omnispindle todo to a chat session."""
     try:
         auth_token, api_key = _require_api_auth(ctx)
-        async with MadnessAPIClient(auth_token=auth_token, api_key=api_key) as client:
-            session_resp = await client.get_chat_session(session_id)
-            if not session_resp.success:
-                return create_response(False, message=session_resp.error or f"Session {session_id} not found")
-            session = session_resp.data or {}
-            current_links = session.get("linked_todo_ids", [])
-            if todo_id in current_links:
-                return create_response(True, session, message="Todo already linked to session")
-            updates = {"linked_todo_ids": current_links + [todo_id]}
-            update_resp = await client.update_chat_session(session_id, updates)
+        client = await get_cached_client(auth_token=auth_token, api_key=api_key)
+        session_resp = await client.get_chat_session(session_id)
+        if not session_resp.success:
+            return create_response(False, message=session_resp.error or f"Session {session_id} not found")
+        session = session_resp.data or {}
+        current_links = session.get("linked_todo_ids", [])
+        if todo_id in current_links:
+            return create_response(True, session, message="Todo already linked to session")
+        updates = {"linked_todo_ids": current_links + [todo_id]}
+        update_resp = await client.update_chat_session(session_id, updates)
 
         if not update_resp.success:
             return create_response(False, message=update_resp.error or "Failed to link todo to session")
@@ -537,8 +537,8 @@ async def inventorium_sessions_fork(session_id: str, title: Optional[str] = None
         if initial_status:
             payload["initial_status"] = initial_status
 
-        async with MadnessAPIClient(auth_token=auth_token, api_key=api_key) as client:
-            response = await client.fork_chat_session(session_id, payload)
+        client = await get_cached_client(auth_token=auth_token, api_key=api_key)
+        response = await client.fork_chat_session(session_id, payload)
         if not response.success:
             return create_response(False, message=response.error or "Failed to fork session")
         session = response.data.get("session", response.data)
@@ -552,8 +552,8 @@ async def inventorium_sessions_genealogy(session_id: str, ctx: Optional[Context]
     """Retrieve genealogy (parents/children) for a session."""
     try:
         auth_token, api_key = _require_api_auth(ctx)
-        async with MadnessAPIClient(auth_token=auth_token, api_key=api_key) as client:
-            response = await client.get_chat_session_genealogy(session_id)
+        client = await get_cached_client(auth_token=auth_token, api_key=api_key)
+        response = await client.get_chat_session_genealogy(session_id)
         if not response.success:
             return create_response(False, message=response.error or "Failed to load genealogy")
         return create_response(True, response.data, message="Genealogy fetched")
@@ -566,8 +566,8 @@ async def inventorium_sessions_tree(project: Optional[str] = None, limit: int = 
     """Fetch the full session tree for a project."""
     try:
         auth_token, api_key = _require_api_auth(ctx)
-        async with MadnessAPIClient(auth_token=auth_token, api_key=api_key) as client:
-            response = await client.get_chat_session_tree(project=project, limit=limit)
+        client = await get_cached_client(auth_token=auth_token, api_key=api_key)
+        response = await client.get_chat_session_tree(project=project, limit=limit)
         if not response.success:
             return create_response(False, message=response.error or "Failed to fetch session tree")
         return create_response(True, response.data, message="Session tree loaded")

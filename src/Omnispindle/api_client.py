@@ -30,8 +30,8 @@ class MadnessAPIClient:
         self.auth_token = auth_token or os.getenv("MADNESS_AUTH_TOKEN")
         self.api_key = api_key or os.getenv("MADNESS_API_KEY")
         self.session: Optional[aiohttp.ClientSession] = None
-        self.max_retries = 3
-        self.timeout = aiohttp.ClientTimeout(total=30)
+        self.max_retries = 1
+        self.timeout = aiohttp.ClientTimeout(total=8)
         
         # Authentication priority: JWT token > API key
         self.auth_headers = {}
@@ -324,3 +324,28 @@ async def get_default_client() -> MadnessAPIClient:
     if not _default_client:
         _default_client = create_api_client()
     return _default_client
+
+
+# Per-token persistent client cache — reuses TCP/TLS connections across tool calls
+_client_cache: Dict[str, MadnessAPIClient] = {}
+
+async def get_cached_client(auth_token: Optional[str] = None, api_key: Optional[str] = None) -> MadnessAPIClient:
+    """Return a persistent MadnessAPIClient reusing the underlying aiohttp session.
+
+    Keyed by token so token refreshes get a fresh session; all calls within
+    the same token share one connection pool, avoiding per-call TLS handshakes.
+    """
+    cache_key = auth_token or api_key or "__default__"
+    client = _client_cache.get(cache_key)
+    if client is None:
+        client = MadnessAPIClient(auth_token=auth_token, api_key=api_key)
+        await client._ensure_session()
+        _client_cache[cache_key] = client
+    return client
+
+
+async def close_all_cached_clients() -> None:
+    """Close all cached sessions (call on shutdown)."""
+    for client in list(_client_cache.values()):
+        await client.close()
+    _client_cache.clear()

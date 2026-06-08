@@ -1023,18 +1023,20 @@ async def update_todo(todo_id: str, updates: dict, ctx: Optional[Context] = None
             else:
                 logger.debug(f"No actual changes detected for todo {todo_id}, skipping log entry")
 
-            # Regenerate embedding when content fields change
+            # Regenerate embedding in background — don't block the response
             embedding_fields = {"description", "notes", "project"}
             if embedding_fields & set(updates.keys()):
-                try:
-                    updated_todo = todos_collection.find_one({"id": todo_id})
-                    if updated_todo:
-                        embed_text = embeddings.embedding_text_for_todo(updated_todo)
-                        embedding = await embeddings.generate_embedding(embed_text)
-                        if embedding:
-                            todos_collection.update_one({"id": todo_id}, {"$set": {"embedding": embedding}})
-                except Exception:
-                    pass
+                async def _bg_regen_embedding(tid=todo_id, coll=todos_collection):
+                    try:
+                        updated_todo = coll.find_one({"id": tid})
+                        if updated_todo:
+                            embed_text = embeddings.embedding_text_for_todo(updated_todo)
+                            embedding = await embeddings.generate_embedding(embed_text)
+                            if embedding:
+                                coll.update_one({"id": tid}, {"$set": {"embedding": embedding}})
+                    except Exception:
+                        pass
+                asyncio.create_task(_bg_regen_embedding())
 
             return json.dumps({"id": todo_id})
         else:
