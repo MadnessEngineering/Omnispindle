@@ -1,24 +1,39 @@
 #!/bin/bash
 # Omnispindle pre-push hook
-# Pull + restart on eaws when pushing to main
+# Deploy to eaws when pushing main.
+#
+# Pushes the exact SHA being pushed directly to the eaws repo
+# (deploy-incoming ref), then fast-forwards main and restarts pm2.
+# Direct push avoids the old race where pre-push fires BEFORE the
+# GitHub push lands, so eaws's `git pull` deployed N-1 every time.
+# If the GitHub push later fails, eaws briefly runs unpushed code;
+# the next successful push reconciles.
+#
+# Recursion-safe: the inner push targets refs/heads/deploy-incoming,
+# which doesn't match the refs/heads/main guard below.
 
 set -o pipefail
 
-branch=$(git rev-parse --abbrev-ref HEAD)
-if [ "$branch" != "main" ]; then
-    exit 0
-fi
+REMOTE_PATH="/home/ubuntu/Omnispindle"
+ZERO=0000000000000000000000000000000000000000
+
+deploy_sha=""
+while read -r local_ref local_sha remote_ref remote_sha; do
+    if [ "$remote_ref" = "refs/heads/main" ] && [ "$local_sha" != "$ZERO" ]; then
+        deploy_sha="$local_sha"
+    fi
+done
+
+[ -z "$deploy_sha" ] && exit 0
 
 echo ""
-echo "🚀 Deploying Omnispindle to eaws..."
+echo "🚀 Deploying Omnispindle (${deploy_sha:0:8}) to eaws..."
 
-ssh eaws "cd /home/ubuntu/Omnispindle && git pull origin main && pm2 restart Omnispindle-HTTP" 2>&1
-status=$?
-
-if [ $status -eq 0 ]; then
-    echo "✅ Omnispindle deployed and restarted."
+if git push --force --quiet "eaws:$REMOTE_PATH" "$deploy_sha:refs/heads/deploy-incoming" \
+   && ssh eaws "cd $REMOTE_PATH && git merge --ff-only deploy-incoming && pm2 restart Omnispindle-HTTP" 2>&1; then
+    echo "✅ Omnispindle deployed and restarted at ${deploy_sha:0:8}."
 else
-    echo "❌ Deploy failed (exit $status). Push still succeeded — fix manually with: ssh eaws 'cd /home/ubuntu/Omnispindle && git pull && pm2 restart Omnispindle-HTTP'"
+    echo "❌ Deploy failed. Push continues — fix manually: ssh eaws 'cd $REMOTE_PATH && git pull && pm2 restart Omnispindle-HTTP'"
 fi
 
 exit 0
