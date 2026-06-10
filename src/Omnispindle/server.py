@@ -144,7 +144,10 @@ class Omnispindle:
             app.add_middleware(NoneTypeResponseMiddleware)
 
             # Add the new /api/mcp endpoint
+            # Both paths registered: FastAPI's redirect_slashes 307 on POST /api/mcp/
+            # made remote clients drop the Authorization header and fail
             @app.post("/api/mcp")
+            @app.post("/api/mcp/")
             async def mcp_endpoint(request: Request, user: dict = Depends(get_current_user)):
                 from .mcp_handler import mcp_handler
                 return await mcp_handler(request, lambda: user)
