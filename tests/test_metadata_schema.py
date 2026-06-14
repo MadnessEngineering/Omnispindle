@@ -24,8 +24,32 @@ from src.Omnispindle.schemas.todo_metadata_schema import (
     StatusLevel,
     ComplexityLevel,
     validate_todo_metadata,
-    validate_todo
+    validate_todo,
+    normalize_priority
 )
+
+
+class TestNormalizePriority:
+    """Regression for AI-supplied 'low' silently becoming 'Medium' (todo f045364c)."""
+
+    @pytest.mark.parametrize("raw,expected", [
+        # canonical passes through
+        ("Low", "Low"), ("Medium", "Medium"), ("High", "High"), ("Critical", "Critical"),
+        # case-insensitive — the actual bug: 'low'/'LOW' must map to 'Low', not 'Medium'
+        ("low", "Low"), ("LOW", "Low"), (" low ", "Low"),
+        ("high", "High"), ("HIGH", "High"),
+        ("critical", "Critical"), ("medium", "Medium"),
+        # common synonyms
+        ("urgent", "Critical"), ("blocker", "Critical"), ("p0", "Critical"),
+        ("p1", "High"), ("normal", "Medium"), ("p2", "Medium"),
+        ("minor", "Low"), ("p3", "Low"), ("lo", "Low"),
+    ])
+    def test_known_values_map_to_canonical(self, raw, expected):
+        assert normalize_priority(raw) == expected
+
+    @pytest.mark.parametrize("raw", [None, "", "bogus", "whatever", "  "])
+    def test_unknown_or_empty_defaults_to_medium(self, raw):
+        assert normalize_priority(raw) == "Medium"
 
 
 class TestTodoMetadata:

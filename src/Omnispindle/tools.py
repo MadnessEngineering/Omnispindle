@@ -17,7 +17,7 @@ from pymongo import MongoClient
 from .database import db_connection
 from .utils import create_response, mqtt_publish, _format_duration, MongoJSONEncoder
 from .todo_log_service import log_todo_create, log_todo_update, log_todo_delete, log_todo_complete
-from .schemas.todo_metadata_schema import validate_todo_metadata, validate_todo, TodoMetadata
+from .schemas.todo_metadata_schema import validate_todo_metadata, validate_todo, TodoMetadata, normalize_priority
 from .query_handlers import enhance_todo_query, build_metadata_aggregation, get_query_enhancer
 from .git_integration import enrich_metadata_with_git
 from . import api_tools
@@ -654,6 +654,8 @@ async def add_todo(description: str, project: str, priority: str = "Medium", tar
         return create_response(False, message="Demo mode: Todo creation is disabled. Please authenticate to create todos.")
 
     todo_id = str(uuid.uuid4())
+    # Canonicalize priority so AI-supplied 'low'/'LOW'/synonyms don't read as Medium downstream.
+    priority = normalize_priority(priority)
     if should_validate_project_name():
         validated_project = validate_project_name(project, ctx)
     else:

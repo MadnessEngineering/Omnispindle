@@ -18,6 +18,29 @@ class PriorityLevel(str, Enum):
     LOW = "Low"
 
 
+# Synonyms / loose forms the AI (or a human) may emit, mapped to canonical labels.
+# Case-insensitive; unknown values fall back to "Medium" (the historical default).
+_PRIORITY_ALIASES = {
+    "critical": "Critical", "crit": "Critical", "urgent": "Critical",
+    "blocker": "Critical", "p0": "Critical",
+    "high": "High", "hi": "High", "h": "High", "p1": "High",
+    "medium": "Medium", "med": "Medium", "normal": "Medium",
+    "m": "Medium", "p2": "Medium", "default": "Medium",
+    "low": "Low", "lo": "Low", "l": "Low", "p3": "Low", "minor": "Low",
+}
+
+
+def normalize_priority(value: Optional[str]) -> str:
+    """Map any case/synonym form of a priority to its canonical label.
+
+    Fixes AI-supplied 'low'/'LOW' silently reading as Medium downstream because
+    the UI matches the canonical 'Low' exactly. Unknown -> 'Medium'.
+    """
+    if not value:
+        return PriorityLevel.MEDIUM.value
+    return _PRIORITY_ALIASES.get(str(value).strip().lower(), PriorityLevel.MEDIUM.value)
+
+
 class StatusLevel(str, Enum):
     """Valid status levels for todos."""
     PENDING = "pending"

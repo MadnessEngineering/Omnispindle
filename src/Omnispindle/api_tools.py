@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from .api_client import MadnessAPIClient, APIResponse, get_default_client, get_cached_client
 from .context import Context
 from .utils import create_response
+from .schemas.todo_metadata_schema import normalize_priority
 
 logger = logging.getLogger(__name__)
 
@@ -115,6 +116,8 @@ async def add_todo(description: str, project: str, priority: str = "Medium",
     """
     try:
         logger.info(f"🐛 add_todo called with metadata: {metadata}")
+        # Canonicalize priority so AI-supplied 'low'/'LOW'/synonyms don't read as Medium downstream.
+        priority = normalize_priority(priority)
         auth_token, api_key = _get_auth_from_context(ctx)
 
         # Add target_agent to metadata if provided
