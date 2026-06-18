@@ -141,6 +141,31 @@ TOOL_SCHEMAS = {
             "required": ["project"]
         }
     },
+    "query_todos_near": {
+        "name": "query_todos_near",
+        "description": "Find todos in the same district or within spatial radius. Requires todo_id (inherits district+coords) or district name. Powers SwarmDesk neighborhood queries.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "todo_id": {"type": "string", "description": "Anchor todo UUID — inherit its district and coordinates"},
+                "district": {"type": "string", "description": "District label to match (e.g. 'rag', 'ui', 'infra')"},
+                "radius": {"type": "number", "description": "Max Euclidean distance for coordinate matching (default: 2.0)"},
+                "limit": {"type": "number", "description": "Max results (default: 20)"}
+            }
+        }
+    },
+    "link_todos": {
+        "name": "link_todos",
+        "description": "Mark blocker_id as a dependency of blocked_id. Adds to metadata.blockers. Use query_todos(graph_root=id) to visualize.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "blocker_id": {"type": "string", "description": "Todo that must complete first"},
+                "blocked_id": {"type": "string", "description": "Todo that depends on blocker_id"}
+            },
+            "required": ["blocker_id", "blocked_id"]
+        }
+    },
     "add_lesson": {
         "name": "add_lesson",
         "description": "Persist a lesson/pitfall for future recall. Tag well — drives preflight_rag relevance.",
@@ -653,6 +678,8 @@ async def mcp_handler(request: Request, get_current_user: Callable[[], Coroutine
                 "list_todos_by_status": tools.list_todos_by_status,
                 "search_todos": tools.search_todos,
                 "list_project_todos": tools.list_project_todos,
+                "query_todos_near": tools.query_todos_near,
+                "link_todos": tools.link_todos,
                 # Lesson tools
                 "add_lesson": tools.add_lesson,
                 "get_lesson": tools.get_lesson,

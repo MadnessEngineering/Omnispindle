@@ -386,6 +386,14 @@ class OmniSpindleStdioServer:
                 "func": tools.read_agent_journal,
                 "doc": get_tool_doc("read_agent_journal")
             },
+            "query_todos_near": {
+                "func": tools.query_todos_near,
+                "doc": get_tool_doc("query_todos_near")
+            },
+            "link_todos": {
+                "func": tools.link_todos,
+                "doc": get_tool_doc("link_todos")
+            },
             "create_quest": {
                 "func": tools.create_quest,
                 "doc": get_tool_doc("create_quest")
@@ -846,6 +854,30 @@ class OmniSpindleStdioServer:
                                 ctx = _create_context()
                                 return await func(agent_name=agent_name, limit=limit, ctx=ctx)
                             return read_agent_journal
+
+                        elif name == "query_todos_near":
+                            @self.server.tool()
+                            async def query_todos_near(
+                                todo_id: Annotated[Optional[str], Field(description="Anchor todo UUID — inherit its district and coordinates")] = None,
+                                district: Annotated[Optional[str], Field(description="District label to match (e.g. 'rag', 'ui', 'infra')")] = None,
+                                radius: Annotated[float, Field(description="Max Euclidean distance for coordinate matching (default: 2.0)")] = 2.0,
+                                limit: Annotated[int, Field(description="Max results (default: 20)")] = 20
+                            ) -> str:
+                                """Find todos in the same district or within spatial radius. Requires todo_id or district."""
+                                ctx = _create_context()
+                                return await func(todo_id=todo_id, district=district, radius=radius, limit=limit, ctx=ctx)
+                            return query_todos_near
+
+                        elif name == "link_todos":
+                            @self.server.tool()
+                            async def link_todos(
+                                blocker_id: Annotated[str, Field(description="Todo that must complete first")],
+                                blocked_id: Annotated[str, Field(description="Todo that depends on blocker_id")]
+                            ) -> str:
+                                """Mark blocker_id as a dependency of blocked_id. Use query_todos(graph_root=id) to visualize."""
+                                ctx = _create_context()
+                                return await func(blocker_id=blocker_id, blocked_id=blocked_id, ctx=ctx)
+                            return link_todos
 
                         elif name == "create_quest":
                             @self.server.tool()

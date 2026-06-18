@@ -87,6 +87,11 @@ class TodoMetadata(BaseModel):
     deliverables: Optional[List[str]] = Field(default=None, description="Expected deliverable files/components")
     acceptance_criteria: Optional[List[str]] = Field(default=None, description="Acceptance criteria for completion")
     
+    # Spatial / SwarmDesk (optional)
+    district: Optional[str] = Field(default=None, description="SwarmDesk district label (e.g. 'core', 'rag', 'ui', 'infra', 'npc-brain')")
+    effort: Optional[int] = Field(default=None, ge=1, le=10, description="Effort estimate in story points (1-10)")
+    coordinates: Optional[Dict[str, float]] = Field(default=None, description="Semantic 3D position {x, y, z} for SwarmDesk layout. Agents assign based on topic proximity.")
+
     # Analysis & Estimates (optional)
     complexity: Optional[ComplexityLevel] = Field(default=None, description="Complexity assessment")
     confidence: Optional[int] = Field(default=None, ge=1, le=5, description="Confidence level (1-5)")

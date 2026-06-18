@@ -19,7 +19,7 @@ from .utils import create_response, mqtt_publish, _format_duration, MongoJSONEnc
 from .todo_log_service import log_todo_create, log_todo_update, log_todo_delete, log_todo_complete
 from .schemas.todo_metadata_schema import validate_todo_metadata, validate_todo, TodoMetadata, normalize_priority
 from .query_handlers import enhance_todo_query, build_metadata_aggregation, get_query_enhancer
-from .git_integration import enrich_metadata_with_git
+from .git_integration import enrich_metadata_with_git, get_changed_files
 from . import api_tools
 from . import embeddings
 
@@ -642,7 +642,12 @@ async def add_todo(description: str, project: str, priority: str = "Medium", tar
         ticket: External ticket reference (default: "")
         metadata: Optional structured metadata. Always include 'files': ['path/to/main/file']
             so SwarmDesk can link this todo to its source node in the 3D view.
-            Example: {"files": ["src/components/Dashboard.js"], "tags": ["bug", "ui"]}
+            Spatial fields power 3D clustering and query_todos_near:
+              - district: topic area (e.g. 'rag', 'ui', 'infra', 'npc-brain', 'auth')
+              - coordinates: {x, y, z} semantic position (assign based on topic similarity to existing todos)
+              - effort: story points 1-10
+            Example: {"files": ["src/components/Dashboard.js"], "tags": ["bug", "ui"],
+                      "district": "ui", "coordinates": {"x": 2.1, "y": 0.5, "z": -1.3}, "effort": 3}
         ctx: Context with user information
 
     Returns a compact representation of the created todo with an ID for reference.
@@ -870,6 +875,108 @@ def _query_todo_graph(todos_collection, root_id: str, max_hops: int = 2) -> str:
             unique_edges.append(e)
 
     return json.dumps({"root": root_id, "nodes": nodes, "edges": unique_edges, "count": len(nodes)}, cls=MongoJSONEncoder)
+
+
+def _euclidean_distance(a: dict, b: dict) -> float:
+    """Euclidean distance between two {x, y, z} coordinate dicts."""
+    return sum((a.get(k, 0.0) - b.get(k, 0.0)) ** 2 for k in ("x", "y", "z")) ** 0.5
+
+
+async def query_todos_near(todo_id: Optional[str] = None, district: Optional[str] = None,
+                           radius: float = 2.0, limit: int = 20,
+                           ctx: Optional[Context] = None) -> str:
+    """
+    Find todos in the same district or within spatial radius of a given todo.
+
+    Spatial proximity uses metadata.district (exact match) and metadata.coordinates
+    (Euclidean distance on {x, y, z}). Returns union of both matches, deduplicated.
+
+    Requires at least one of todo_id or district.
+
+    Args:
+        todo_id: Anchor todo — inherit its district and coordinates for proximity search.
+        district: Match all todos in this district (e.g. 'rag', 'ui', 'infra').
+        radius: Max Euclidean distance for coordinate matching (default: 2.0).
+        limit: Max results (default: 20).
+    """
+    try:
+        user_context = ctx.user if ctx else None
+        if user_context and user_context.get('sub'):
+            collections = db_connection.get_collections(user_context)
+        else:
+            collections = db_connection.get_collections(None)
+        todos_col = collections['todos']
+
+        anchor_coords = None
+        anchor_district = district
+
+        if todo_id:
+            anchor = todos_col.find_one({"id": todo_id})
+            if not anchor:
+                return create_response(False, message=f"Todo {todo_id} not found.")
+            meta = anchor.get("metadata") or {}
+            anchor_coords = meta.get("coordinates")
+            if not anchor_district:
+                anchor_district = meta.get("district")
+
+        if not anchor_district and not anchor_coords:
+            return create_response(False, message="No district or coordinates found. Provide todo_id with spatial metadata, or pass district= directly.")
+
+        results: dict = {}  # id → doc
+
+        # Match by district
+        if anchor_district:
+            for doc in todos_col.find({"metadata.district": anchor_district, "status": {"$ne": "completed"}}).limit(limit):
+                doc_id = doc.get("id")
+                if doc_id and doc_id != todo_id:
+                    results[doc_id] = doc
+
+        # Match by coordinate proximity
+        if anchor_coords and len(results) < limit:
+            candidate_cursor = todos_col.find(
+                {"metadata.coordinates": {"$exists": True}, "status": {"$ne": "completed"}},
+                {"id": 1, "description": 1, "project": 1, "status": 1, "priority": 1, "metadata": 1}
+            ).limit(limit * 5)
+            for doc in candidate_cursor:
+                doc_id = doc.get("id")
+                if not doc_id or doc_id == todo_id or doc_id in results:
+                    continue
+                coords = (doc.get("metadata") or {}).get("coordinates")
+                if coords and _euclidean_distance(anchor_coords, coords) <= radius:
+                    results[doc_id] = doc
+                    if len(results) >= limit:
+                        break
+
+        compacted = compact_todo_list(list(results.values())[:limit], brief=True)
+        return json.dumps({
+            "items": compacted,
+            "count": len(compacted),
+            "anchor_district": anchor_district,
+            "anchor_coords": anchor_coords,
+            "radius": radius
+        }, cls=MongoJSONEncoder)
+    except Exception as e:
+        logger.error(f"query_todos_near failed: {e}")
+        return create_response(False, message=str(e))
+
+
+async def link_todos(blocker_id: str, blocked_id: str, ctx: Optional[Context] = None) -> str:
+    """
+    Mark blocker_id as a dependency of blocked_id.
+
+    Adds blocker_id to blocked_id.metadata.blockers. Use query_todos(graph_root=id)
+    to visualize the resulting dependency graph.
+
+    Args:
+        blocker_id: The todo that must be completed first.
+        blocked_id: The todo that depends on blocker_id.
+    """
+    return await update_todo(
+        todo_id=blocked_id,
+        updates={"metadata": {"blockers": {"$push": blocker_id}}},
+        ctx=ctx
+    )
+
 
 def _resolve_todo_id(todo_id: str, user_context, db_conn) -> Optional[str]:
     """
@@ -1210,6 +1317,13 @@ async def complete_todo(todo_id: str, comment: Optional[str] = None, files: Opti
             updates["metadata.completed_by"] = user_email
         if files:
             updates["metadata.files"] = files
+        elif not existing_todo.get("metadata", {}).get("files"):
+            # Auto-detect changed files from git when caller didn't provide them
+            # and the todo has no files yet. Only fires in local/stdio mode where
+            # the server runs in the user's working tree.
+            auto_files = get_changed_files()
+            if auto_files:
+                updates["metadata.files"] = auto_files
 
         # Add git context on completion (branch and commit hash at completion time)
         git_metadata = enrich_metadata_with_git()

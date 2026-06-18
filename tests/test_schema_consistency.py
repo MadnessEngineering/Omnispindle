@@ -17,7 +17,7 @@ from src.Omnispindle import tools as tools_module
 from src.Omnispindle.mcp_handler import TOOL_SCHEMAS
 
 # Params that exist on every async tool but are never part of the MCP schema
-_SKIP_PARAMS = {"ctx", "self"}
+_SKIP_PARAMS = {"ctx", "self", "extra"}  # extra = **kwargs catch-all in add_todo
 
 # Map schema tool names → actual functions (explain uses explain_tool internally)
 TOOL_FUNCTION_MAP = {
@@ -56,6 +56,9 @@ TOOL_FUNCTION_MAP = {
     "preflight_rag": tools_module.preflight_rag,
     "write_agent_journal": tools_module.write_agent_journal,
     "read_agent_journal": tools_module.read_agent_journal,
+    "query_todos_near": tools_module.query_todos_near,
+    "link_todos": tools_module.link_todos,
+    "regenerate_embedding": tools_module.regenerate_embedding,
     "create_quest": tools_module.create_quest,
     "check_quest": tools_module.check_quest,
     "list_quests": tools_module.list_quests,

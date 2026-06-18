@@ -451,6 +451,21 @@ if "update_quest" in selected_tools:
         auth_ctx = await get_authenticated_context_from_mcp(ctx, user_ctx)
         return await tools.update_quest(quest_id, updates, auth_ctx)
 
+# Spatial / Dependency tools
+if "query_todos_near" in selected_tools:
+    @mcp.tool()
+    async def query_todos_near(todo_id: Optional[str] = None, district: Optional[str] = None, radius: float = 2.0, limit: int = 20, user_ctx: Optional[Dict[str, Any]] = None, ctx: MCPContext = None):
+        """Find todos in the same district or within spatial radius. Requires todo_id or district."""
+        auth_ctx = await get_authenticated_context_from_mcp(ctx, user_ctx)
+        return await tools.query_todos_near(todo_id=todo_id, district=district, radius=radius, limit=limit, ctx=auth_ctx)
+
+if "link_todos" in selected_tools:
+    @mcp.tool()
+    async def link_todos(blocker_id: str, blocked_id: str, user_ctx: Optional[Dict[str, Any]] = None, ctx: MCPContext = None):
+        """Mark blocker_id as a dependency of blocked_id. Adds to metadata.blockers."""
+        auth_ctx = await get_authenticated_context_from_mcp(ctx, user_ctx)
+        return await tools.link_todos(blocker_id=blocker_id, blocked_id=blocked_id, ctx=auth_ctx)
+
 # RAG / Context tools
 if "get_context_bundle" in selected_tools:
     @mcp.tool()

@@ -8,7 +8,7 @@ in todo metadata when operating within a git repository.
 import subprocess
 import logging
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 
 logger = logging.getLogger(__name__)
 
@@ -100,6 +100,37 @@ def get_current_commit_hash(path: Optional[str] = None, short: bool = True) -> O
     except (subprocess.TimeoutExpired, FileNotFoundError, Exception) as e:
         logger.debug(f"Could not get git commit hash: {e}")
         return None
+
+
+def get_changed_files(path: Optional[str] = None) -> List[str]:
+    """
+    Get files modified vs HEAD (staged + unstaged).
+
+    Useful for auto-populating metadata.files on complete_todo when the caller
+    doesn't provide an explicit list. Only meaningful in local/stdio mode where
+    the server runs in the user's working directory.
+
+    Args:
+        path: Path to check (defaults to current directory)
+
+    Returns:
+        List of relative file paths changed since HEAD, or empty list if none/error
+    """
+    try:
+        search_path = Path(path) if path else Path.cwd()
+        result = subprocess.run(
+            ["git", "diff", "--name-only", "HEAD"],
+            cwd=search_path,
+            capture_output=True,
+            text=True,
+            timeout=2
+        )
+        if result.returncode == 0:
+            return [f.strip() for f in result.stdout.strip().split('\n') if f.strip()]
+        return []
+    except (subprocess.TimeoutExpired, FileNotFoundError, Exception) as e:
+        logger.debug(f"Could not get changed files: {e}")
+        return []
 
 
 def get_git_metadata(path: Optional[str] = None) -> Dict[str, Any]:

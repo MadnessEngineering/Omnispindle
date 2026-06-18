@@ -14,9 +14,10 @@ from .tool_metadata import filter_remote_safe_loadout, is_pro_tool
 # Base loadout definitions (before security filtering for remote mode)
 _BASE_LOADOUTS: Dict[str, List[str]] = {
     "full": [
-        # Todo management (9 tools)
+        # Todo management (11 tools)
         "add_todo", "query_todos", "update_todo", "delete_todo", "get_todo",
         "complete_todo", "list_todos_by_status", "search_todos", "list_project_todos",
+        "query_todos_near", "link_todos",
 
         # Lessons (8 tools)
         "add_lesson", "get_lesson", "update_lesson", "delete_lesson", "regenerate_embedding",
@@ -55,6 +56,8 @@ _BASE_LOADOUTS: Dict[str, List[str]] = {
         "add_todo", "query_todos", "update_todo", "get_todo", "complete_todo",
         "list_todos_by_status", "list_project_todos", "get_context_bundle",
         "get_lesson", "search_lessons",
+        # Spatial + dependency (2 tools)
+        "query_todos_near", "link_todos",
         # Quest system — include so agents know epics exist (5 tools)
         "create_quest", "check_quest", "list_quests", "link_quest", "update_quest",
     ],
@@ -88,9 +91,9 @@ _BASE_LOADOUTS: Dict[str, List[str]] = {
     ],
 
     "read_only": [
-        # Query/Get only (15 tools)
+        # Query/Get only (16 tools)
         "query_todos", "get_todo", "list_todos_by_status",
-        "list_project_todos", "search_todos", "get_lesson",
+        "list_project_todos", "search_todos", "query_todos_near", "get_lesson",
         "search_lessons", "list_lessons", "get_context_bundle",
         "find_relevant", "preflight_rag",
         "inventorium_sessions_list", "inventorium_sessions_get",
@@ -114,12 +117,12 @@ _BASE_LOADOUTS: Dict[str, List[str]] = {
     ],
 
     "refine": [
-        # Discovery — find todos needing enrichment (5 tools)
+        # Discovery — find todos needing enrichment (6 tools)
         "query_todos", "search_todos", "get_todo",
-        "list_todos_by_status", "list_project_todos",
+        "list_todos_by_status", "list_project_todos", "query_todos_near",
 
-        # Enrichment — write improved metadata (1 tool)
-        "update_todo",
+        # Enrichment — write improved metadata (2 tools)
+        "update_todo", "link_todos",
 
         # Context & intelligence (4 tools)
         "get_context_bundle", "find_relevant", "preflight_rag", "search_lessons",
