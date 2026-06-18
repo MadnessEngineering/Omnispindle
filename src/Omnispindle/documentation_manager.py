@@ -514,6 +514,38 @@ Params:
 - position: index to insert at (-1 = append, default)"""
     },
 
+    "query_todos_near": {
+        "minimal": "Find nearby todos",
+        "compact": "Find todos in same district or within spatial radius. Pass todo_id or district.",
+        "basic": "Find todos by spatial proximity. Match on metadata.district (exact) or metadata.coordinates (Euclidean). Pass todo_id to inherit anchor's district+coords, or district= directly.",
+        "full": """Spatial neighborhood query for SwarmDesk 3D view.
+
+Matches todos by:
+1. metadata.district — exact label match (e.g. 'rag', 'ui', 'infra')
+2. metadata.coordinates — Euclidean distance on {x, y, z} within radius
+
+Returns union of both, deduped, excluding completed todos.
+
+Args:
+- todo_id: anchor todo — inherits its district and coordinates
+- district: override/direct district filter
+- radius: max coordinate distance (default: 2.0)
+- limit: max results (default: 20)
+
+Response: {items: [...], count, anchor_district, anchor_coords, radius}"""
+    },
+    "link_todos": {
+        "minimal": "Link todo dependency",
+        "compact": "Mark blocker_id as dependency of blocked_id. Adds to metadata.blockers.",
+        "basic": "Set blocker_id as a prerequisite for blocked_id. blocker must complete before blocked. Use query_todos(graph_root=id) to visualize the dependency graph.",
+        "full": """Create a dependency edge between two todos.
+
+blocker_id must be completed before blocked_id can proceed.
+Adds blocker_id to blocked_id.metadata.blockers array ($push, idempotent).
+
+To remove: update_todo(blocked_id, {metadata: {blockers: {$pull: blocker_id}}})
+To visualize: query_todos(graph_root=blocked_id) → {nodes, edges}"""
+    },
     "update_quest": {
         "minimal": "Update quest",
         "compact": "Update quest fields (name, description, status, success_criteria, metadata). Param: quest_id, updates (JSON).",
