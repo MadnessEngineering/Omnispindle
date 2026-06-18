@@ -492,14 +492,14 @@ TOOL_SCHEMAS = {
     # Quest tools
     "create_quest": {
         "name": "create_quest",
-        "description": "Create a quest — epic container for todo chains with progress tracking. Quests group related todos into ordered chains with optional parallel execution and gate dependencies.",
+        "description": "Create a quest — epic container for todo chains. TODOS FIRST: add_todo for each task, collect IDs, then create_quest with chains pre-loaded. chains todos[] must be existing todo UUIDs.",
         "inputSchema": {
             "type": "object",
             "properties": {
                 "name": {"type": "string", "description": "Quest name, e.g. 'Tag System Overhaul'"},
                 "description": {"type": "string", "description": "Goal statement"},
                 "project": {"type": "string", "description": "Project scope"},
-                "chains": {"type": "string", "description": "JSON array of chain objects: [{\"label\": \"...\", \"todos\": [\"uuid\", ...], \"parallel\": false, \"gate_todo\": null}]"},
+                "chains": {"type": "string", "description": "JSON array of chain objects. todos[] must be EXISTING todo UUIDs — create todos with add_todo first, then list their IDs here: [{\"label\": \"Phase 1\", \"todos\": [\"uuid1\", \"uuid2\"], \"parallel\": false, \"gate_todo\": null}]"},
                 "tags": {"type": "string", "description": "Comma-separated tags"},
                 "success_criteria": {"type": "string", "description": "Comma-separated success criteria"}
             },

@@ -438,30 +438,37 @@ Returns: agent name, entries array (timestamp, content, type, author), count, to
 
     "create_quest": {
         "minimal": "Create quest (epic goal container)",
-        "compact": "Create a Quest — an epic container grouping chains of todos toward a goal. Model: Quest→Chains→Todos. NOT a todo itself. Params: name, description, project, chains (JSON), tags, success_criteria.",
-        "basic": """Create a Quest — an epic goal container grouping chains of todos.
-Model: Quest → Chains (phases/workstreams) → Todos (atomic tasks).
-Use this when a goal spans multiple steps or workstreams. Do NOT use add_todo for epics.
-chains param: JSON array of {label, todos: [todo_id,...], parallel, gate_todo}.""",
+        "compact": "Create a Quest — epic container for todo chains. TODOS FIRST: add_todo for each task, collect IDs, then create_quest with chains=[{label, todos:[id1,id2,...]}]. NOT a todo itself.",
+        "basic": """Create a Quest — epic container grouping chains of todos toward a goal.
+Model: Quest → Chains (phases/workstreams) → Todos (atomic tasks, created with add_todo).
+
+TODOS FIRST workflow:
+1. add_todo for each task → collect the IDs
+2. create_quest with chains pre-loaded: '[{"label":"Phase 1","todos":["id1","id2"]}]'
+3. link_quest for any todos added later""",
         "full": """Create a Quest — the top-level epic container in the Quest→Chain→Todo hierarchy.
 
-  Quest     = the goal (e.g. "Ship tag system overhaul")
-  Chain     = a named sequence or workstream (e.g. "Backend", "Testing", "Docs")
-  Todo      = one atomic task inside a chain, created with add_todo
+  Quest  = the goal (e.g. "Ship tag system overhaul")
+  Chain  = a named sequence or workstream (e.g. "Backend", "Testing", "Docs")
+  Todo   = one atomic task inside a chain — MUST be created with add_todo first
 
-When to use create_quest vs add_todo:
-- Single atomic task → add_todo
-- Multi-step objective with phases or parallel workstreams → create_quest
+CORRECT WORKFLOW — todos first, then quest:
+  Step 1: add_todo for every task you know about → collect all returned IDs
+  Step 2: create_quest with chains pre-loaded using those IDs:
+            chains='[{"label":"Backend","todos":["uuid1","uuid2"]},
+                     {"label":"Testing","todos":["uuid3"]}]'
+  Step 3: For tasks discovered later → link_quest(quest_id, new_todo_id, chain_label)
+  Step 4: check_quest to get progress, next actions, blockers
 
-Workflow:
-1. create_quest (name the goal, optionally pre-load chains with existing todo IDs)
-2. add_todo for each atomic task (they get metadata.quest_id backlinked automatically)
-3. link_quest to add todos to chains retroactively
-4. check_quest to get progress summary and next actions
+WRONG: create_quest with placeholder text in todos array — IDs must be real existing todos.
+WRONG: creating the quest first and leaving chains empty, then forgetting to link_quest.
 
-chains param is a JSON array:
-[{"label": "Backend", "todos": ["uuid1", "uuid2"], "parallel": false, "gate_todo": null}]
-Omit chains to start empty; add todos later with link_quest."""
+chains JSON schema:
+[{"label": "string", "todos": ["uuid",...], "parallel": false, "gate_todo": null}]
+  - label: chain/phase name
+  - todos: array of existing todo UUIDs (empty array OK if none yet)
+  - parallel: true = all todos can proceed simultaneously
+  - gate_todo: UUID of a todo that must complete before this chain unlocks"""
     },
 
     "check_quest": {

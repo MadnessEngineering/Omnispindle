@@ -885,11 +885,11 @@ class OmniSpindleStdioServer:
                                 name: Annotated[str, Field(description="Quest name, e.g. 'Tag System Overhaul'")],
                                 description: Annotated[str, Field(description="Goal statement")],
                                 project: Annotated[str, Field(description="Project scope")],
-                                chains: Annotated[str, Field(description="JSON array of chain objects: [{\"label\": \"...\", \"todos\": [\"uuid\", ...], \"parallel\": false, \"gate_todo\": null}]")] = "[]",
+                                chains: Annotated[str, Field(description="JSON array of chains. todos[] must be EXISTING UUIDs — add_todo first, collect IDs, then list them here: [{\"label\": \"Phase 1\", \"todos\": [\"uuid1\", \"uuid2\"], \"parallel\": false, \"gate_todo\": null}]")] = "[]",
                                 tags: Annotated[str, Field(description="Comma-separated tags")] = "",
                                 success_criteria: Annotated[str, Field(description="Comma-separated success criteria")] = ""
                             ) -> str:
-                                """Create a quest — epic container for todo chains with progress tracking."""
+                                """Create a quest — TODOS FIRST: add_todo for each task, collect IDs, then create_quest with chains pre-loaded. todos[] must be existing todo UUIDs."""
                                 ctx = _create_context()
                                 return await func(name=name, description=description, project=project, chains=chains, tags=tags, success_criteria=success_criteria, ctx=ctx)
                             return create_quest

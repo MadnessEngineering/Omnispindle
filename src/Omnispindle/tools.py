@@ -2857,15 +2857,23 @@ async def create_quest(name: str, description: str, project: str,
     """Create a Quest — top-level epic container in the Quest→Chain→Todo hierarchy.
 
     Model: Quest (goal) → Chains (phases/workstreams) → Todos (atomic tasks).
-    Use this for multi-step objectives. Use add_todo for single atomic tasks.
+
+    CORRECT WORKFLOW — todos first, then quest:
+        1. add_todo for every atomic task you already know about → collect the IDs
+        2. create_quest with chains pre-loaded: chains='[{"label":"Phase 1","todos":["id1","id2"]}]'
+        3. For tasks added later: link_quest(quest_id, new_todo_id, chain_label)
+        4. check_quest to track progress
+
+    The chains param must reference EXISTING todo IDs. Do NOT pass placeholder names —
+    create the todos with add_todo first, then paste their IDs into the chains JSON.
 
     Args:
         name: Quest name, e.g. "Tag System Overhaul"
         description: Goal statement / success definition
         project: Project scope
-        chains: JSON array of chain objects:
-            [{"label": "Backend", "todos": ["uuid1", ...], "parallel": false, "gate_todo": null}]
-            Omit or pass "[]" to start empty; add todos later with link_quest.
+        chains: JSON array of chain objects (todos must exist before referencing):
+            [{"label": "Backend", "todos": ["uuid1", "uuid2"], "parallel": false, "gate_todo": null}]
+            Pass "[]" to start empty if you haven't created todos yet.
         tags: Comma-separated tags
         success_criteria: Comma-separated success criteria
     """
