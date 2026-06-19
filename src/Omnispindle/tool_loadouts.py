@@ -132,6 +132,22 @@ _BASE_LOADOUTS: Dict[str, List[str]] = {
 
         # Utility (1 tool)
         "point_out_obvious",
+    ],
+
+    "npc": [
+        # Context — what's happening in the world (4 tools)
+        "get_context_bundle", "find_relevant", "preflight_rag", "query_todos_near",
+
+        # Knowledge — lore, lessons, explanations (4 tools)
+        "get_lesson", "search_lessons", "grep_lessons", "explain",
+
+        # Todo awareness — read missions/objectives (3 tools)
+        "query_todos", "get_todo", "list_todos_by_status",
+
+        # Journal — NPC can record observations (2 tools)
+        "write_agent_journal", "read_agent_journal",
+
+        # Placeholder — NPC-specific tools added here as built
     ]
 }
 
@@ -142,7 +158,7 @@ def get_loadout(loadout_name: str, mode: str = "local") -> List[str]:
 
     Args:
         loadout_name: Name of the loadout (full, basic, minimal, lessons, admin,
-                      write_only, read_only, lightweight, hybrid_test)
+                      write_only, read_only, lightweight, agent_preflight, refine, npc)
         mode: Deployment mode - 'local' for stdio/local, 'remote' for HTTP/API
 
     Returns:
@@ -225,7 +241,8 @@ def get_loadout_info(loadout_name: str) -> Dict[str, any]:
         "read_only": "Query, get, and search operations + sessions (15 tools)",
         "lightweight": "Token-optimized core functionality (13 tools)",
         "agent_preflight": "Startup context for agents beginning work (6 tools)",
-        "refine": "Todo enrichment: audit + enrich metadata (tags, files, district, coordinates, blockers) for 3D visualization and dependency graph quality (13 tools)"
+        "refine": "Todo enrichment: audit + enrich metadata (tags, files, district, coordinates, blockers) for 3D visualization and dependency graph quality (13 tools)",
+        "npc": "NPC Brain: context awareness + knowledge lookup + todo observation + journal. Placeholder for NPC-specific tools as built (13 tools)"
     }
 
     tools = _BASE_LOADOUTS.get(loadout_name, [])
