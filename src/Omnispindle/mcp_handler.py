@@ -227,7 +227,7 @@ TOOL_SCHEMAS = {
     },
     "search_lessons": {
         "name": "search_lessons",
-        "description": "Text search across lesson topic, content, and tags. For broader semantic search, use find_relevant.",
+        "description": "Two-pass text search across lesson topic, content, and tags. Pass 1: strict AND (all tokens must match). Pass 2: OR ranked fallback when strict returns nothing. search_mode in response tells which fired. For semantic search, use find_relevant.",
         "inputSchema": {
             "type": "object",
             "properties": {

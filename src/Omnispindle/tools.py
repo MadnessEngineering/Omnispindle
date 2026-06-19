@@ -2055,29 +2055,64 @@ async def list_lessons(limit: int = 100, brief: bool = False, ctx: Optional[Cont
 
 async def search_lessons(query: str, fields: Optional[list] = None, limit: int = 100, brief: bool = False, ctx: Optional[Context] = None) -> str:
     """
-    Search lessons with text search capabilities.
+    Search lessons with two-pass text search.
+
+    Pass 1 (strict): all tokens must appear (AND). Fast, precise.
+    Pass 2 (fuzzy):  any token matches (OR), ranked by how many tokens hit.
+                     Fires only when strict returns nothing.
+
+    search_mode in response: 'strict' | 'fuzzy_or' so callers can tell which fired.
     """
     if fields is None:
         fields = ["topic", "lesson_learned", "tags"]
-    search_query = _build_tokenized_search_query(query, fields)
+
     try:
-        # Get user-scoped collections
         collections = db_connection.get_collections(ctx.user if ctx else None)
         lessons_collection = collections['lessons']
 
         user_id = ctx.user.get('sub') if ctx and ctx.user else 'anonymous'
         db_name = lessons_collection.database.name
         logger.info(f"search_lessons called by {user_id}: query='{query}', fields={fields}, limit={limit}, brief={brief}, db={db_name}")
-        logger.debug(f"MongoDB query: {search_query}")
 
-        cursor = lessons_collection.find(search_query).limit(limit)
-        results = list(cursor)
+        # Pass 1 — strict AND
+        strict_query = _build_tokenized_search_query(query, fields)
+        logger.debug(f"search_lessons pass1 query: {strict_query}")
+        results = list(lessons_collection.find(strict_query).limit(limit))
+        if results:
+            logger.info(f"search_lessons strict returned {len(results)} results")
+            if brief:
+                results = [{"id": r["id"], "topic": r["topic"], "language": r["language"]} for r in results]
+            return json.dumps({"items": results, "count": len(results), "search_mode": "strict"}, cls=MongoJSONEncoder)
 
-        logger.info(f"search_lessons returned {len(results)} results for query '{query}'")
+        # Pass 2 — OR fallback, ranked by token match density
+        raw_tokens = re.split(r'\W+', query)
+        meaningful = [t for t in raw_tokens if t.lower() not in _STOP_WORDS and (len(t) > 2 or t.isdigit())]
+        if not meaningful:
+            return json.dumps({"items": [], "count": 0, "search_mode": "fuzzy_or"}, cls=MongoJSONEncoder)
 
+        escaped = [re.escape(t) for t in meaningful]
+        or_query = {"$or": [
+            {field: {"$regex": tok, "$options": "i"}}
+            for tok in escaped
+            for field in fields
+        ]}
+        logger.debug(f"search_lessons pass2 OR query: {or_query}")
+        candidates = list(lessons_collection.find(or_query).limit(limit * 4))
+
+        tok_lower = [t.lower() for t in meaningful]
+
+        def match_score(lesson):
+            text = " ".join(str(lesson.get(f, "")) for f in fields).lower()
+            return sum(1 for t in tok_lower if t in text)
+
+        candidates.sort(key=match_score, reverse=True)
+        results = candidates[:limit]
+
+        logger.info(f"search_lessons fuzzy_or returned {len(results)} results for query '{query}'")
         if brief:
             results = [{"id": r["id"], "topic": r["topic"], "language": r["language"]} for r in results]
-        return json.dumps({"items": results, "count": len(results)}, cls=MongoJSONEncoder)
+        return json.dumps({"items": results, "count": len(results), "search_mode": "fuzzy_or"}, cls=MongoJSONEncoder)
+
     except Exception as e:
         logger.error(f"Failed to search lessons: {str(e)}")
         return create_response(False, message=str(e))
