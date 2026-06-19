@@ -59,7 +59,8 @@ def _build_tokenized_search_query(query: str, fields: list) -> dict:
     """
     all_tokens = [t for t in query.split() if t.strip()]
     # Strip stop words; fall back to all tokens if everything is a stop word
-    filtered = [re.escape(t) for t in all_tokens if t.lower() not in _STOP_WORDS and len(t) > 2]
+    filtered = [re.escape(t) for t in all_tokens
+                if t.lower() not in _STOP_WORDS and (len(t) > 2 or t.isdigit())]
     tokens = filtered if filtered else [re.escape(t) for t in all_tokens if t.strip()]
 
     if not tokens:
@@ -1498,29 +1499,71 @@ async def delete_lesson(lesson_id: str, ctx: Optional[Context] = None) -> str:
 
 async def search_todos(query: str, fields: Optional[list] = None, limit: int = 100, brief: bool = False, ctx: Optional[Context] = None) -> str:
     """
-    Search todos with text search capabilities.
-    Pass brief=true for a compact summary (id/description/status/priority only).
+    Search todos with two-pass fuzzy matching.
+
+    Pass 1 (strict): all meaningful tokens must appear (AND). Fast, precise.
+    Pass 2 (fuzzy):  any token matches (OR), results ranked by how many tokens
+                     appear in description+project. Fires only when pass 1 returns
+                     nothing — avoids flooding precise queries with noise.
+
+    search_mode in response: 'strict' | 'fuzzy_or' so callers can tell which fired.
     """
     if fields is None:
         fields = ["description", "project"]
-    search_query = _build_tokenized_search_query(query, fields)
 
     user_id = ctx.user.get('sub') if ctx and ctx.user else 'anonymous'
-    logger.info(f"search_todos called by {user_id}: query='{query}', fields={fields}, limit={limit}, brief={brief}")
-    logger.debug(f"MongoDB query: {search_query}")
+    logger.info(f"search_todos: user={user_id} query='{query}' fields={fields} limit={limit}")
 
-    result = await query_todos(filter=search_query, limit=limit, brief=brief, ctx=ctx)
+    # Pass 1 — strict AND
+    strict_query = _build_tokenized_search_query(query, fields)
+    result = await query_todos(filter=strict_query, limit=limit, brief=brief, ctx=ctx)
 
-    # Parse result to log count
     try:
-        import json
-        result_data = json.loads(result)
-        item_count = len(result_data.get('data', {}).get('items', [])) if result_data.get('success') else 0
-        logger.info(f"search_todos returned {item_count} results for query '{query}'")
-    except:
-        pass
+        data = json.loads(result)
+        if data.get('items'):
+            data['search_mode'] = 'strict'
+            return json.dumps(data, cls=MongoJSONEncoder)
+    except Exception:
+        return result
 
-    return result
+    # Extract meaningful tokens for OR pass (keep digits even if short: "4", "2", etc.)
+    raw_tokens = [t for t in query.split() if t.strip()]
+    meaningful = [t for t in raw_tokens if t.lower() not in _STOP_WORDS and (len(t) > 2 or t.isdigit())]
+    tokens = meaningful if meaningful else raw_tokens
+    if not tokens:
+        return result
+
+    # Pass 2 — OR fallback, ranked by token match density
+    escaped = [re.escape(t) for t in tokens]
+    or_query = {"$or": [
+        {field: {"$regex": tok, "$options": "i"}}
+        for tok in escaped for field in fields
+    ]}
+
+    fallback = await query_todos(filter=or_query, limit=min(limit * 4, 400), brief=brief, ctx=ctx)
+
+    try:
+        fb = json.loads(fallback)
+        candidates = fb.get('items', [])
+        if not candidates:
+            return result  # Still nothing — return original empty
+
+        tok_lower = [t.lower() for t in tokens]
+
+        def match_score(todo):
+            text = (todo.get('description', '') + ' ' + todo.get('project', '')).lower()
+            return sum(1 for t in tok_lower if t in text)
+
+        ranked = sorted(candidates, key=match_score, reverse=True)[:limit]
+        logger.info(f"search_todos fuzzy fallback: {len(ranked)} results for '{query}'")
+        return json.dumps({
+            "items": ranked,
+            "count": len(ranked),
+            "source": fb.get('source'),
+            "search_mode": "fuzzy_or"
+        }, cls=MongoJSONEncoder)
+    except Exception:
+        return fallback
 
 
 async def query_todos_by_metadata(metadata_filters: Dict[str, Any],

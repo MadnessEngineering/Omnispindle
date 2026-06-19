@@ -114,7 +114,7 @@ TOOL_SCHEMAS = {
     },
     "search_todos": {
         "name": "search_todos",
-        "description": "Text search todos by keyword. Shorthand for query_todos with tokenized regex on description+project.",
+        "description": "Text search todos. Two-pass: strict AND-match first; fuzzy OR ranked by token density if empty. Response includes search_mode: 'strict'|'fuzzy_or'.",
         "inputSchema": {
             "type": "object",
             "properties": {
