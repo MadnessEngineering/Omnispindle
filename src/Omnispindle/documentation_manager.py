@@ -36,7 +36,11 @@ class DocumentationManager:
             loadout: Tool loadout level, defaults to OMNISPINDLE_TOOL_LOADOUT env var
         """
         self.loadout = loadout or os.getenv("OMNISPINDLE_TOOL_LOADOUT", "full").lower()
-        self.level = self._get_documentation_level()
+        explicit = os.getenv("OMNISPINDLE_DOC_LEVEL", "").lower()
+        if explicit in ("minimal", "compact", "basic", "full"):
+            self.level = DocumentationLevel[explicit.upper()]
+        else:
+            self.level = self._get_documentation_level()
     
     def _get_documentation_level(self) -> DocumentationLevel:
         """Map loadout to documentation level."""
@@ -44,12 +48,14 @@ class DocumentationManager:
             "minimal": DocumentationLevel.MINIMAL,
             "lightweight": DocumentationLevel.COMPACT,  # Token-optimized
             "basic": DocumentationLevel.BASIC,
-            "lessons": DocumentationLevel.BASIC,  # Use basic level for lessons loadout
+            "lessons": DocumentationLevel.BASIC,
             "admin": DocumentationLevel.ADMIN,
             "full": DocumentationLevel.FULL,
             "write_only": DocumentationLevel.BASIC,
             "read_only": DocumentationLevel.BASIC,
-            "agent_preflight": DocumentationLevel.BASIC
+            "agent_preflight": DocumentationLevel.BASIC,
+            "refine": DocumentationLevel.BASIC,
+            "npc": DocumentationLevel.COMPACT,
         }
         return mapping.get(self.loadout, DocumentationLevel.FULL)
     
@@ -64,7 +70,15 @@ class DocumentationManager:
             Documentation string appropriate for the loadout level
         """
         docs = TOOL_DOCUMENTATION.get(tool_name, {})
-        return docs.get(self.level.value, docs.get("full", "Tool documentation not found."))
+        # Cascade: requested level → basic (not full) → full → fallback
+        # Prevents compact falling through to verbose full descriptions
+        level_val = self.level.value
+        return (
+            docs.get(level_val)
+            or docs.get("basic")
+            or docs.get("full")
+            or "Tool documentation not found."
+        )
     
     def get_parameter_hint(self, tool_name: str) -> Optional[str]:
         """

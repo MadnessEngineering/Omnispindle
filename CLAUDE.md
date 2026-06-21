@@ -243,6 +243,7 @@ The server exposes standardized MCP tools that AI agents can call:
 *Operation Mode Configuration*:
 - `OMNISPINDLE_MODE` - Operation mode: `hybrid`, `api`, `local`, `auto` (default: `hybrid`)
 - `OMNISPINDLE_TOOL_LOADOUT` - Tool loadout configuration (see Tool Loadouts below)
+- `OMNISPINDLE_DOC_LEVEL` - Tool description verbosity: `minimal` (~4.5k tokens), `basic` (~5k), `full` (~7.8k). Overrides loadout-derived level. Recommended: `basic` for AI clients, `full` for development/onboarding.
 - `OMNISPINDLE_FALLBACK_ENABLED` - Enable fallback in hybrid mode (default: `true`)
 - `OMNISPINDLE_API_TIMEOUT` - API request timeout in seconds (default: `10.0`)
 
@@ -272,6 +273,7 @@ For Claude Desktop stdio transport, add to your `claude_desktop_config.json`:
       "env": {
         "OMNISPINDLE_MODE": "api",
         "OMNISPINDLE_TOOL_LOADOUT": "basic",
+        "OMNISPINDLE_DOC_LEVEL": "basic",
         "MADNESS_AUTH_TOKEN": "your_jwt_token_here",
         "MCP_USER_EMAIL": "user@example.com"
       }

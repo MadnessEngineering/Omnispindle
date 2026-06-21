@@ -11,6 +11,7 @@ from starlette.responses import JSONResponse
 
 from .tool_loadouts import get_loadout, filter_by_tier
 from .tool_metadata import is_pro_tool
+from .documentation_manager import get_tool_doc
 
 logger = logging.getLogger(__name__)
 
@@ -556,6 +557,12 @@ TOOL_SCHEMAS = {
         }
     }
 }
+
+# Apply tier-aware descriptions at startup — reads OMNISPINDLE_DOC_LEVEL / OMNISPINDLE_TOOL_LOADOUT
+for _name, _schema in TOOL_SCHEMAS.items():
+    _doc = get_tool_doc(_name)
+    if _doc:
+        _schema["description"] = _doc
 
 async def mcp_handler(request: Request, get_current_user: Callable[[], Coroutine[Any, Any, Any]]) -> JSONResponse:
     """

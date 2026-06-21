@@ -425,7 +425,7 @@ class OmniSpindleStdioServer:
                 def make_tool(name, func, docstring):
                     def create_wrapper():
                         if name == "add_todo":
-                            @self.server.tool()
+                            @self.server.tool(description=docstring)
                             async def add_todo(
                                 description: Annotated[str, Field(description="Task description")],
                                 project: Annotated[str, Field(description="Project name")],
@@ -441,7 +441,7 @@ class OmniSpindleStdioServer:
                             return add_todo
 
                         elif name == "query_todos":
-                            @self.server.tool()
+                            @self.server.tool(description=docstring)
                             async def query_todos(
                                 filter: Annotated[Optional[Dict[str, Any]], Field(description="{status: 'pending', project: 'name'}")] = None,
                                 projection: Annotated[Optional[Dict[str, Any]], Field(description="{field: 1} to include")] = None,
@@ -457,7 +457,7 @@ class OmniSpindleStdioServer:
                             return query_todos
 
                         elif name == "update_todo":
-                            @self.server.tool()
+                            @self.server.tool(description=docstring)
                             async def update_todo(
                                 todo_id: Annotated[str, Field(description="Todo ID")],
                                 updates: Annotated[dict, Field(description="{field: new_value}")]
@@ -468,7 +468,7 @@ class OmniSpindleStdioServer:
                             return update_todo
 
                         elif name == "delete_todo":
-                            @self.server.tool()
+                            @self.server.tool(description=docstring)
                             async def delete_todo(
                                 todo_id: Annotated[str, Field(description="Todo ID")]
                             ) -> str:
@@ -478,7 +478,7 @@ class OmniSpindleStdioServer:
                             return delete_todo
 
                         elif name == "get_todo":
-                            @self.server.tool()
+                            @self.server.tool(description=docstring)
                             async def get_todo(
                                 todo_id: Annotated[str, Field(description="Todo ID")]
                             ) -> str:
@@ -488,7 +488,7 @@ class OmniSpindleStdioServer:
                             return get_todo
 
                         elif name == "complete_todo":
-                            @self.server.tool()
+                            @self.server.tool(description=docstring)
                             async def complete_todo(
                                 todo_id: Annotated[str, Field(description="Todo ID")],
                                 comment: Annotated[Optional[str], Field(description="Optional completion comment")] = None,
@@ -500,7 +500,7 @@ class OmniSpindleStdioServer:
                             return complete_todo
 
                         elif name == "list_todos_by_status":
-                            @self.server.tool()
+                            @self.server.tool(description=docstring)
                             async def list_todos_by_status(
                                 status: Annotated[str, Field(description="pending|completed|initial|blocked|in_progress|review")],
                                 limit: Annotated[int, Field(description="Max results")] = 100,
@@ -513,7 +513,7 @@ class OmniSpindleStdioServer:
                             return list_todos_by_status
 
                         elif name == "search_todos":
-                            @self.server.tool()
+                            @self.server.tool(description=docstring)
                             async def search_todos(
                                 query: Annotated[str, Field(description="Search text. Use 'project:Name' for project filter")],
                                 fields: Annotated[Optional[list], Field(description="Fields to search")] = None,
@@ -527,7 +527,7 @@ class OmniSpindleStdioServer:
                             return search_todos
 
                         elif name == "list_project_todos":
-                            @self.server.tool()
+                            @self.server.tool(description=docstring)
                             async def list_project_todos(
                                 project: Annotated[str, Field(description="Project name")],
                                 limit: Annotated[int, Field(description="Max results")] = 5,
@@ -541,7 +541,7 @@ class OmniSpindleStdioServer:
                             return list_project_todos
 
                         elif name == "add_lesson":
-                            @self.server.tool()
+                            @self.server.tool(description=docstring)
                             async def add_lesson(
                                 language: Annotated[str, Field(description="Programming language")],
                                 topic: Annotated[str, Field(description="Topic/category")],
@@ -554,7 +554,7 @@ class OmniSpindleStdioServer:
                             return add_lesson
 
                         elif name == "get_lesson":
-                            @self.server.tool()
+                            @self.server.tool(description=docstring)
                             async def get_lesson(
                                 lesson_id: Annotated[str, Field(description="Lesson ID")]
                             ) -> str:
@@ -564,7 +564,7 @@ class OmniSpindleStdioServer:
                             return get_lesson
 
                         elif name == "update_lesson":
-                            @self.server.tool()
+                            @self.server.tool(description=docstring)
                             async def update_lesson(
                                 lesson_id: Annotated[str, Field(description="Lesson ID")],
                                 updates: Annotated[dict, Field(description="{field: new_value}")]
@@ -575,7 +575,7 @@ class OmniSpindleStdioServer:
                             return update_lesson
 
                         elif name == "delete_lesson":
-                            @self.server.tool()
+                            @self.server.tool(description=docstring)
                             async def delete_lesson(
                                 lesson_id: Annotated[str, Field(description="Lesson ID")]
                             ) -> str:
@@ -585,7 +585,7 @@ class OmniSpindleStdioServer:
                             return delete_lesson
 
                         elif name == "regenerate_embedding":
-                            @self.server.tool()
+                            @self.server.tool(description=docstring)
                             async def regenerate_embedding(
                                 lesson_id: Annotated[str, Field(description="Lesson ID")]
                             ) -> str:
@@ -595,7 +595,7 @@ class OmniSpindleStdioServer:
                             return regenerate_embedding
 
                         elif name == "search_lessons":
-                            @self.server.tool()
+                            @self.server.tool(description=docstring)
                             async def search_lessons(
                                 query: Annotated[str, Field(description="Search text")],
                                 fields: Annotated[Optional[list], Field(description="Fields to search")] = None,
@@ -607,7 +607,7 @@ class OmniSpindleStdioServer:
                             return search_lessons
 
                         elif name == "grep_lessons":
-                            @self.server.tool()
+                            @self.server.tool(description=docstring)
                             async def grep_lessons(
                                 pattern: Annotated[str, Field(description="Regex pattern")],
                                 limit: Annotated[int, Field(description="Max results")] = 20
@@ -618,7 +618,7 @@ class OmniSpindleStdioServer:
                             return grep_lessons
 
                         elif name == "list_lessons":
-                            @self.server.tool()
+                            @self.server.tool(description=docstring)
                             async def list_lessons(
                                 limit: Annotated[int, Field(description="Max results")] = 100
                             ) -> str:
@@ -628,7 +628,7 @@ class OmniSpindleStdioServer:
                             return list_lessons
 
                         elif name == "query_todo_logs":
-                            @self.server.tool()
+                            @self.server.tool(description=docstring)
                             async def query_todo_logs(
                                 filter_type: Annotated[str, Field(description="all|create|update|delete|complete")] = 'all',
                                 project: Annotated[str, Field(description="Project name or 'all'")] = 'all',
@@ -641,7 +641,7 @@ class OmniSpindleStdioServer:
                             return query_todo_logs
 
                         elif name == "list_projects":
-                            @self.server.tool()
+                            @self.server.tool(description=docstring)
                             async def list_projects(
                                 include_details: Annotated[bool, Field(description="Include metadata")] = False,
                                 madness_root: Annotated[str, Field(description="Madness root path")] = "/Users/d.edens/lab/madness_interactive"
@@ -652,7 +652,7 @@ class OmniSpindleStdioServer:
                             return list_projects
 
                         elif name == "explain":
-                            @self.server.tool()
+                            @self.server.tool(description=docstring)
                             async def explain(
                                 topic: Annotated[str, Field(description="Topic/project name")]
                             ) -> str:
@@ -662,7 +662,7 @@ class OmniSpindleStdioServer:
                             return explain
 
                         elif name == "add_explanation":
-                            @self.server.tool()
+                            @self.server.tool(description=docstring)
                             async def add_explanation(
                                 topic: Annotated[str, Field(description="Topic name")],
                                 content: Annotated[str, Field(description="Explanation content")],
@@ -675,7 +675,7 @@ class OmniSpindleStdioServer:
                             return add_explanation
 
                         elif name == "point_out_obvious":
-                            @self.server.tool()
+                            @self.server.tool(description=docstring)
                             async def point_out_obvious(
                                 observation: Annotated[str, Field(description="Obvious observation")],
                                 sarcasm_level: Annotated[int, Field(description="Sarcasm level (1-10)")] = 5
@@ -686,7 +686,7 @@ class OmniSpindleStdioServer:
                             return point_out_obvious
 
                         elif name == "bring_your_own":
-                            @self.server.tool()
+                            @self.server.tool(description=docstring)
                             async def bring_your_own(
                                 tool_name: Annotated[str, Field(description="Tool name")],
                                 code: Annotated[str, Field(description="Code to execute")],
@@ -702,7 +702,7 @@ class OmniSpindleStdioServer:
 
 
                         elif name == "inventorium_sessions_list":
-                            @self.server.tool()
+                            @self.server.tool(description=docstring)
                             async def inventorium_sessions_list(
                                 project: Annotated[Optional[str], Field(description="Project filter (optional)")] = None,
                                 limit: Annotated[int, Field(description="Max results")] = 50
@@ -713,7 +713,7 @@ class OmniSpindleStdioServer:
                             return inventorium_sessions_list
 
                         elif name == "inventorium_sessions_get":
-                            @self.server.tool()
+                            @self.server.tool(description=docstring)
                             async def inventorium_sessions_get(
                                 session_id: Annotated[str, Field(description="Session ID")]
                             ) -> str:
@@ -723,7 +723,7 @@ class OmniSpindleStdioServer:
                             return inventorium_sessions_get
 
                         elif name == "inventorium_sessions_create":
-                            @self.server.tool()
+                            @self.server.tool(description=docstring)
                             async def inventorium_sessions_create(
                                 project: Annotated[str, Field(description="Project name")],
                                 title: Annotated[Optional[str], Field(description="Session title (optional)")] = None,
@@ -736,7 +736,7 @@ class OmniSpindleStdioServer:
                             return inventorium_sessions_create
 
                         elif name == "inventorium_sessions_spawn":
-                            @self.server.tool()
+                            @self.server.tool(description=docstring)
                             async def inventorium_sessions_spawn(
                                 parent_session_id: Annotated[str, Field(description="Parent session ID")],
                                 prompt: Annotated[str, Field(description="Initial prompt")],
@@ -749,7 +749,7 @@ class OmniSpindleStdioServer:
                             return inventorium_sessions_spawn
 
                         elif name == "inventorium_todos_link_session":
-                            @self.server.tool()
+                            @self.server.tool(description=docstring)
                             async def inventorium_todos_link_session(
                                 todo_id: Annotated[str, Field(description="Todo ID")],
                                 session_id: Annotated[str, Field(description="Session ID")]
@@ -760,7 +760,7 @@ class OmniSpindleStdioServer:
                             return inventorium_todos_link_session
 
                         elif name == "inventorium_sessions_fork":
-                            @self.server.tool()
+                            @self.server.tool(description=docstring)
                             async def inventorium_sessions_fork(
                                 session_id: Annotated[str, Field(description="Session ID to fork")],
                                 title: Annotated[Optional[str], Field(description="New session title (optional)")] = None,
@@ -774,7 +774,7 @@ class OmniSpindleStdioServer:
                             return inventorium_sessions_fork
 
                         elif name == "inventorium_sessions_genealogy":
-                            @self.server.tool()
+                            @self.server.tool(description=docstring)
                             async def inventorium_sessions_genealogy(
                                 session_id: Annotated[str, Field(description="Session ID")]
                             ) -> str:
@@ -784,7 +784,7 @@ class OmniSpindleStdioServer:
                             return inventorium_sessions_genealogy
 
                         elif name == "inventorium_sessions_tree":
-                            @self.server.tool()
+                            @self.server.tool(description=docstring)
                             async def inventorium_sessions_tree(
                                 project: Annotated[Optional[str], Field(description="Project filter (optional)")] = None,
                                 limit: Annotated[int, Field(description="Max sessions")] = 200
@@ -795,7 +795,7 @@ class OmniSpindleStdioServer:
                             return inventorium_sessions_tree
 
                         elif name == "get_context_bundle":
-                            @self.server.tool()
+                            @self.server.tool(description=docstring)
                             async def get_context_bundle(
                                 project: Annotated[Optional[str], Field(description="Project name (optional)")] = None,
                                 keywords: Annotated[Optional[List[str]], Field(description="Keywords to search across todos and lessons")] = None,
@@ -808,7 +808,7 @@ class OmniSpindleStdioServer:
                             return get_context_bundle
 
                         elif name == "find_relevant":
-                            @self.server.tool()
+                            @self.server.tool(description=docstring)
                             async def find_relevant(
                                 query: Annotated[str, Field(description="Natural language search query")],
                                 types: Annotated[Optional[List[str]], Field(description="Types to search: ['todos', 'lessons'] (default: both)")] = None,
@@ -820,7 +820,7 @@ class OmniSpindleStdioServer:
                             return find_relevant
 
                         elif name == "preflight_rag":
-                            @self.server.tool()
+                            @self.server.tool(description=docstring)
                             async def preflight_rag(
                                 intent: Annotated[str, Field(description="What the agent is about to do (natural language)")],
                                 project: Annotated[Optional[str], Field(description="Project scope to prioritise project-specific lessons")] = None,
@@ -833,7 +833,7 @@ class OmniSpindleStdioServer:
                             return preflight_rag
 
                         elif name == "write_agent_journal":
-                            @self.server.tool()
+                            @self.server.tool(description=docstring)
                             async def write_agent_journal(
                                 agent_name: Annotated[str, Field(description="Agent identifier (e.g. 'claude', 'gemini', 'user')")],
                                 content: Annotated[str, Field(description="Journal entry text (max 500 chars)")],
@@ -845,7 +845,7 @@ class OmniSpindleStdioServer:
                             return write_agent_journal
 
                         elif name == "read_agent_journal":
-                            @self.server.tool()
+                            @self.server.tool(description=docstring)
                             async def read_agent_journal(
                                 agent_name: Annotated[str, Field(description="Agent identifier to read (e.g. 'claude', 'gemini', 'user')")],
                                 limit: Annotated[int, Field(description="Number of recent entries (default: 10, max: 50)")] = 10
@@ -856,7 +856,7 @@ class OmniSpindleStdioServer:
                             return read_agent_journal
 
                         elif name == "query_todos_near":
-                            @self.server.tool()
+                            @self.server.tool(description=docstring)
                             async def query_todos_near(
                                 todo_id: Annotated[Optional[str], Field(description="Anchor todo UUID — inherit its district and coordinates")] = None,
                                 district: Annotated[Optional[str], Field(description="District label to match (e.g. 'rag', 'ui', 'infra')")] = None,
@@ -869,7 +869,7 @@ class OmniSpindleStdioServer:
                             return query_todos_near
 
                         elif name == "link_todos":
-                            @self.server.tool()
+                            @self.server.tool(description=docstring)
                             async def link_todos(
                                 blocker_id: Annotated[str, Field(description="Todo that must complete first")],
                                 blocked_id: Annotated[str, Field(description="Todo that depends on blocker_id")]
@@ -880,7 +880,7 @@ class OmniSpindleStdioServer:
                             return link_todos
 
                         elif name == "create_quest":
-                            @self.server.tool()
+                            @self.server.tool(description=docstring)
                             async def create_quest(
                                 name: Annotated[str, Field(description="Quest name, e.g. 'Tag System Overhaul'")],
                                 description: Annotated[str, Field(description="Goal statement")],
@@ -895,7 +895,7 @@ class OmniSpindleStdioServer:
                             return create_quest
 
                         elif name == "check_quest":
-                            @self.server.tool()
+                            @self.server.tool(description=docstring)
                             async def check_quest(
                                 quest_id: Annotated[str, Field(description="Quest UUID")]
                             ) -> str:
@@ -905,7 +905,7 @@ class OmniSpindleStdioServer:
                             return check_quest
 
                         elif name == "list_quests":
-                            @self.server.tool()
+                            @self.server.tool(description=docstring)
                             async def list_quests(
                                 status: Annotated[str, Field(description="Filter: active|completed|archived|abandoned|all")] = "active",
                                 project: Annotated[str, Field(description="Filter by project (optional)")] = "",
@@ -917,7 +917,7 @@ class OmniSpindleStdioServer:
                             return list_quests
 
                         elif name == "link_quest":
-                            @self.server.tool()
+                            @self.server.tool(description=docstring)
                             async def link_quest(
                                 quest_id: Annotated[str, Field(description="Quest UUID")],
                                 todo_id: Annotated[str, Field(description="Todo UUID to add")],
@@ -930,7 +930,7 @@ class OmniSpindleStdioServer:
                             return link_quest
 
                         elif name == "update_quest":
-                            @self.server.tool()
+                            @self.server.tool(description=docstring)
                             async def update_quest(
                                 quest_id: Annotated[str, Field(description="Quest UUID")],
                                 updates: Annotated[str, Field(description="JSON string of fields to update")] = "{}"
