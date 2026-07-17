@@ -219,7 +219,9 @@ Omnispindle is the AI interface layer. The rest of the workshop:
 
 **MadnessVR** — Quest 2 VR version of SwarmDesk. Put on the headset, walk through your codebase as actual geometry. This one is on the roadmap, not the release notes. But the plan exists and it's detailed.
 
-**Cogwyrm** — AI chat companion integrated into the ecosystem. Uses Omnispindle MCP tools during conversations to read and write shared context.
+**[MadQTT](https://github.com/MadnessEngineering/MadQTT)** — Live terminal TUI for the workshop's MQTT + MongoDB event stream (`pip install madqtt`). Agent sessions, tool calls, and failures from every machine, readable in real time instead of a firehose.
+
+**[Madness Desktop](https://github.com/MadnessEngineering/madnessDesktop)** — GitHub Desktop fork wired into the workshop: composable git-hook loadouts, MQTT commit events shared across machines, and live workshop todos inside the git client.
 
 **Swarmonomicon** — The core database layer. MongoDB, `swarmonomicon` database. Everything persistent lives here.
 
@@ -227,7 +229,7 @@ Omnispindle is the AI interface layer. The rest of the workshop:
 
 ```
 UI (Inventorium, forms, dashboards) → REST API → Database
-AI agents (Claude, Cogwyrm, any MCP client) → MCP tools → Backend → Database
+AI agents (Claude, any MCP client) → MCP tools → Backend → Database
 ```
 
 Never route UI through MCP. Never call the REST API directly from an AI agent. The separation is intentional and load-bearing.
