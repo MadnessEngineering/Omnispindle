@@ -630,6 +630,86 @@ def _normalize_updates(updates, label: str = "updates") -> tuple:
     return updates, None
 
 
+# ── recall-on-add_todo: surface related lessons at the point of need ──────────
+# Converts lesson recall from pull→push at the ONE habitual call (add_todo before a
+# work section) — no new agent behavior required. Kept cheap + safe:
+#   • OFF by default (OMNISPINDLE_RECALL_ON_ADD) until the threshold is tuned empirically
+#   • TEASER only — id/topic/tags/relevance + a one-line hint, never the lesson body
+#     (search is cheap server-side; injecting body tokens is the expensive part, so the
+#     agent calls get_lesson(id) to expand only if the hint bites)
+#   • HIGH inject bar (0.6 default) vs find_similar's loose 0.3 search floor — silence
+#     when nothing is clearly relevant
+#   • bounded by a wall-clock budget so recall NEVER blocks todo creation (honors the
+#     existing "keep add_todo latency tight" design)
+def _recall_on_add_enabled() -> bool:
+    return os.getenv("OMNISPINDLE_RECALL_ON_ADD", "0").strip().lower() in ("1", "true", "yes", "on")
+
+
+def _recall_cfg() -> dict:
+    def _f(name, default):
+        try:
+            return float(os.getenv(name, str(default)))
+        except (TypeError, ValueError):
+            return float(default)
+    return {
+        "threshold": _f("OMNISPINDLE_RECALL_THRESHOLD", 0.6),   # inject bar, NOT the 0.3 search floor
+        "limit": max(1, int(_f("OMNISPINDLE_RECALL_LIMIT", 2))),
+        "budget": _f("OMNISPINDLE_RECALL_BUDGET_SECS", 2.5),
+    }
+
+
+def _one_line(text: str, n: int = 140) -> str:
+    """Collapse to a single ≤n-char line — the teaser hint, not the full lesson."""
+    t = " ".join((text or "").split())
+    return (t[: n - 1] + "…") if len(t) > n else t
+
+
+async def _recall_related_lessons(description: str, project: Optional[str], tags, lessons_collection, cfg: dict) -> list:
+    """Semantic teaser recall of lessons relevant to a new todo. Returns a slim list
+    [{id, topic, tags, relevance, hint}] (NO body) above cfg['threshold'], project- +
+    tag-boosted the same way preflight_rag ranks. Empty on no key / no embeddings /
+    nothing above the bar. Raises nothing worth catching here — the caller guards."""
+    if lessons_collection is None or not embeddings.is_available():
+        return []
+    if not lessons_collection.find_one({"embedding": {"$exists": True}}):
+        return []
+    tag_list = [str(t) for t in tags] if isinstance(tags, (list, tuple)) else []
+    query = description or ""
+    if project:
+        query += f" | project: {project}"
+    if tag_list:
+        query += f" | tags: {', '.join(tag_list)}"
+    matched = await embeddings.find_similar(
+        query, lessons_collection, "lesson",
+        limit=cfg["limit"] * 3, min_score=cfg["threshold"],
+    )
+    if not matched:
+        return []
+
+    def _tags_of(m):
+        mt = m.get("tags", [])
+        return [t.strip() for t in mt.split(",")] if isinstance(mt, str) else (mt or [])
+
+    # project boost (+0.08) then tag-overlap re-rank — mirrors preflight_rag ranking
+    if project:
+        pl = project.lower()
+        for m in matched:
+            if pl in (m.get("topic", "") or "").lower() or any(pl in str(t).lower() for t in _tags_of(m)):
+                m["similarity_score"] = round(m.get("similarity_score", 0.0) + 0.08, 4)
+        matched.sort(key=lambda m: m.get("similarity_score", 0.0), reverse=True)
+    if tag_list:
+        want = {t.lower() for t in tag_list}
+        matched.sort(key=lambda m: len(want & {str(t).lower() for t in _tags_of(m)}), reverse=True)
+
+    return [{
+        "id": m.get("id"),
+        "topic": m.get("topic"),
+        "tags": m.get("tags", []),
+        "relevance": m.get("similarity_score"),
+        "hint": _one_line(m.get("lesson_learned", "")),
+    } for m in matched[: cfg["limit"]]]
+
+
 async def add_todo(description: str, project: str, priority: str = "Medium", target_agent: str = "user", notes: str = "", ticket: str = "", metadata: Optional[Dict[str, Any]] = None, ctx: Optional[Context] = None, **extra) -> str:
     """
     Creates a task in the specified project with the given priority and target agent.
@@ -761,13 +841,29 @@ async def add_todo(description: str, project: str, priority: str = "Medium", tar
         _track_background("log_todo_create", _background_log_create())
         _track_background("embedding_update", _background_embedding_update())
 
-        return json.dumps({
+        resp = {
             "id": todo_id,
             "project": validated_project,
             "priority": priority,
             "target_agent": target_agent,
             "created_at": todo["created_at"],
-        })
+        }
+        # Point-of-need recall: surface related lessons (teaser) at this habitual
+        # call. Bounded by a wall-clock budget → best-effort, never blocks creation.
+        if _recall_on_add_enabled():
+            try:
+                cfg = _recall_cfg()
+                related = await asyncio.wait_for(
+                    _recall_related_lessons(description, validated_project,
+                                            validated_metadata.get("tags"),
+                                            collections.get("lessons"), cfg),
+                    timeout=cfg["budget"],
+                )
+                if related:
+                    resp["related_lessons"] = {"items": related, "count": len(related)}
+            except Exception as e:
+                logger.debug(f"add_todo recall skipped for {todo_id}: {e}")
+        return json.dumps(resp)
     except Exception as e:
         logger.error(f"Failed to create todo: {str(e)}")
         return create_response(False, message=str(e))
