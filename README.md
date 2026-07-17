@@ -281,9 +281,7 @@ This is a working system for our lab. For yours, make it yours.
 
 ## Philosophy
 
-Most people build a todo app with 5 features. We built one with 33 MCP tools, three operation modes, session genealogy trees, vector embeddings, zero-config OAuth, and a roadmap that includes walking through your code in VR.
 
-This is the right amount of complexity. Every piece is load-bearing.
 
 **Working now:**
 - Todo management for AI agents — robust, audited, per-user
