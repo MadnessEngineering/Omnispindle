@@ -3139,7 +3139,10 @@ async def check_quest(quest_id: str, ctx: Optional[Context] = None) -> str:
         summary_parts = []
 
         for chain in quest.get("chains", []):
-            chain_todos = [todo_docs.get(tid, {"id": tid, "status": "missing", "description": f"[missing: {tid[:8]}]"}) for tid in chain.get("todos", [])]
+            linked_todos = [todo_docs.get(tid, {"id": tid, "status": "missing", "description": f"[missing: {tid[:8]}]"}) for tid in chain.get("todos", [])]
+            # Cancelled todos are resolved-not-done: drop them from the chain
+            # entirely so they weigh neither numerator nor denominator.
+            chain_todos = [t for t in linked_todos if t.get("status") != "cancelled"]
             done = [t for t in chain_todos if t.get("status") in ("completed", "review")]
             blocked = [t for t in chain_todos if t.get("status") == "blocked"]
             in_progress = [t for t in chain_todos if t.get("status") == "in_progress"]
@@ -3203,6 +3206,7 @@ async def check_quest(quest_id: str, ctx: Optional[Context] = None) -> str:
                     {"metadata.quest": quest_id},
                 ]
             }))
+            metadata_fallback_todos = [t for t in metadata_fallback_todos if t.get("status") != "cancelled"]
             if metadata_fallback_todos:
                 metadata_fallback = True
                 fb_done = sum(1 for t in metadata_fallback_todos if t.get("status") in ("completed", "review"))
