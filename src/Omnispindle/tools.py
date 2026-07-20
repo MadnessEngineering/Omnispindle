@@ -3231,8 +3231,10 @@ async def check_quest(quest_id: str, ctx: Optional[Context] = None) -> str:
                 }]
                 summary_parts = [f"[metadata-fallback] {fb_done}/{fb_total} todos tagged with quest ID"]
 
-        denominator = total_count - total_blocked
-        progress_pct = int(total_done / denominator * 100) if denominator > 0 else 0
+        # Blocked todos stay in the denominator — blocked work is still work
+        # owed, unlike cancelled (already dropped above). Keeps progress_pct
+        # consistent with the "done/total" string below.
+        progress_pct = int(total_done / total_count * 100) if total_count > 0 else 0
 
         result = {
             "quest_id": quest["id"],
@@ -3241,6 +3243,7 @@ async def check_quest(quest_id: str, ctx: Optional[Context] = None) -> str:
             "status": quest.get("status"),
             "progress_pct": progress_pct,
             "total": f"{total_done}/{total_count}",
+            "blocked_count": total_blocked,
             "chains": chains_report,
             "blockers": all_blockers,
             "success_criteria": quest.get("success_criteria", []),
