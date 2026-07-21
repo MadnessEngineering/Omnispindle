@@ -3163,12 +3163,16 @@ async def check_quest(quest_id: str, ctx: Optional[Context] = None) -> str:
                 if nxt:
                     next_actions = [{"id": nxt["id"], "description": nxt.get("description", ""), "status": nxt.get("status", "")}]
 
-            # Chain status
+            # Chain status. Blocked todos still show in the done/total bar
+            # (denominator below), but for the FINISHED decision they count as
+            # resolved alongside done — a chain whose only leftover work is
+            # blocked reads as complete, matching the hide-completed toggle.
             chain_len = len(chain_todos)
             done_len = len(done)
-            if done_len == chain_len and chain_len > 0:
+            resolved_len = done_len + len(blocked)
+            if resolved_len == chain_len and chain_len > 0:
                 chain_status = "completed"
-            elif len(blocked) == len(remaining) and len(remaining) > 0:
+            elif len(blocked) > 0:
                 chain_status = "blocked"
             elif done_len > 0 or len(in_progress) > 0:
                 chain_status = "in_progress"
@@ -3235,6 +3239,9 @@ async def check_quest(quest_id: str, ctx: Optional[Context] = None) -> str:
         # owed, unlike cancelled (already dropped above). Keeps progress_pct
         # consistent with the "done/total" string below.
         progress_pct = int(total_done / total_count * 100) if total_count > 0 else 0
+        # Finished decision counts blocked as resolved (like the hide toggle):
+        # a quest with only blocked leftovers is done, even at pct < 100.
+        is_complete = total_count > 0 and (total_done + total_blocked) == total_count
 
         result = {
             "quest_id": quest["id"],
@@ -3242,6 +3249,7 @@ async def check_quest(quest_id: str, ctx: Optional[Context] = None) -> str:
             "project": quest.get("project"),
             "status": quest.get("status"),
             "progress_pct": progress_pct,
+            "is_complete": is_complete,
             "total": f"{total_done}/{total_count}",
             "blocked_count": total_blocked,
             "chains": chains_report,
