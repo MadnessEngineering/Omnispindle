@@ -106,7 +106,11 @@ def compact_todo(doc: dict, brief: bool = False) -> dict:
     """
     if not isinstance(doc, dict):
         return doc
-    out = {k: v for k, v in doc.items() if k not in ("_id", "source")}
+    # Drop the search-only vector fields. The 768-float embedding is a RAG
+    # index artifact — embeddings.find_similar reads it via its own projection
+    # server-side; a client reading a todo has no use for it, and shipping it
+    # inline bloated list payloads ~50x (a 30-item list ran ~80k tokens).
+    out = {k: v for k, v in doc.items() if k not in ("_id", "source", "embedding", "embedding_updated_at")}
 
     md = out.get("metadata")
     if isinstance(md, dict):
@@ -1699,7 +1703,9 @@ async def query_todos_by_metadata(metadata_filters: Dict[str, Any],
         logger.info(f"Enhanced metadata query: {enhanced_filter}")
 
         # Execute query
-        cursor = todos_collection.find(enhanced_filter).limit(limit).sort("created_at", -1)
+        # Exclude the search-only vector field (see compact_todo) — this raw
+        # path skips compaction, so project it out at the DB read.
+        cursor = todos_collection.find(enhanced_filter, {"embedding": 0}).limit(limit).sort("created_at", -1)
         results = list(cursor)
 
         return json.dumps({"items": results, "count": len(results)}, cls=MongoJSONEncoder)
@@ -1758,10 +1764,13 @@ async def search_todos_advanced(query: str,
                 metadata_filters or {},
                 limit=limit
             )
+            # Exclude the search-only vector field (see compact_todo); this raw
+            # path skips compaction, so drop it in the pipeline / projection.
+            pipeline = pipeline + [{"$project": {"embedding": 0}}]
             results = list(todos_collection.aggregate(pipeline))
         else:
             # Simple query for text-only search
-            cursor = todos_collection.find(combined_filter).limit(limit).sort("created_at", -1)
+            cursor = todos_collection.find(combined_filter, {"embedding": 0}).limit(limit).sort("created_at", -1)
             results = list(cursor)
 
         return json.dumps({"items": results, "count": len(results)}, cls=MongoJSONEncoder)
