@@ -129,6 +129,42 @@ def compact_todo_list(docs: list, brief: bool = False, iso_dates: bool = False) 
     return [compact_todo(d, brief=brief, iso_dates=iso_dates) for d in docs if d]
 
 
+# Fields kept when a lesson is requested in brief form
+_BRIEF_LESSON_KEEP = ("id", "topic", "language", "tags")
+
+
+def compact_lesson(doc: dict, brief: bool = False, iso_dates: bool = False) -> dict:
+    """
+    Lesson-side mirror of compact_todo. Lessons carry the same 768-float embedding
+    as todos but never got the compaction treatment — get_lesson/list_lessons/
+    search_lessons/grep_lessons returned raw Mongo docs, so a single lesson cost
+    ~15KB of vector nobody reads (embeddings.find_similar loads it server-side via
+    its own projection). Also drops _id and empty fields.
+    """
+    if not isinstance(doc, dict):
+        return doc
+
+    out = {k: v for k, v in doc.items() if k not in ("_id", "embedding", "embedding_updated_at")}
+
+    if brief:
+        out = {k: out[k] for k in _BRIEF_LESSON_KEEP if k in out}
+
+    out = strip_empty_fields(out)
+
+    if iso_dates:
+        for field in _TIMESTAMP_FIELDS:
+            if field in out:
+                iso = _iso_from_epoch(out[field])
+                if iso:
+                    out[f"{field}_iso"] = iso
+    return out
+
+
+def compact_lesson_list(docs: list, brief: bool = False, iso_dates: bool = False) -> list:
+    """Apply compact_lesson to each item in a list."""
+    return [compact_lesson(d, brief=brief, iso_dates=iso_dates) for d in docs if d]
+
+
 # Response-diet thresholds for search results (chars, roughly 4 chars/token)
 _NOTES_SINGLE_HIT_BUDGET = 4000   # single hit: truncate notes past this
 _NOTES_TOTAL_BUDGET = 2000        # multi hit: brief the whole set past this

@@ -6,9 +6,6 @@ import subprocess
 from datetime import datetime
 from datetime import timezone
 from typing import Any
-from typing import Any
-from typing import Dict
-from typing import List
 from fastmcp import Context
 from bson import ObjectId
 
@@ -26,141 +23,41 @@ class MongoJSONEncoder(json.JSONEncoder):
         return super().default(obj)
 
 
-def create_response(success: bool, data: Any = None, message: str = None, return_context: bool = True) -> str:
-    """Create a standardized JSON response with context-rich but efficient information for AI agents"""
-    # Determine entity type early to check if we should put ID first
-    entity_type = None
+def create_response(success: bool, data: Any = None, message: str = None) -> str:
+    """
+    Create a standardized JSON response.
+
+    Shape: {<entity>_id?, success, data?, message?}
+
+    The old `agent_context` block ({"type": "todo", "entity": "todo:<uuid>"}) was
+    dropped — it restated the key name and repeated the uuid already present in
+    both the top-level id and data, costing ~70 chars on every create/update for
+    information the caller already had. No client ever read it.
+    """
     entity_id = None
+    entity_type = None
 
-    if data is not None and isinstance(data, dict):
+    if isinstance(data, dict):
         if "todo_id" in data:
-            entity_type = "todo"
-            entity_id = data["todo_id"]
+            entity_type, entity_id = "todo", data["todo_id"]
         elif "lesson_id" in data:
-            entity_type = "lesson"
-            entity_id = data["lesson_id"]
+            entity_type, entity_id = "lesson", data["lesson_id"]
 
-    # Build response with ID first when success=true and we have an entity ID
     response = {}
 
+    # ID first when we have one — easy to spot and copy in the UI
     if success and entity_id:
-        # Put ID first for easy copying in UI
         response[f"{entity_type}_id"] = entity_id
-        response["success"] = success
-    else:
-        response["success"] = success
 
-    # Only add agent_context when it provides value
+    response["success"] = success
+
     if data is not None:
-        # Only add minimal agent_context with actually useful information
-        if return_context and (entity_type or _should_add_context(data)):
-            response["agent_context"] = {
-                "type": _infer_result_type(data)
-            }
-
-            # Only add these fields if they exist and have value
-            if entity_type:
-                response["agent_context"]["entity"] = f"{entity_type}:{entity_id}"
-
-            # Only add collection metadata for collections
-            if isinstance(data, dict) and "items" in data and isinstance(data["items"], list):
-                items_count = len(data["items"])
-                if items_count > 0:
-                    collection_type = _infer_collection_type(data["items"])
-                    if collection_type != "generic_collection":
-                        response["agent_context"]["collection"] = f"{collection_type}:{items_count}"
-
         response["data"] = data
 
     if message is not None:
         response["message"] = message
 
     return json.dumps(response, cls=MongoJSONEncoder)
-
-
-def _get_caller_function_name() -> str:
-    """Get the name of the calling function for context"""
-    import inspect
-    stack = inspect.stack()
-    # Look for the first frame that's not this function or create_response
-    for frame in stack[1:]:
-        if frame.function not in ["create_response", "_get_caller_function_name"]:
-            return frame.function
-    return "unknown_function"
-
-
-def _infer_result_type(data: Any) -> str:
-    """Infer the type of result for better AI understanding"""
-    if data is None:
-        return "null"
-
-    if isinstance(data, dict):
-        # Use a more compact approach for common types
-        for key, type_name in [
-            ("todo_id", "todo"),
-            ("lesson_id", "lesson"),
-            ("suggested_deadline", "deadline"),
-            ("time_slot", "timeslot")
-        ]:
-            if key in data:
-                return type_name
-
-        # Collection detection
-        if "items" in data and isinstance(data["items"], list):
-            item_count = len(data["items"])
-            if item_count == 0:
-                return "empty_collection"
-
-            # Sample first item for type inference
-            sample = data["items"][0]
-            if "description" in sample:
-                return "todos"
-            elif "topic" in sample:
-                return "lessons"
-            return "collection"
-
-        return "object"
-
-    # Simple types
-    if isinstance(data, list):
-        return "list"
-    if isinstance(data, (int, float)):
-        return "number"
-    if isinstance(data, bool):
-        return "bool"
-
-    # Default to string representation of type
-    return type(data).__name__
-
-
-def _infer_collection_type(items: List[Dict]) -> str:
-    """Infer the type of collection based on its items"""
-    if not items:
-        return "empty"
-
-    # Use first item for inference, with quick checks for common types
-    sample = items[0]
-    if "description" in sample:
-        return "todos"
-    if "topic" in sample:
-        return "lessons"
-    if "message" in sample:
-        return "messages"
-
-    # For unknown types, return a generic label
-    return "items"
-
-
-def _should_add_context(data: Any) -> bool:
-    """Determine if we should add agent_context based on data type"""
-    if isinstance(data, dict):
-        # Check if this is a collection, suggestion, or has action hints
-        if ("items" in data and isinstance(data["items"], list) and len(data["items"]) > 0) or \
-           "suggested_deadline" in data or \
-           "time_slot" in data or \
-           "possible_next_actions" in data:
-            return True
-    return False
 
 
 async def mqtt_publish(topic: str, message: str, ctx: Context = None, retain: bool = False) -> bool:

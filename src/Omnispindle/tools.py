@@ -25,6 +25,8 @@ from . import embeddings
 from .response_shaping import (
     STOP_WORDS,
     apply_response_diet,
+    compact_lesson,
+    compact_lesson_list,
     compact_todo,
     compact_todo_list,
     meaningful_tokens,
@@ -35,6 +37,11 @@ from .response_shaping import (
 # them (tools.py imports api_tools, so they can't live here). Alias kept for
 # in-module callers.
 _STOP_WORDS = STOP_WORDS
+
+# Projection for lesson reads: keep the 768-float embedding out of the wire.
+# compact_lesson drops it from the payload too, but projecting at the DB read
+# avoids paying for it in bandwidth on every list/search.
+_LESSON_NO_VECTOR = {"embedding": 0, "embedding_updated_at": 0}
 
 # Load environment variables
 load_dotenv()
@@ -1445,11 +1452,9 @@ async def get_lesson(lesson_id: str, ctx: Optional[Context] = None) -> str:
         collections = db_connection.get_collections(ctx.user if ctx else None)
         lessons_collection = collections['lessons']
 
-        lesson = lessons_collection.find_one({"id": lesson_id})
+        lesson = lessons_collection.find_one({"id": lesson_id}, _LESSON_NO_VECTOR)
         if lesson:
-            if '_id' in lesson:
-                del lesson['_id']
-            return json.dumps(strip_empty_fields(lesson))
+            return json.dumps(compact_lesson(lesson, iso_dates=True))
         else:
             return create_response(False, message=f"Lesson with ID {lesson_id} not found.")
     except Exception as e:
@@ -1857,8 +1862,8 @@ async def grep_lessons(pattern: str, limit: int = 20, ctx: Optional[Context] = N
         search_query = _build_tokenized_search_query(pattern, ["topic", "lesson_learned"])
         logger.debug(f"MongoDB query: {search_query}")
 
-        cursor = lessons_collection.find(search_query).limit(limit)
-        results = list(cursor)
+        cursor = lessons_collection.find(search_query, _LESSON_NO_VECTOR).limit(limit)
+        results = compact_lesson_list(list(cursor))
 
         logger.info(f"grep_lessons returned {len(results)} results for pattern '{pattern}'")
         return json.dumps({"items": results, "count": len(results)}, cls=MongoJSONEncoder)
@@ -2098,13 +2103,11 @@ async def list_lessons(limit: int = 100, brief: bool = False, ctx: Optional[Cont
         db_name = lessons_collection.database.name
         logger.info(f"list_lessons called by {user_id}: limit={limit}, brief={brief}, db={db_name}")
 
-        cursor = lessons_collection.find().sort("created_at", -1).limit(limit)
-        results = list(cursor)
+        cursor = lessons_collection.find({}, _LESSON_NO_VECTOR).sort("created_at", -1).limit(limit)
+        results = compact_lesson_list(list(cursor), brief=brief)
 
         logger.info(f"list_lessons returned {len(results)} total lessons")
 
-        if brief:
-            results = [{"id": r["id"], "topic": r["topic"], "language": r["language"]} for r in results]
         return json.dumps({"items": results, "count": len(results)}, cls=MongoJSONEncoder)
     except Exception as e:
         logger.error(f"Failed to list lessons: {str(e)}")
@@ -2134,11 +2137,10 @@ async def search_lessons(query: str, fields: Optional[list] = None, limit: int =
         # Pass 1 — strict AND
         strict_query = _build_tokenized_search_query(query, fields)
         logger.debug(f"search_lessons pass1 query: {strict_query}")
-        results = list(lessons_collection.find(strict_query).limit(limit))
+        results = list(lessons_collection.find(strict_query, _LESSON_NO_VECTOR).limit(limit))
         if results:
             logger.info(f"search_lessons strict returned {len(results)} results")
-            if brief:
-                results = [{"id": r["id"], "topic": r["topic"], "language": r["language"]} for r in results]
+            results = compact_lesson_list(results, brief=brief)
             return json.dumps({"items": results, "count": len(results), "search_mode": "strict"}, cls=MongoJSONEncoder)
 
         # Pass 2 — OR fallback, ranked by token match density
@@ -2154,7 +2156,7 @@ async def search_lessons(query: str, fields: Optional[list] = None, limit: int =
             for field in fields
         ]}
         logger.debug(f"search_lessons pass2 OR query: {or_query}")
-        candidates = list(lessons_collection.find(or_query).limit(limit * 4))
+        candidates = list(lessons_collection.find(or_query, _LESSON_NO_VECTOR).limit(limit * 4))
 
         tok_lower = [t.lower() for t in meaningful]
 
@@ -2166,8 +2168,7 @@ async def search_lessons(query: str, fields: Optional[list] = None, limit: int =
         results = candidates[:limit]
 
         logger.info(f"search_lessons fuzzy_or returned {len(results)} results for query '{query}'")
-        if brief:
-            results = [{"id": r["id"], "topic": r["topic"], "language": r["language"]} for r in results]
+        results = compact_lesson_list(results, brief=brief)
         return json.dumps({"items": results, "count": len(results), "search_mode": "fuzzy_or"}, cls=MongoJSONEncoder)
 
     except Exception as e:
