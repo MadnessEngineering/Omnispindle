@@ -95,12 +95,31 @@ _AI_NOISE_METADATA_KEYS = {"user_id", "user_email", "created_by_ai", "chat_conte
 # Keys kept in compact metadata when brief mode is on
 _BRIEF_METADATA_KEEP = {"blockers", "files", "complexity"}
 
+# Epoch-second fields worth mirroring as human/AI-readable ISO on single-item reads
+_TIMESTAMP_FIELDS = ("created_at", "updated_at", "completed_at")
 
-def compact_todo(doc: dict, brief: bool = False) -> dict:
+
+def _iso_from_epoch(value) -> Optional[str]:
+    """Render an epoch-seconds value as an ISO-8601 UTC string, or None if not epoch-like."""
+    if isinstance(value, datetime):
+        return value.isoformat()
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        try:
+            return datetime.fromtimestamp(value, tz=timezone.utc).isoformat().replace("+00:00", "Z")
+        except (ValueError, OSError, OverflowError):
+            return None
+    return None
+
+
+def compact_todo(doc: dict, brief: bool = False, iso_dates: bool = False) -> dict:
     """
     Reduce todo doc to MCP-friendly shape. Always: drop _id, drop per-doc source,
-    strip noise metadata keys, dedupe metadata.tags against top-level tags.
+    drop empty fields (ticket: "", notes: "", [] and {}), strip noise metadata keys,
+    dedupe metadata.tags against top-level tags.
     If brief=True: drop notes and reduce metadata to a small whitelist.
+    If iso_dates=True: add *_iso mirrors of the epoch timestamps. Off by default —
+    on a list response those extra fields multiply by N, so only single-item reads
+    pay for readability.
 
     See compact_todo_list() for list-level handling (envelope source).
     """
@@ -128,12 +147,23 @@ def compact_todo(doc: dict, brief: bool = False) -> dict:
     if brief:
         out.pop("notes", None)
         out.pop("updated_at", None)
+
+    # Empty fields carry no information but cost tokens on every item (ticket: "",
+    # notes: "", tags: []). Applied last so brief/metadata handling runs first.
+    out = strip_empty_fields(out)
+
+    if iso_dates:
+        for field in _TIMESTAMP_FIELDS:
+            if field in out:
+                iso = _iso_from_epoch(out[field])
+                if iso:
+                    out[f"{field}_iso"] = iso
     return out
 
 
-def compact_todo_list(docs: list, brief: bool = False) -> list:
+def compact_todo_list(docs: list, brief: bool = False, iso_dates: bool = False) -> list:
     """Apply compact_todo to each item in a list."""
-    return [compact_todo(d, brief=brief) for d in docs if d]
+    return [compact_todo(d, brief=brief, iso_dates=iso_dates) for d in docs if d]
 
 
 # Response-diet thresholds for search results (chars, roughly 4 chars/token)
@@ -1003,7 +1033,8 @@ def _query_todo_graph(todos_collection, root_id: str, max_hops: int = 2) -> str:
 
         frontier = next_frontier
 
-    nodes = list(visited.values())
+    # Compact the nodes — raw docs here still carried _id and the 768-float embedding
+    nodes = compact_todo_list(list(visited.values()), brief=True)
     # Deduplicate edges
     seen_edges = set()
     unique_edges = []
@@ -1358,9 +1389,9 @@ async def get_todo(todo_id: str, ctx: Optional[Context] = None) -> str:
 
             todo = user_todos_collection.find_one({"id": todo_id})
             if todo:
-                compacted = compact_todo(todo)
+                compacted = compact_todo(todo, iso_dates=True)
                 compacted['source'] = 'user'
-                return json.dumps(strip_empty_fields(compacted))
+                return json.dumps(compacted)
 
         # If not found in user database (or no user database), try shared database
         shared_collections = db_connection.get_collections(None)  # None = shared database
@@ -1370,9 +1401,9 @@ async def get_todo(todo_id: str, ctx: Optional[Context] = None) -> str:
 
         todo = shared_todos_collection.find_one({"id": todo_id})
         if todo:
-            compacted = compact_todo(todo)
+            compacted = compact_todo(todo, iso_dates=True)
             compacted['source'] = 'shared'
-            return json.dumps(strip_empty_fields(compacted))
+            return json.dumps(compacted)
 
         # Not found in any database
         searched_locations = " and ".join(searched_databases)

@@ -1,5 +1,6 @@
 """Tests for compact_todo helper — MCP response token efficiency."""
 import json
+import re
 
 from Omnispindle.tools import apply_response_diet, compact_todo, compact_todo_list
 
@@ -107,6 +108,50 @@ def test_metadata_removed_when_empty_after_strip():
 def test_non_dict_passthrough():
     assert compact_todo("not a dict") == "not a dict"
     assert compact_todo(None) is None
+
+
+# --- empty-field stripping -------------------------------------------------
+
+def test_compact_drops_empty_fields():
+    doc = {"id": "x", "description": "test", "ticket": "", "notes": "",
+           "tags": [], "metadata": {}, "target": "user"}
+    out = compact_todo(doc)
+    for empty_key in ("ticket", "notes", "tags", "metadata"):
+        assert empty_key not in out, f"{empty_key} should be stripped"
+    assert out["target"] == "user"
+
+
+def test_compact_keeps_falsy_but_meaningful_values():
+    doc = {"id": "x", "description": "test", "metadata": {"archived": False, "hops": 0}}
+    out = compact_todo(doc)
+    assert out["metadata"] == {"archived": False, "hops": 0}
+
+
+# --- iso_dates -------------------------------------------------------------
+
+def test_iso_dates_off_by_default():
+    out = compact_todo(SAMPLE_TODO)
+    assert "created_at_iso" not in out
+    assert out["created_at"] == SAMPLE_TODO["created_at"]
+
+
+def test_iso_dates_mirrors_epoch_without_replacing_it():
+    out = compact_todo(SAMPLE_TODO, iso_dates=True)
+    # epoch preserved so `since`-style change detection keeps working
+    assert out["created_at"] == SAMPLE_TODO["created_at"]
+    assert re.match(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$", out["created_at_iso"])
+    assert "updated_at_iso" in out
+
+
+def test_iso_dates_skips_non_epoch_values():
+    doc = {"id": "x", "description": "d", "created_at": "not-a-timestamp"}
+    out = compact_todo(doc, iso_dates=True)
+    assert "created_at_iso" not in out
+
+
+def test_compact_todo_list_passes_iso_flag():
+    out = compact_todo_list([SAMPLE_TODO], iso_dates=True)
+    assert "created_at_iso" in out[0]
 
 
 # --- apply_response_diet: search_todos auto-sizing -------------------------
