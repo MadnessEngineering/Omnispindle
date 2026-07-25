@@ -1,7 +1,7 @@
 """Tests for compact_todo helper — MCP response token efficiency."""
 import json
 
-from Omnispindle.tools import compact_todo, compact_todo_list
+from Omnispindle.tools import apply_response_diet, compact_todo, compact_todo_list
 
 
 SAMPLE_TODO = {
@@ -107,3 +107,43 @@ def test_metadata_removed_when_empty_after_strip():
 def test_non_dict_passthrough():
     assert compact_todo("not a dict") == "not a dict"
     assert compact_todo(None) is None
+
+
+# --- apply_response_diet: search_todos auto-sizing -------------------------
+
+def _todo(i, notes_len):
+    return {"id": f"id-{i}", "description": "d", "notes": "x" * notes_len,
+            "metadata": {"district": "core", "files": ["a.py"]}}
+
+
+def test_diet_multi_hit_fat_notes_goes_brief():
+    items, diet = apply_response_diet([_todo(i, 900) for i in range(4)])
+    assert diet == "brief"
+    assert all("notes" not in i for i in items)
+    # brief metadata whitelist applied too
+    assert all("district" not in i.get("metadata", {}) for i in items)
+
+
+def test_diet_multi_hit_thin_notes_stays_full():
+    items, diet = apply_response_diet([_todo(i, 20) for i in range(3)])
+    assert diet == "full"
+    assert all("notes" in i for i in items)
+
+
+def test_diet_single_hit_keeps_notes():
+    items, diet = apply_response_diet([_todo(0, 3000)])
+    assert diet == "full"
+    assert len(items[0]["notes"]) == 3000
+
+
+def test_diet_single_hit_oversized_truncates_with_pointer():
+    items, diet = apply_response_diet([_todo(0, 9000)])
+    assert diet == "truncated"
+    notes = items[0]["notes"]
+    assert len(notes) < 9000
+    assert "9000 chars total" in notes and "get_todo('id-0')" in notes
+
+
+def test_diet_empty_and_missing_notes():
+    assert apply_response_diet([]) == ([], "full")
+    assert apply_response_diet([{"id": "a"}, {"id": "b"}])[1] == "full"

@@ -198,7 +198,11 @@ Supports regex patterns and case-insensitive search.
 
 Special formats:
 - "project:ProjectName" - Search by specific project
-- Regular text searches across description and metadata fields"""
+- Regular text searches across description and metadata fields
+
+Response size: brief is auto by default — multi-hit sets drop notes once the
+combined notes get fat, a single hit keeps its notes (truncated if oversized).
+Response reports diet: 'full'|'brief'|'truncated'. Pass brief=true/false to force."""
     },
     
     "delete_todo": {

@@ -135,6 +135,44 @@ def compact_todo_list(docs: list, brief: bool = False) -> list:
     """Apply compact_todo to each item in a list."""
     return [compact_todo(d, brief=brief) for d in docs if d]
 
+
+# Response-diet thresholds for search results (chars, roughly 4 chars/token)
+_NOTES_SINGLE_HIT_BUDGET = 4000   # single hit: truncate notes past this
+_NOTES_TOTAL_BUDGET = 2000        # multi hit: brief the whole set past this
+
+
+def apply_response_diet(items: list) -> tuple:
+    """
+    Auto-size a search result set so a fat-notes corpus can't blow up context.
+
+    Multi-hit  -> brief every item (notes dropped) once total notes exceed
+                  _NOTES_TOTAL_BUDGET; small sets pass through whole.
+    Single hit -> keep notes, truncated at _NOTES_SINGLE_HIT_BUDGET with a
+                  pointer to get_todo for the rest.
+
+    Returns (items, diet) where diet is 'full' | 'brief' | 'truncated'.
+    """
+    if not items:
+        return items, "full"
+
+    total_notes = sum(len(i.get("notes") or "") for i in items if isinstance(i, dict))
+
+    if len(items) > 1:
+        if total_notes > _NOTES_TOTAL_BUDGET:
+            return compact_todo_list(items, brief=True), "brief"
+        return items, "full"
+
+    item = items[0]
+    if isinstance(item, dict) and total_notes > _NOTES_SINGLE_HIT_BUDGET:
+        item = dict(item)
+        notes = item["notes"]
+        item["notes"] = (
+            notes[:_NOTES_SINGLE_HIT_BUDGET]
+            + f"… [truncated — {len(notes)} chars total, get_todo('{item.get('id', '')}') for full]"
+        )
+        return [item], "truncated"
+    return items, "full"
+
 # Helper function for deep merging metadata
 def deep_merge_metadata(existing: dict, updates: dict) -> dict:
     """
@@ -1597,7 +1635,7 @@ async def delete_lesson(lesson_id: str, ctx: Optional[Context] = None) -> str:
         logger.error(f"Failed to delete lesson: {str(e)}")
         return create_response(False, message=str(e))
 
-async def search_todos(query: str, fields: Optional[list] = None, limit: int = 100, brief: bool = False, ctx: Optional[Context] = None) -> str:
+async def search_todos(query: str, fields: Optional[list] = None, limit: int = 20, brief: Optional[bool] = None, ctx: Optional[Context] = None) -> str:
     """
     Search todos with two-pass fuzzy matching.
 
@@ -1606,23 +1644,36 @@ async def search_todos(query: str, fields: Optional[list] = None, limit: int = 1
                      appear in description+project. Fires only when pass 1 returns
                      nothing — avoids flooding precise queries with noise.
 
-    search_mode in response: 'strict' | 'fuzzy_or' so callers can tell which fired.
+    brief=None (default) auto-sizes the response: multi-hit sets with fat notes
+    come back brief, a single hit keeps its notes (truncated if oversized). Pass
+    brief=True/False to force. Response carries search_mode ('strict'|'fuzzy_or')
+    and diet ('full'|'brief'|'truncated').
     """
     if fields is None:
         fields = ["description", "project"]
 
+    auto = brief is None
+    fetch_brief = False if auto else brief
+
     user_id = ctx.user.get('sub') if ctx and ctx.user else 'anonymous'
-    logger.info(f"search_todos: user={user_id} query='{query}' fields={fields} limit={limit}")
+    logger.info(f"search_todos: user={user_id} query='{query}' fields={fields} limit={limit} brief={brief}")
+
+    def _finish(data: dict, mode: str) -> str:
+        if auto:
+            data['items'], data['diet'] = apply_response_diet(data.get('items') or [])
+        else:
+            data['diet'] = 'brief' if fetch_brief else 'full'
+        data['search_mode'] = mode
+        return json.dumps(data, cls=MongoJSONEncoder)
 
     # Pass 1 — strict AND
     strict_query = _build_tokenized_search_query(query, fields)
-    result = await query_todos(filter=strict_query, limit=limit, brief=brief, ctx=ctx)
+    result = await query_todos(filter=strict_query, limit=limit, brief=fetch_brief, ctx=ctx)
 
     try:
         data = json.loads(result)
         if data.get('items'):
-            data['search_mode'] = 'strict'
-            return json.dumps(data, cls=MongoJSONEncoder)
+            return _finish(data, 'strict')
     except Exception:
         return result
 
@@ -1640,7 +1691,7 @@ async def search_todos(query: str, fields: Optional[list] = None, limit: int = 1
         for tok in escaped for field in fields
     ]}
 
-    fallback = await query_todos(filter=or_query, limit=min(limit * 4, 400), brief=brief, ctx=ctx)
+    fallback = await query_todos(filter=or_query, limit=min(limit * 4, 400), brief=fetch_brief, ctx=ctx)
 
     try:
         fb = json.loads(fallback)
@@ -1656,12 +1707,11 @@ async def search_todos(query: str, fields: Optional[list] = None, limit: int = 1
 
         ranked = sorted(candidates, key=match_score, reverse=True)[:limit]
         logger.info(f"search_todos fuzzy fallback: {len(ranked)} results for '{query}'")
-        return json.dumps({
+        return _finish({
             "items": ranked,
             "count": len(ranked),
             "source": fb.get('source'),
-            "search_mode": "fuzzy_or"
-        }, cls=MongoJSONEncoder)
+        }, "fuzzy_or")
     except Exception:
         return fallback
 

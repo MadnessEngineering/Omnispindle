@@ -16,6 +16,21 @@ from .documentation_manager import get_tool_doc
 logger = logging.getLogger(__name__)
 
 
+def _as_text(result: Any) -> str:
+    """
+    Serialize a tool result for MCP text content exactly once.
+
+    Every tool in tools.py already returns a JSON string (via create_response or
+    json.dumps). Running json.dumps over that string again re-encoded it as a JSON
+    *string literal* — every quote escaped to \\" — which cost ~10-15% extra tokens
+    and forced clients to parse twice. Strings pass through untouched; anything else
+    is serialized here. Matches FastMCP's own stdio behaviour (_convert_to_content).
+    """
+    if isinstance(result, str):
+        return result
+    return json.dumps(result, default=str)
+
+
 # Centralized tool schemas - single source of truth for all MCP tools
 TOOL_SCHEMAS = {
     "add_todo": {
@@ -115,14 +130,14 @@ TOOL_SCHEMAS = {
     },
     "search_todos": {
         "name": "search_todos",
-        "description": "Text search todos. Two-pass: strict AND-match first; fuzzy OR ranked by token density if empty. Response includes search_mode: 'strict'|'fuzzy_or'.",
+        "description": "Text search todos. Two-pass: strict AND-match first; fuzzy OR ranked by token density if empty. Response includes search_mode: 'strict'|'fuzzy_or' and diet: 'full'|'brief'|'truncated'.",
         "inputSchema": {
             "type": "object",
             "properties": {
                 "query": {"type": "string", "description": "Search text. Tokenized regex across description+project."},
-                "limit": {"type": "number", "description": "Max results (default: 100)"},
+                "limit": {"type": "number", "description": "Max results (default: 20)"},
                 "fields": {"type": "array", "description": "Fields to search (default: description, project)"},
-                "brief": {"type": "boolean", "description": "Strip notes + non-essential metadata (default: false)"}
+                "brief": {"type": "boolean", "description": "Force strip notes + non-essential metadata. Omit for auto: multi-hit sets go brief when notes are fat, single hit keeps notes."}
             },
             "required": ["query"]
         }
@@ -756,7 +771,7 @@ async def mcp_handler(request: Request, get_current_user: Callable[[], Coroutine
                 return JSONResponse(content={
                     "jsonrpc": "2.0",
                     "id": request_id,
-                    "result": {"content": [{"type": "text", "text": json.dumps(result, default=str)}]}
+                    "result": {"content": [{"type": "text", "text": _as_text(result)}]}
                 })
 
             except Exception as tool_error:

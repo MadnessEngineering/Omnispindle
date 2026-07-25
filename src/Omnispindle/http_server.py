@@ -267,10 +267,10 @@ if "delete_todo" in selected_tools:
 
 if "search_todos" in selected_tools:
     @mcp.tool()
-    async def search_todos(query: str, limit: int = 100, user_ctx: Optional[Dict[str, Any]] = None, ctx: MCPContext = None):
+    async def search_todos(query: str, limit: int = 20, user_ctx: Optional[Dict[str, Any]] = None, ctx: MCPContext = None):
         """Text search task content. Returns matching list. Use when ID unknown."""
         auth_ctx = await get_authenticated_context_from_mcp(ctx, user_ctx)
-        return await tools.search_todos(query, limit, auth_ctx)
+        return await tools.search_todos(query, limit=limit, ctx=auth_ctx)
 
 # ADDED: Lesson management tools
 if "add_lesson" in selected_tools:
