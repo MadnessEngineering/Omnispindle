@@ -277,13 +277,14 @@ async def list_todos_by_status(status: str, limit: int = 100, ctx: Optional[Cont
         ctx=ctx
     )
 
-async def search_todos(query: str, fields: Optional[list] = None, limit: int = 100, ctx: Optional[Context] = None) -> str:
+async def search_todos(query: str, fields: Optional[list] = None, limit: int = 20,
+                       brief: Optional[bool] = None, ctx: Optional[Context] = None) -> str:
     """Search todos using hybrid mode"""
     return await _execute_with_fallback(
         "search_todos",
         api_tools.search_todos,
         local_tools.search_todos,
-        query, fields, limit,
+        query, fields, limit, brief,
         ctx=ctx
     )
 

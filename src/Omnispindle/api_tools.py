@@ -12,19 +12,15 @@ from datetime import datetime, timezone
 from .api_client import MadnessAPIClient, APIResponse, get_default_client, get_cached_client
 from .context import Context
 from .utils import create_response
+from .response_shaping import (
+    apply_response_diet,
+    compact_todo_list,
+    meaningful_tokens,
+    strip_empty_fields,
+)
 from .schemas.todo_metadata_schema import normalize_priority
 
 logger = logging.getLogger(__name__)
-
-# Helper function to strip empty fields to save tokens
-def strip_empty_fields(obj):
-    """Recursively remove empty fields (None, empty strings, empty lists, empty dicts)"""
-    if isinstance(obj, dict):
-        return {k: strip_empty_fields(v) for k, v in obj.items()
-                if v not in (None, "", [], {})}
-    elif isinstance(obj, list):
-        return [strip_empty_fields(item) for item in obj if item not in (None, "", [], {})]
-    return obj
 
 # Project validation - will be fetched from API
 FALLBACK_VALID_PROJECTS = [
@@ -328,49 +324,78 @@ async def list_todos_by_status(status: str, limit: int = 100, ctx: Optional[Cont
     
     return await query_todos(filter={"status": status.lower()}, limit=limit, ctx=ctx)
 
-async def search_todos(query: str, fields: Optional[list] = None, limit: int = 100, ctx: Optional[Context] = None) -> str:
+async def search_todos(query: str, fields: Optional[list] = None, limit: int = 20,
+                       brief: Optional[bool] = None, ctx: Optional[Context] = None) -> str:
     """
     Search todos with text search capabilities.
-    For API-based search, we'll use the general query endpoint for now.
+
+    The API has no text-search endpoint yet, so this pulls a candidate pool and
+    filters client-side, mirroring the local implementation's two-pass shape:
+    strict AND-match on meaningful tokens first, fuzzy OR ranked by token
+    density only when strict comes back empty.
+
+    brief=None (default) auto-sizes the response — see apply_response_diet.
     """
     try:
         auth_token, api_key = _get_auth_from_context(ctx)
-        
-        # For now, we'll fetch all todos and filter client-side
-        # In future, the API should support text search parameters
+
         client = await get_cached_client(auth_token=auth_token, api_key=api_key)
-        api_response = await client.get_todos(limit=limit)
-        
+        # Filtering happens client-side, so the fetch pool has to be much larger
+        # than `limit` or the search only ever sees the newest `limit` todos.
+        pool = min(max(limit * 10, 200), 500)
+        api_response = await client.get_todos(limit=pool)
+
         if not api_response.success:
             return create_response(False, message=api_response.error or "Failed to search todos")
-        
+
         # Extract todos from API response
         api_data = api_response.data
         if isinstance(api_data, dict) and 'todos' in api_data:
             todos_list = api_data['todos']
         else:
             todos_list = api_data if isinstance(api_data, list) else []
-        
-        # Client-side text search
+
         if fields is None:
             fields = ["description", "project"]
-        
-        filtered_todos = []
-        tokens = [t.lower() for t in query.split() if t.strip()]
 
-        for todo in todos_list:
-            # Each token must match in at least one field (AND between tokens)
-            if all(
-                any(
-                    token in str(todo.get(field, "")).lower()
-                    for field in fields
-                )
-                for token in tokens
-            ):
-                filtered_todos.append(_convert_api_todo_to_mcp_format(todo))
-        
-        return create_response(True, {"items": filtered_todos})
-        
+        tokens = [t.lower() for t in meaningful_tokens(query)]
+
+        def field_text(todo):
+            return " ".join(str(todo.get(f, "")) for f in fields).lower()
+
+        # Pass 1 — strict AND: every token must appear somewhere in the fields
+        matched = [t for t in todos_list if all(tok in field_text(t) for tok in tokens)]
+        search_mode = "strict"
+
+        # Pass 2 — fuzzy OR, ranked by how many tokens hit
+        if not matched and tokens:
+            scored = [(sum(1 for tok in tokens if tok in field_text(t)), t) for t in todos_list]
+            matched = [t for score, t in sorted(scored, key=lambda p: p[0], reverse=True) if score]
+            search_mode = "fuzzy_or"
+
+        # _convert_api_todo_to_mcp_format drops notes (it feeds list endpoints
+        # that have no brief control). Search carries them so results match the
+        # local implementation — the diet below is what keeps them in budget.
+        items = []
+        for raw in matched[:limit]:
+            item = _convert_api_todo_to_mcp_format(raw)
+            if raw.get("notes"):
+                item["notes"] = raw["notes"]
+            items.append(item)
+
+        if brief is None:
+            items, diet = apply_response_diet(items)
+        else:
+            items = compact_todo_list(items, brief=brief)
+            diet = "brief" if brief else "full"
+
+        return json.dumps({
+            "items": items,
+            "count": len(items),
+            "search_mode": search_mode,
+            "diet": diet,
+        })
+
     except Exception as e:
         logger.error(f"Failed to search todos via API: {str(e)}")
         return create_response(False, message=f"API error: {str(e)}")
