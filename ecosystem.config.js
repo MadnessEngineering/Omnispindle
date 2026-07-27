@@ -47,7 +47,11 @@ module.exports = {
         env_production: {
             NODE_ENV: 'production',
             OMNISPINDLE_MODE: process.env.OMNISPINDLE_MODE || 'hybrid',
-            OMNISPINDLE_TOOL_LOADOUT: process.env.OMNISPINDLE_TOOL_LOADOUT || 'full',
+            // Unset on purpose: mcp_handler defaults remote tools/list to 'basic'
+            // (~2.4k tokens vs ~7.5k for 'full') and clients widen themselves
+            // per-request via ?loadout= or X-Omnispindle-Loadout. Setting this here
+            // would pin every client to one loadout and override their choice.
+            OMNISPINDLE_TOOL_LOADOUT: process.env.OMNISPINDLE_TOOL_LOADOUT,
             MADNESS_AUTH_TOKEN: process.env.MADNESS_AUTH_TOKEN,
             MADNESS_API_URL: process.env.MADNESS_API_URL || 'https://madnessinteractive.cc/api',
             MQTT_HOST: 'localhost',
