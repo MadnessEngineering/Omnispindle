@@ -121,11 +121,6 @@ python -m twine upload dist/*
 - **Collections**: todos, lessons, explanations, todo_logs (when using local storage)
 - MQTT for real-time messaging and cross-system coordination
 
-**Dashboard (`Todomill_projectorium/`)**:
-- Node-RED based visual dashboard
-- Real-time updates via MQTT
-- JavaScript/HTML components in separate directories for version control
-
 ### MCP Tool Interface
 
 **CRITICAL**: When integrating with HTTP MCP endpoints (for Inventorium chat, etc.), see integration standards in Inventorium's `docs/MCP_INTEGRATION_GUIDE.md`
@@ -159,8 +154,12 @@ read kind, no exceptions beyond the one documented below.
   caller params always beat auto-sizing — that invariant holds across every shaping helper in
   `response_shaping.py`.
 
-Known violators, not yet converted (converting them needs a consumer audit first):
-`list_quests` returns `{success, data, message}` and `explain` returns `{success, message}`.
+All read tools now follow this. `list_quests` was the last list-shaped violator (it returned
+`{success, data: {quests, count}, message}` — a wrapper around a wrapper) and was converted
+after an audit found nobody parsing it: Inventorium's chat reaches quests over REST
+(`GET /api/quests`), not MCP. `explain` returns the bare explanation object on success; only
+its not-found path still uses `create_response(False, ...)`, which is the tolerated legacy
+error shape.
 
 The server exposes standardized MCP tools that AI agents can call:
 
@@ -381,8 +380,6 @@ OMNISPINDLE_MODE="api" python test_api_client.py
 **Testing**: Pytest-based test suite in `tests/` directory. Key guard: `tests/test_schema_consistency.py` validates that `mcp_handler.py` TOOL_SCHEMAS stays in sync with `tools.py` function signatures, all params have descriptions, and valid status values are consistent. Run after any tool signature changes.
 
 **Git Workflow**: Deployment handled through git hooks - commit when ready to deploy.
-
-**Node-RED Integration**: Dashboard components are extracted to separate files for version control, then imported into Node-RED editor.
 
 ### Tool Loadouts
 

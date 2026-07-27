@@ -3306,8 +3306,7 @@ async def list_quests(status: str = "active", project: str = "",
                 "updated_at": q.get("updated_at"),
             })
 
-        return create_response(True, {"quests": items, "count": len(items)},
-                               message=f"Found {len(items)} quests")
+        return json.dumps({"items": items, "count": len(items)}, cls=MongoJSONEncoder)
 
     except Exception as e:
         logger.error(f"Failed to list quests: {str(e)}")
