@@ -52,10 +52,20 @@ _BASE_LOADOUTS: Dict[str, List[str]] = {
     ],
 
     "basic": [
-        # Core CRUD + context + lesson lookup (10 tools)
+        # The default for remote HTTP clients. Read as "everything you want for a
+        # normal working session" — not "core CRUD". Deliberately excluded:
+        # sessions, agent journal, explain/add_explanation, point_out_obvious,
+        # bring_your_own, and the destructive deletes. Those are specialist tools;
+        # a client that needs them asks for 'full' or 'admin' per request.
+
+        # Todo CRUD (7 tools)
         "add_todo", "query_todos", "update_todo", "get_todo", "complete_todo",
-        "list_todos_by_status", "list_project_todos", "get_context_bundle",
-        "get_lesson", "search_lessons",
+        "list_todos_by_status", "list_project_todos",
+        # Finding things — search_todos and the RAG pair are normal operation,
+        # not extras. Working without them means re-deriving context by hand.
+        "search_todos", "get_context_bundle", "find_relevant", "preflight_rag",
+        # Lessons: read and write. Capturing a lesson is part of doing the work.
+        "add_lesson", "get_lesson", "search_lessons",
         # Spatial + dependency (2 tools)
         "query_todos_near", "link_todos",
         # Quest system — include so agents know epics exist (5 tools)
@@ -233,7 +243,7 @@ def get_loadout_info(loadout_name: str) -> Dict[str, any]:
     """
     loadout_descriptions = {
         "full": "All available tools (33 local, 31 remote after filtering)",
-        "basic": "Core CRUD + context + lesson lookup + quest system (15 tools)",
+        "basic": "Default for remote HTTP. Normal working session: todo CRUD + search + RAG (find_relevant, preflight_rag, get_context_bundle) + lessons read/write + spatial/dependency + quests (21 tools). No sessions, journal, explain, point_out_obvious, bring_your_own, or deletes.",
         "minimal": "Absolute minimum functionality (4 tools)",
         "lessons": "Knowledge management focus (8 tools)",
         "admin": "Administrative tools and session management (14 tools)",

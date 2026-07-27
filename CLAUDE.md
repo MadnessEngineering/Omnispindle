@@ -364,7 +364,7 @@ Omnispindle supports variable tool loadouts to reduce token usage for AI agents.
 
 **Available Loadouts**:
 - `full` (default for stdio) - All 38 tools available. **Remote HTTP defaults to `basic`** — see below.
-- `basic` - Core todo CRUD + context + quest system (15 tools): add_todo, query_todos, update_todo, get_todo, complete_todo, list_todos_by_status, list_project_todos, get_context_bundle, get_lesson, search_lessons, create_quest, check_quest, list_quests, link_quest, update_quest
+- `basic` - **Default for remote HTTP.** Everything wanted for a normal working session (21 tools): todo CRUD (add_todo, query_todos, update_todo, get_todo, complete_todo, list_todos_by_status, list_project_todos), finding things (search_todos, get_context_bundle, find_relevant, preflight_rag), lessons read+write (add_lesson, get_lesson, search_lessons), spatial/dependency (query_todos_near, link_todos), quests (create_quest, check_quest, list_quests, link_quest, update_quest). Deliberately excluded: session tools, agent journal, explain/add_explanation, point_out_obvious, bring_your_own, and all deletes — ask for `full` or `admin` per request when you need them.
 - `minimal` - Core functionality only (4 tools): add_todo, query_todos, get_todo, complete_todo
 - `lessons` - Knowledge management focus (8 tools): add_lesson, get_lesson, update_lesson, delete_lesson, regenerate_embedding, search_lessons, grep_lessons, list_lessons
 - `admin` - Administrative tools + sessions (16 tools): query_todos, update_todo, delete_todo, query_todo_logs, list_projects, explain, add_explanation + all session tools + agent journal
@@ -391,7 +391,8 @@ Headers work too: `X-Omnispindle-Loadout: refine`, `X-Omnispindle-Doc-Level: min
 Unknown values log a warning and fall back to the default rather than erroring.
 
 Approximate `tools/list` cost (remote mode, measured): `full`/full docs ~7.5k tokens,
-`basic`/basic ~2.4k, `refine`/basic ~2.0k, `agent_preflight`/basic ~0.9k, `minimal`/minimal ~0.6k.
+`basic`/basic ~3.0k, `basic`/minimal ~2.5k, `refine`/basic ~2.0k,
+`agent_preflight`/basic ~0.9k, `minimal`/minimal ~0.6k.
 
 Note: `tools/call` is **not** loadout-gated (only tier-gated). A narrow loadout shrinks
 discovery, not capability — a client that knows a tool name can still call it. That's
