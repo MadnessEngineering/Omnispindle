@@ -170,26 +170,104 @@ _NOTES_SINGLE_HIT_BUDGET = 4000   # single hit: truncate notes past this
 _NOTES_TOTAL_BUDGET = 2000        # multi hit: brief the whole set past this
 
 
-def apply_response_diet(items: list) -> tuple:
-    """
-    Auto-size a search result set so a fat-notes corpus can't blow up context.
+# Description budget for search hits (chars). Descriptions were 62% of a
+# search_todos payload — 10,732 of 17,306 chars on an 8-hit set — because a
+# search result shipped every hit's full description even though only the
+# matched span answers the query.
+_DESC_TOTAL_BUDGET = 2400   # combined description text before snipping
+_DESC_SNIPPET_MIN = 200     # a snippet below this says nothing useful
 
+
+def _without_coordinates(items: list) -> list:
+    """Drop coordinates from each item, top-level and under metadata.
+
+    Coordinates are a SwarmDesk rendering blob ({x, y, z, lastUpdated} floats);
+    a text search result has no use for them. Both spellings exist in the wild —
+    the MCP tools write metadata.coordinates, the dashboard writes a top-level
+    `coordinates` — and the top-level one is the common case (15 of 20 hits on a
+    measured search, 8% of the payload). query_todos_near still returns them;
+    that tool is the one asking a spatial question.
+    """
+    out = []
+    for item in items:
+        if not isinstance(item, dict):
+            out.append(item)
+            continue
+        md = item.get("metadata")
+        md_has = isinstance(md, dict) and "coordinates" in md
+        if "coordinates" not in item and not md_has:
+            out.append(item)
+            continue
+        item = {k: v for k, v in item.items() if k != "coordinates"}
+        if md_has:
+            md = {k: v for k, v in md.items() if k != "coordinates"}
+            if md:
+                item["metadata"] = md
+            else:
+                item.pop("metadata", None)
+        out.append(item)
+    return out
+
+
+def _snip_descriptions(items: list, query: Optional[str]) -> tuple:
+    """Cut oversized descriptions to a match-centred snippet. Returns (items, snipped)."""
+    total = sum(len(i.get("description") or "") for i in items if isinstance(i, dict))
+    if total <= _DESC_TOTAL_BUDGET:
+        return items, False
+
+    per_item = max(_DESC_SNIPPET_MIN, _DESC_TOTAL_BUDGET // len(items))
+    tokens = [t.lower() for t in meaningful_tokens(query)] if query else []
+
+    out, snipped = [], False
+    for item in items:
+        text = item.get("description") if isinstance(item, dict) else None
+        if not text or len(text) <= per_item:
+            out.append(item)
+            continue
+        item = dict(item)
+        item["description"] = (
+            _match_snippet(text, tokens, per_item)
+            + f" [snippet — {len(text)} chars total, get_todo('{item.get('id', '')}') for full]"
+        )
+        out.append(item)
+        snipped = True
+    return out, snipped
+
+
+def apply_response_diet(items: list, query: Optional[str] = None) -> tuple:
+    """
+    Auto-size a search result set so a fat corpus can't blow up context.
+
+    Always     -> metadata.coordinates dropped (see _without_coordinates).
     Multi-hit  -> brief every item (notes dropped) once total notes exceed
-                  _NOTES_TOTAL_BUDGET; small sets pass through whole.
+                  _NOTES_TOTAL_BUDGET; oversized descriptions then cut to a
+                  match-centred snippet once they exceed _DESC_TOTAL_BUDGET.
+                  Small sets pass through whole.
     Single hit -> keep notes, truncated at _NOTES_SINGLE_HIT_BUDGET with a
                   pointer to get_todo for the rest.
 
-    Returns (items, diet) where diet is 'full' | 'brief' | 'truncated'.
+    `query` centres the description snippet on the matched span, the same way
+    apply_lesson_diet windows lesson_learned.
+
+    Returns (items, diet) where diet is 'full' | 'brief' | 'truncated'. The label
+    reports the *text* treatment: 'brief' means notes were dropped (descriptions
+    may also be snipped), 'truncated' means text was cut but nothing dropped.
     """
     if not items:
         return items, "full"
 
+    items = _without_coordinates(items)
     total_notes = sum(len(i.get("notes") or "") for i in items if isinstance(i, dict))
 
     if len(items) > 1:
+        diet = "full"
         if total_notes > _NOTES_TOTAL_BUDGET:
-            return compact_todo_list(items, brief=True), "brief"
-        return items, "full"
+            items = compact_todo_list(items, brief=True)
+            diet = "brief"
+        items, snipped = _snip_descriptions(items, query)
+        if snipped and diet == "full":
+            diet = "truncated"
+        return items, diet
 
     item = items[0]
     if isinstance(item, dict) and total_notes > _NOTES_SINGLE_HIT_BUDGET:
@@ -276,3 +354,107 @@ def apply_lesson_diet(items: list, query: Optional[str] = None) -> tuple:
         )
         return [item], "truncated"
     return items, "full"
+
+
+# Fields a fat list read keeps. Everything else — notes, prose metadata
+# (current_state/target_state), timestamps, ticket, updated_by — is one
+# get_todo away, and on a 10-item read it was 58% of the bytes.
+_LIST_KEEP_FIELDS = ("id", "description", "project", "status", "priority", "tags")
+_LIST_METADATA_KEEP = ("tags", "files")
+_LIST_TOTAL_BUDGET = 4000   # trimmable chars across the set before slimming
+
+
+def _trimmable_chars(item: dict) -> int:
+    """Chars the list diet would remove from one item."""
+    total = len(item.get("notes") or "")
+    md = item.get("metadata")
+    if isinstance(md, dict):
+        total += sum(len(str(v)) for k, v in md.items() if k not in _LIST_METADATA_KEEP)
+    return total
+
+
+def apply_todo_list_diet(items: list) -> tuple:
+    """
+    Auto-size a plain list read (query_todos) — the browse-side sibling of
+    apply_response_diet.
+
+    A search hit is read once and discarded; a list read lands in the agent's
+    window and stays there, so this cuts harder: past _LIST_TOTAL_BUDGET of
+    trimmable text the set collapses to _LIST_KEEP_FIELDS plus metadata.tags /
+    metadata.files. Measured 12,909 chars for limit=10 (4,873 metadata + 2,712
+    notes) — ~345 tokens/todo where ~150 does the same job.
+
+    Single-item and small sets pass through whole; the caller reaches for
+    get_todo when it wants the rest.
+
+    Returns (items, diet) where diet is 'full' | 'brief'.
+    """
+    if not items or len(items) < 2:
+        return items, "full"
+
+    trimmable = sum(_trimmable_chars(i) for i in items if isinstance(i, dict))
+    if trimmable <= _LIST_TOTAL_BUDGET:
+        return items, "full"
+
+    out = []
+    for item in items:
+        if not isinstance(item, dict):
+            out.append(item)
+            continue
+        slim = {k: item[k] for k in _LIST_KEEP_FIELDS if k in item}
+        md = item.get("metadata")
+        if isinstance(md, dict):
+            kept = {k: md[k] for k in _LIST_METADATA_KEEP if md.get(k)}
+            if kept:
+                slim["metadata"] = kept
+        out.append(strip_empty_fields(slim))
+    return out, "brief"
+
+
+def compact_log_entry(entry: dict) -> dict:
+    """
+    Audit-log mirror of compact_todo. get_logs stringifies Mongo's ObjectId into
+    `_id` and hands the doc straight to the client — a 24-char field nothing
+    downstream can look up, plus whatever empty fields the write left behind.
+    """
+    if not isinstance(entry, dict):
+        return entry
+    return strip_empty_fields({k: v for k, v in entry.items() if k != "_id"})
+
+
+def compact_log_list(entries: list) -> list:
+    """Apply compact_log_entry to each item in a list."""
+    return [compact_log_entry(e) for e in entries if e]
+
+
+def compact_stats_facets(stats: dict) -> dict:
+    """
+    Reshape a Mongo $facet aggregation for MCP.
+
+    Every $group names its key `_id`, so a stats payload reads like a page of
+    document ids. Rename to `value`, drop the null buckets (todos with no tag,
+    no complexity, …), and flatten the single-element total_counts facet into a
+    `totals` object — a single-item read returns the bare object, not a
+    one-element list.
+    """
+    if not isinstance(stats, dict):
+        return stats
+
+    out = {}
+    for key, bucket in stats.items():
+        if key == "total_counts":
+            continue
+        if isinstance(bucket, list):
+            out[key] = [
+                {"value": b["_id"], **{k: v for k, v in b.items() if k != "_id"}}
+                for b in bucket
+                if isinstance(b, dict) and b.get("_id") is not None
+            ]
+        else:
+            out[key] = bucket
+
+    totals = stats.get("total_counts")
+    if isinstance(totals, list) and totals and isinstance(totals[0], dict):
+        out["totals"] = {k: v for k, v in totals[0].items() if k != "_id"}
+
+    return strip_empty_fields(out)

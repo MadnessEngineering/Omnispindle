@@ -216,14 +216,15 @@ async def add_todo(description: str, project: str, priority: str = "Medium",
         ctx=ctx
     )
 
-async def query_todos(filter: Optional[Dict[str, Any]] = None, projection: Optional[Dict[str, Any]] = None, 
-                     limit: int = 100, ctx: Optional[Context] = None) -> str:
-    """Query todos using hybrid mode"""
+async def query_todos(filter: Optional[Dict[str, Any]] = None, projection: Optional[Dict[str, Any]] = None,
+                     limit: int = 100, brief: Optional[bool] = None, ctx: Optional[Context] = None) -> str:
+    """Query todos using hybrid mode. brief=None auto-sizes — see apply_todo_list_diet."""
     return await _execute_with_fallback(
         "query_todos",
         api_tools.query_todos,
         local_tools.query_todos,
         filter, projection, limit,
+        brief=brief,
         ctx=ctx
     )
 

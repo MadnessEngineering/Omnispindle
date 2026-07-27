@@ -449,11 +449,12 @@ class OmniSpindleStdioServer:
                                 offset: Annotated[int, Field(description="Skip N results for pagination")] = 0,
                                 exclude_completed: Annotated[bool, Field(description="Exclude completed items")] = True,
                                 since: Annotated[Optional[int], Field(description="Unix timestamp — only return items modified after this time")] = None,
+                                brief: Annotated[Optional[bool], Field(description="Force strip notes + non-essential metadata. Omit for auto-sizing.")] = None,
                                 ctx: Annotated[Optional[str], Field(description="Additional context")] = None
                             ) -> str:
-                                """Query with MongoDB filters. Excludes completed items by default. Use offset for pagination."""
+                                """Query with MongoDB filters. Excludes completed items by default. Use offset for pagination. Auto-sizes response: fat multi-item sets come back slim."""
                                 context = _create_context()
-                                return await func(filter, projection, limit, offset, exclude_completed, since, ctx=context)
+                                return await func(filter, projection, limit, offset, exclude_completed, since, None, brief, ctx=context)
                             return query_todos
 
                         elif name == "update_todo":

@@ -14,6 +14,7 @@ from .context import Context
 from .utils import create_response
 from .response_shaping import (
     apply_response_diet,
+    apply_todo_list_diet,
     compact_todo_list,
     meaningful_tokens,
     strip_empty_fields,
@@ -160,10 +161,12 @@ async def add_todo(description: str, project: str, priority: str = "Medium",
         logger.error(f"Failed to create todo via API: {str(e)}")
         return create_response(False, message=f"API error: {str(e)}")
 
-async def query_todos(filter: Optional[Dict[str, Any]] = None, projection: Optional[Dict[str, Any]] = None, 
-                     limit: int = 100, ctx: Optional[Context] = None) -> str:
+async def query_todos(filter: Optional[Dict[str, Any]] = None, projection: Optional[Dict[str, Any]] = None,
+                     limit: int = 100, brief: Optional[bool] = None, ctx: Optional[Context] = None) -> str:
     """
     Query todos with flexible filtering options from API.
+
+    brief=None (default) auto-sizes the response — see apply_todo_list_diet.
     """
     try:
         auth_token, api_key = _get_auth_from_context(ctx)
@@ -202,7 +205,13 @@ async def query_todos(filter: Optional[Dict[str, Any]] = None, projection: Optio
         # Convert each todo to MCP format
         mcp_todos = [_convert_api_todo_to_mcp_format(todo) for todo in todos_list]
 
-        return json.dumps({"items": mcp_todos, "count": len(mcp_todos)})
+        if brief is None:
+            mcp_todos, diet = apply_todo_list_diet(mcp_todos)
+        else:
+            mcp_todos = compact_todo_list(mcp_todos, brief=brief)
+            diet = "brief" if brief else "full"
+
+        return json.dumps({"items": mcp_todos, "count": len(mcp_todos), "diet": diet})
         
     except Exception as e:
         logger.error(f"Failed to query todos via API: {str(e)}")
@@ -384,7 +393,7 @@ async def search_todos(query: str, fields: Optional[list] = None, limit: int = 2
             items.append(item)
 
         if brief is None:
-            items, diet = apply_response_diet(items)
+            items, diet = apply_response_diet(items, query)
         else:
             items = compact_todo_list(items, brief=brief)
             diet = "brief" if brief else "full"

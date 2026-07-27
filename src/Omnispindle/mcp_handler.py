@@ -60,7 +60,7 @@ TOOL_SCHEMAS = {
     },
     "query_todos": {
         "name": "query_todos",
-        "description": "Query todos with pagination. Excludes completed items by default. Use 'since' for change detection. Use 'graph_root' to return a dependency subgraph.",
+        "description": "Query todos with pagination. Excludes completed items by default. Use 'since' for change detection. Use 'graph_root' to return a dependency subgraph. Response includes diet: 'full'|'brief'.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -71,7 +71,7 @@ TOOL_SCHEMAS = {
                 "since": {"type": "number", "description": "Unix timestamp — only return items modified after this time"},
                 "projection": {"type": "object", "description": "{field: 1} to include, {field: 0} to exclude"},
                 "graph_root": {"type": "string", "description": "Todo ID or short prefix — returns dependency subgraph: {root, nodes, edges} traversing metadata.blockers up to 2 hops in both directions"},
-                "brief": {"type": "boolean", "description": "Strip notes + non-essential metadata for token efficiency (default: false)"}
+                "brief": {"type": "boolean", "description": "Force strip notes + prose metadata. Omit for auto: a fat multi-item set slims to id/description/project/status/priority/tags + metadata.tags/files."}
             }
         }
     },
@@ -145,7 +145,7 @@ TOOL_SCHEMAS = {
                 "query": {"type": "string", "description": "Search text. Tokenized regex across description+project."},
                 "limit": {"type": "number", "description": "Max results (default: 20)"},
                 "fields": {"type": "array", "description": "Fields to search (default: description, project)"},
-                "brief": {"type": "boolean", "description": "Force strip notes + non-essential metadata. Omit for auto: multi-hit sets go brief when notes are fat, single hit keeps notes."}
+                "brief": {"type": "boolean", "description": "Force strip notes + non-essential metadata. Omit for auto: multi-hit sets go brief when notes are fat, long descriptions become match-centred snippets, coordinates are dropped; single hit keeps notes."}
             },
             "required": ["query"]
         }

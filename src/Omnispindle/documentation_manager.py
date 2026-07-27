@@ -130,7 +130,12 @@ Supports MongoDB-style query syntax with filters like:
 - {"created_at": {"$gte": timestamp}} - Date range filters
 
 Projection parameter allows selecting specific fields to return.
-All queries are user-scoped for data isolation."""
+All queries are user-scoped for data isolation.
+
+brief=None (default) auto-sizes: once a multi-item set carries more than ~4000
+chars of notes + prose metadata, items collapse to id/description/project/
+status/priority/tags plus metadata.tags and metadata.files. Pass brief=false for
+the full payload, brief=true to force slim. Response carries diet: 'full'|'brief'."""
     },
     
     "update_todo": {
@@ -201,8 +206,11 @@ Special formats:
 - Regular text searches across description and metadata fields
 
 Response size: brief is auto by default — multi-hit sets drop notes once the
-combined notes get fat, a single hit keeps its notes (truncated if oversized).
-Response reports diet: 'full'|'brief'|'truncated'. Pass brief=true/false to force."""
+combined notes get fat and cut oversized descriptions to a match-centred
+snippet, a single hit keeps its notes (truncated if oversized). Auto mode also
+drops metadata.coordinates (a SwarmDesk rendering blob). Response reports diet:
+'full'|'brief'|'truncated'. Pass brief=true/false to force; brief=false returns
+the untouched payload."""
     },
     
     "delete_todo": {
@@ -627,6 +635,7 @@ PARAMETER_HINTS = {
 - projection (dict, optional): Fields to include/exclude
   Examples: {"description": 1, "status": 1}, {"metadata": 0}
 - limit (int, optional): Maximum number of results (default: 100)
+- brief (bool, optional): Omit to auto-size; false for the full payload
 - ctx (str, optional): Additional context for the query"""
     },
 

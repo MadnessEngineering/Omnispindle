@@ -218,10 +218,10 @@ if "add_todo" in selected_tools:
 
 if "query_todos" in selected_tools:
     @mcp.tool()
-    async def query_todos(filter: Optional[Dict[str, Any]] = None, projection: Optional[Dict[str, Any]] = None, limit: int = 100, offset: int = 0, exclude_completed: bool = True, user_ctx: Optional[Dict[str, Any]] = None, ctx: MCPContext = None):
-        """Search tasks via filter. Default excludes completed. Returns list. Use for bulk retrieval."""
+    async def query_todos(filter: Optional[Dict[str, Any]] = None, projection: Optional[Dict[str, Any]] = None, limit: int = 100, offset: int = 0, exclude_completed: bool = True, brief: Optional[bool] = None, user_ctx: Optional[Dict[str, Any]] = None, ctx: MCPContext = None):
+        """Search tasks via filter. Default excludes completed. Returns list. Use for bulk retrieval. Auto-sizes: fat multi-item sets come back slim; pass brief=false for the full payload."""
         auth_ctx = await get_authenticated_context_from_mcp(ctx, user_ctx)
-        return await tools.query_todos(filter, projection, limit, offset, exclude_completed, ctx=auth_ctx)
+        return await tools.query_todos(filter, projection, limit, offset, exclude_completed, brief=brief, ctx=auth_ctx)
 
 if "get_todo" in selected_tools:
     @mcp.tool()

@@ -136,6 +136,32 @@ python -m twine upload dist/*
 - **Context**: ALWAYS pass `ctx=Context(user=user)` to tools with Auth0 user
 - **Never** use `Context(user=None)` - this breaks user database routing!
 
+**Response Envelope Contract** (the rule new tools follow):
+
+Agents pay a re-learning tax for every tool that invents its own wrapper. One shape per
+read kind, no exceptions beyond the one documented below.
+
+| Read kind | Shape |
+|---|---|
+| List read | `{items, count, ...tool-specific extras}` — extras are things like `diet`, `search_mode`, `source` |
+| Single-item read | the bare object — no wrapper, no one-element list |
+| Mutation | a compact ack: `{id, ...changed fields}` |
+| Multi-bucket read | named buckets holding plain arrays |
+
+- **Multi-bucket is the documented exception.** `find_relevant` returns `{todos, lessons}` and
+  `get_context_bundle` returns `{bundle, summary}`. The buckets hold plain arrays — do NOT nest
+  an `{items, count}` envelope inside a bucket. One level, named by what's in it.
+- **`success` never appears on a successful response.** Failures travel on the JSON-RPC error
+  channel; a payload that has to say `success: true` is a payload the caller has to unwrap
+  before it can read anything. (`create_response(False, ...)` on the error path is the legacy
+  shape and is on its way out — don't add new callers.)
+- Auto-sizing tools report what they did via `diet` (`full` | `brief` | `truncated`). Explicit
+  caller params always beat auto-sizing — that invariant holds across every shaping helper in
+  `response_shaping.py`.
+
+Known violators, not yet converted (converting them needs a consumer audit first):
+`list_quests` returns `{success, data, message}` and `explain` returns `{success, message}`.
+
 The server exposes standardized MCP tools that AI agents can call:
 
 **Todo Management**:

@@ -26,8 +26,11 @@ from .response_shaping import (
     STOP_WORDS,
     apply_lesson_diet,
     apply_response_diet,
+    apply_todo_list_diet,
     compact_lesson,
     compact_lesson_list,
+    compact_log_list,
+    compact_stats_facets,
     compact_todo,
     compact_todo_list,
     meaningful_tokens,
@@ -43,6 +46,9 @@ _STOP_WORDS = STOP_WORDS
 # compact_lesson drops it from the payload too, but projecting at the DB read
 # avoids paying for it in bandwidth on every list/search.
 _LESSON_NO_VECTOR = {"embedding": 0, "embedding_updated_at": 0}
+
+# Same idea on the todo side, for read paths that don't pass a caller projection.
+_NO_VECTOR = {"embedding": 0, "embedding_updated_at": 0}
 
 # Load environment variables
 load_dotenv()
@@ -821,7 +827,7 @@ async def add_todo(description: str, project: str, priority: str = "Medium", tar
         logger.error(f"Failed to create todo: {str(e)}")
         return create_response(False, message=str(e))
 
-async def query_todos(filter: Optional[Dict[str, Any]] = None, projection: Optional[Dict[str, Any]] = None, limit: int = 100, offset: int = 0, exclude_completed: bool = True, since: Optional[int] = None, graph_root: Optional[str] = None, brief: bool = False, ctx: Optional[Context] = None) -> str:
+async def query_todos(filter: Optional[Dict[str, Any]] = None, projection: Optional[Dict[str, Any]] = None, limit: int = 100, offset: int = 0, exclude_completed: bool = True, since: Optional[int] = None, graph_root: Optional[str] = None, brief: Optional[bool] = None, ctx: Optional[Context] = None) -> str:
     """
     Query todos with flexible filtering options and pagination.
     - Authenticated users: returns their personal todos
@@ -833,6 +839,12 @@ async def query_todos(filter: Optional[Dict[str, Any]] = None, projection: Optio
         Returns nodes (todos) and edges (blocker relationships) starting from that todo,
         traversing metadata.blockers in both directions up to 2 hops.
         Response shape: {"nodes": [...], "edges": [{"from": id, "to": id, "relation": "blocks"}], "root": id}
+
+    brief=None (default) auto-sizes the response: a fat multi-item set collapses
+    to id/description/project/status/priority/tags plus metadata.tags and
+    metadata.files, dropping notes and prose metadata. Pass brief=True/False to
+    force — brief=False returns the full payload. Response carries
+    diet ('full'|'brief').
     """
     try:
         user_context = ctx.user if ctx else None
@@ -870,8 +882,14 @@ async def query_todos(filter: Optional[Dict[str, Any]] = None, projection: Optio
         results = list(cursor)
 
         logger.info(f"Query returned {len(results)} todos from {database_source} database (offset={offset}, limit={limit}, exclude_completed={exclude_completed}, since={since}, brief={brief})")
-        compacted = compact_todo_list(results, brief=brief)
-        return json.dumps({"items": compacted, "count": len(compacted), "source": database_source}, cls=MongoJSONEncoder)
+        # Explicit brief wins; only brief=None auto-sizes. compact_todo's own
+        # brief flag stays off in the auto path so the diet sees the real bytes.
+        compacted = compact_todo_list(results, brief=bool(brief))
+        if brief is None:
+            compacted, diet = apply_todo_list_diet(compacted)
+        else:
+            diet = "brief" if brief else "full"
+        return json.dumps({"items": compacted, "count": len(compacted), "source": database_source, "diet": diet}, cls=MongoJSONEncoder)
     except Exception as e:
         logger.error(f"Failed to query todos: {str(e)}")
         return create_response(False, message=str(e))
@@ -962,7 +980,7 @@ async def query_todos_near(todo_id: Optional[str] = None, district: Optional[str
         anchor_district = district
 
         if todo_id:
-            anchor = todos_col.find_one({"id": todo_id})
+            anchor = todos_col.find_one({"id": todo_id}, {"metadata": 1})
             if not anchor:
                 return create_response(False, message=f"Todo {todo_id} not found.")
             meta = anchor.get("metadata") or {}
@@ -977,7 +995,13 @@ async def query_todos_near(todo_id: Optional[str] = None, district: Optional[str
 
         # Match by district
         if anchor_district:
-            for doc in todos_col.find({"metadata.district": anchor_district, "status": {"$ne": "completed"}}).limit(limit):
+            # Project the vector out at the DB read — compact_todo discards it
+            # anyway, so without this every district hit shipped a 768-float
+            # embedding across the wire to be thrown away.
+            for doc in todos_col.find(
+                {"metadata.district": anchor_district, "status": {"$ne": "completed"}},
+                _NO_VECTOR,
+            ).limit(limit):
                 doc_id = doc.get("id")
                 if doc_id and doc_id != todo_id:
                     results[doc_id] = doc
@@ -1570,7 +1594,7 @@ async def search_todos(query: str, fields: Optional[list] = None, limit: int = 2
 
     def _finish(data: dict, mode: str) -> str:
         if auto:
-            data['items'], data['diet'] = apply_response_diet(data.get('items') or [])
+            data['items'], data['diet'] = apply_response_diet(data.get('items') or [], query)
         else:
             data['diet'] = 'brief' if fetch_brief else 'full'
         data['search_mode'] = mode
@@ -1830,16 +1854,10 @@ async def get_metadata_stats(project: Optional[str] = None,
         results = list(todos_collection.aggregate(pipeline))
 
         if results:
-            stats = results[0]
-
-            # Clean up None values from tag stats
-            stats["tag_stats"] = [item for item in stats["tag_stats"] if item["_id"] is not None]
-            stats["complexity_stats"] = [item for item in stats["complexity_stats"] if item["_id"] is not None]
-            stats["confidence_stats"] = [item for item in stats["confidence_stats"] if item["_id"] is not None]
-            stats["phase_stats"] = [item for item in stats["phase_stats"] if item["_id"] is not None]
-            stats["file_type_stats"] = [item for item in stats["file_type_stats"] if item["_id"] is not None]
-
-            return json.dumps(stats)
+            # compact_stats_facets does the null-bucket cleanup the per-facet
+            # list comprehensions used to do, renames Mongo's `_id` group key to
+            # `value`, and flattens the one-element total_counts facet.
+            return json.dumps(compact_stats_facets(results[0]))
         else:
             return json.dumps({"message": "No todos found"})
 
@@ -1938,6 +1956,7 @@ async def query_todo_logs(filter_type: str = 'all', project: str = 'all',
             paginated_logs = all_logs[start_index:end_index]
 
             logger.info(f"Unified view: personal={len(personal_entries)}, shared={len(shared_entries)}, unique={len(all_logs)}")
+            paginated_logs = compact_log_list(paginated_logs)
             return json.dumps({"items": paginated_logs, "count": len(paginated_logs)})
 
         except Exception as e:
@@ -1945,7 +1964,7 @@ async def query_todo_logs(filter_type: str = 'all', project: str = 'all',
             # Fallback to user-specific logs only
             service = get_service_instance()
             logs = await service.get_logs(filter_type, project, page, page_size, ctx.user if ctx else None)
-            log_entries = logs.get('logEntries', [])
+            log_entries = compact_log_list(logs.get('logEntries', []))
             return json.dumps({"items": log_entries, "count": len(log_entries)})
     else:
         # Regular view: single database based on user context
@@ -1958,6 +1977,7 @@ async def query_todo_logs(filter_type: str = 'all', project: str = 'all',
         for log in log_entries:
             log['source'] = source
 
+        log_entries = compact_log_list(log_entries)
         return json.dumps({"items": log_entries, "count": len(log_entries)})
 
 async def list_projects(include_details: Union[bool, str] = False, madness_root: str = "/Users/d.edens/lab/madness_interactive", ctx: Optional[Context] = None) -> str:
@@ -1991,9 +2011,10 @@ async def list_projects(include_details: Union[bool, str] = False, madness_root:
                 collection_names = [p.get('name', p.get('id', '')) for p in shared_projects]
                 all_project_names.update(n for n in collection_names if n)
 
-        # If we found projects, return them sorted
+        # If we found projects, return them sorted. strip_empty_fields drops the
+        # "" entries a project doc with no name/id leaves behind.
         if all_project_names:
-            sorted_projects = sorted(all_project_names)
+            sorted_projects = strip_empty_fields(sorted(all_project_names))
             return json.dumps({"items": sorted_projects, "count": len(sorted_projects)})
 
         # Final fallback to hardcoded list if database is empty
