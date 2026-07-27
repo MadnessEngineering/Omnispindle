@@ -201,3 +201,78 @@ def apply_response_diet(items: list) -> tuple:
         )
         return [item], "truncated"
     return items, "full"
+
+
+# Response-diet thresholds for lesson reads (chars, roughly 4 chars/token).
+# lesson_learned is ~76% of a lesson payload's bytes, so it's the only field
+# worth budgeting.
+_LESSON_TOTAL_BUDGET = 6000       # multi hit: combined lesson_learned before snipping
+_LESSON_SINGLE_HIT_BUDGET = 4000  # single hit: truncate lesson_learned past this
+_LESSON_SNIPPET_MIN = 240         # a snippet below this says nothing useful
+
+
+def _match_snippet(text: str, tokens: list, budget: int) -> str:
+    """Window `budget` chars of `text` around the first token hit (head if none)."""
+    start = 0
+    if tokens:
+        lowered = text.lower()
+        hits = [p for p in (lowered.find(t) for t in tokens) if p >= 0]
+        if hits:
+            # Leave a third of the window as lead-in so the match has context.
+            start = max(0, min(hits) - budget // 3)
+    end = start + budget
+    return ("…" if start else "") + text[start:end] + ("…" if end < len(text) else "")
+
+
+def apply_lesson_diet(items: list, query: Optional[str] = None) -> tuple:
+    """
+    Auto-size a lesson result set — lesson-side mirror of apply_response_diet,
+    budgeting lesson_learned instead of notes.
+
+    Multi-hit  -> once combined lesson_learned exceeds _LESSON_TOTAL_BUDGET,
+                  every oversized lesson_learned is cut to a match-relevant
+                  snippet sized budget/len(items); small sets pass through whole.
+    Single hit -> keeps lesson_learned, truncated at _LESSON_SINGLE_HIT_BUDGET
+                  with a pointer to get_lesson for the rest.
+
+    Where the todo diet briefs notes away, this snips instead: lesson_learned IS
+    the answer, so dropping it would force a get_lesson round-trip on every hit.
+
+    Returns (items, diet) where diet is 'full' | 'truncated'.
+    """
+    if not items:
+        return items, "full"
+
+    total = sum(len(i.get("lesson_learned") or "") for i in items if isinstance(i, dict))
+
+    if len(items) > 1:
+        if total <= _LESSON_TOTAL_BUDGET:
+            return items, "full"
+
+        per_item = max(_LESSON_SNIPPET_MIN, _LESSON_TOTAL_BUDGET // len(items))
+        tokens = [t.lower() for t in meaningful_tokens(query)] if query else []
+
+        out = []
+        for item in items:
+            text = item.get("lesson_learned") if isinstance(item, dict) else None
+            if not text or len(text) <= per_item:
+                out.append(item)
+                continue
+            item = dict(item)
+            item["lesson_learned"] = (
+                _match_snippet(text, tokens, per_item)
+                + f" [snippet — {len(text)} chars total, get_lesson('{item.get('id', '')}') for full]"
+            )
+            out.append(item)
+        return out, "truncated"
+
+    item = items[0]
+    if isinstance(item, dict) and total > _LESSON_SINGLE_HIT_BUDGET:
+        item = dict(item)
+        text = item["lesson_learned"]
+        item["lesson_learned"] = (
+            text[:_LESSON_SINGLE_HIT_BUDGET]
+            + f"… [truncated — {len(text)} chars total, get_lesson('{item.get('id', '')}') for full]"
+        )
+        return [item], "truncated"
+    return items, "full"

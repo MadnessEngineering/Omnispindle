@@ -599,11 +599,12 @@ class OmniSpindleStdioServer:
                             async def search_lessons(
                                 query: Annotated[str, Field(description="Search text")],
                                 fields: Annotated[Optional[list], Field(description="Fields to search")] = None,
-                                limit: Annotated[int, Field(description="Max results")] = 100
+                                limit: Annotated[int, Field(description="Max results")] = 20,
+                                brief: Annotated[Optional[bool], Field(description="Force topic+tags only, no lesson_learned. Omit for auto-sizing.")] = None
                             ) -> str:
-                                """Text search across lesson topic, content, and tags. For semantic search, use find_relevant."""
+                                """Text search across lesson topic, content, and tags. Auto-sizes: fat result sets come back as match-relevant snippets. For semantic search, use find_relevant."""
                                 ctx = _create_context()
-                                return await func(query, fields, limit, ctx=ctx)
+                                return await func(query, fields, limit, brief, ctx=ctx)
                             return search_lessons
 
                         elif name == "grep_lessons":
@@ -620,11 +621,12 @@ class OmniSpindleStdioServer:
                         elif name == "list_lessons":
                             @self.server.tool(description=docstring)
                             async def list_lessons(
-                                limit: Annotated[int, Field(description="Max results")] = 100
+                                limit: Annotated[int, Field(description="Max results")] = 20,
+                                brief: Annotated[Optional[bool], Field(description="Force topic+tags only, no lesson_learned. Omit for auto-sizing.")] = None
                             ) -> str:
-                                """List all lessons (newest first)"""
+                                """List all lessons (newest first). Auto-sizes: lesson_learned is snipped once the set gets fat."""
                                 ctx = _create_context()
-                                return await func(limit, ctx=ctx)
+                                return await func(limit, brief, ctx=ctx)
                             return list_lessons
 
                         elif name == "query_todo_logs":

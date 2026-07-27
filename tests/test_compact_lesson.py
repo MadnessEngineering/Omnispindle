@@ -2,7 +2,7 @@
 import json
 import re
 
-from Omnispindle.response_shaping import compact_lesson, compact_lesson_list
+from Omnispindle.response_shaping import apply_lesson_diet, compact_lesson, compact_lesson_list
 
 
 SAMPLE_LESSON = {
@@ -74,3 +74,54 @@ def test_compaction_is_dramatically_smaller():
     compacted = json.dumps(compact_lesson(SAMPLE_LESSON))
     # 768 floats dominate the raw doc
     assert len(compacted) < len(raw) * 0.1
+
+
+# --- apply_lesson_diet: list_lessons / search_lessons auto-sizing ----------
+
+def _lesson(i, text_len, needle=""):
+    body = "x" * text_len
+    if needle:
+        body = body[:text_len // 2] + needle + body[text_len // 2:]
+    return {"id": f"id-{i}", "topic": f"t{i}", "lesson_learned": body, "tags": ["a"]}
+
+
+def test_lesson_diet_multi_hit_thin_set_stays_full():
+    items, diet = apply_lesson_diet([_lesson(i, 500) for i in range(4)])
+    assert diet == "full"
+    assert all(len(i["lesson_learned"]) == 500 for i in items)
+
+
+def test_lesson_diet_multi_hit_fat_set_snips_with_pointer():
+    items, diet = apply_lesson_diet([_lesson(i, 4000) for i in range(20)])
+    assert diet == "truncated"
+    # 6000-char budget over 20 items -> 300 chars each, plus the pointer
+    assert all(len(i["lesson_learned"]) < 500 for i in items)
+    assert "4000 chars total" in items[0]["lesson_learned"]
+    assert "get_lesson('id-0')" in items[0]["lesson_learned"]
+
+
+def test_lesson_diet_snippet_centres_on_the_query_match():
+    items, diet = apply_lesson_diet(
+        [_lesson(i, 4000, needle="NEEDLE") for i in range(20)], query="needle"
+    )
+    assert diet == "truncated"
+    assert all("NEEDLE" in i["lesson_learned"] for i in items)
+
+
+def test_lesson_diet_single_hit_keeps_text():
+    items, diet = apply_lesson_diet([_lesson(0, 3000)])
+    assert diet == "full"
+    assert len(items[0]["lesson_learned"]) == 3000
+
+
+def test_lesson_diet_single_hit_oversized_truncates_with_pointer():
+    items, diet = apply_lesson_diet([_lesson(0, 9000)])
+    assert diet == "truncated"
+    text = items[0]["lesson_learned"]
+    assert len(text) < 9000
+    assert "9000 chars total" in text and "get_lesson('id-0')" in text
+
+
+def test_lesson_diet_empty_and_missing_text():
+    assert apply_lesson_diet([]) == ([], "full")
+    assert apply_lesson_diet([{"id": "a"}, {"id": "b"}])[1] == "full"

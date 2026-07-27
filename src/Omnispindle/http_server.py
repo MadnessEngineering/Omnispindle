@@ -315,10 +315,10 @@ if "regenerate_embedding" in selected_tools:
 
 if "search_lessons" in selected_tools:
     @mcp.tool()
-    async def search_lessons(query: str, fields: Optional[list] = None, limit: int = 50, user_ctx: Optional[Dict[str, Any]] = None, ctx: MCPContext = None):
-        """Keyword search topic/content/tags. Returns matching list. Use find_relevant for semantic search."""
+    async def search_lessons(query: str, fields: Optional[list] = None, limit: int = 20, brief: Optional[bool] = None, user_ctx: Optional[Dict[str, Any]] = None, ctx: MCPContext = None):
+        """Keyword search topic/content/tags. Auto-sizes: fat sets return match-relevant snippets, diet says which. Use find_relevant for semantic search."""
         auth_ctx = await get_authenticated_context_from_mcp(ctx, user_ctx)
-        return await tools.search_lessons(query, fields, limit, ctx=auth_ctx)
+        return await tools.search_lessons(query, fields, limit, brief, ctx=auth_ctx)
 
 if "grep_lessons" in selected_tools:
     @mcp.tool()
@@ -329,10 +329,10 @@ if "grep_lessons" in selected_tools:
 
 if "list_lessons" in selected_tools:
     @mcp.tool()
-    async def list_lessons(limit: int = 50, user_ctx: Optional[Dict[str, Any]] = None, ctx: MCPContext = None):
-        """Fetch all lessons paginated. Returns list. Use for broad browsing."""
+    async def list_lessons(limit: int = 20, brief: Optional[bool] = None, user_ctx: Optional[Dict[str, Any]] = None, ctx: MCPContext = None):
+        """Fetch all lessons paginated. Auto-sizes: lesson_learned is snipped once the set gets fat, diet says which. Use for broad browsing."""
         auth_ctx = await get_authenticated_context_from_mcp(ctx, user_ctx)
-        return await tools.list_lessons(limit, ctx=auth_ctx)
+        return await tools.list_lessons(limit, brief, ctx=auth_ctx)
 
 # Admin/System tools
 if "query_todo_logs" in selected_tools:

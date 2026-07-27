@@ -24,6 +24,7 @@ from . import api_tools
 from . import embeddings
 from .response_shaping import (
     STOP_WORDS,
+    apply_lesson_diet,
     apply_response_diet,
     compact_lesson,
     compact_lesson_list,
@@ -2090,9 +2091,14 @@ async def explain_tool(topic: str, brief: bool = False, ctx: Optional[Context] =
     return await get_explanation(topic, ctx)
 
 
-async def list_lessons(limit: int = 100, brief: bool = False, ctx: Optional[Context] = None) -> str:
+async def list_lessons(limit: int = 20, brief: Optional[bool] = None, ctx: Optional[Context] = None) -> str:
     """
     List all lessons, sorted by creation date.
+
+    brief=None (default) auto-sizes the response: lesson_learned is cut to a
+    snippet once the combined text blows the budget, kept whole when the set is
+    small. Pass brief=True/False to force. Response carries diet
+    ('full'|'brief'|'truncated').
     """
     try:
         # Get user-scoped collections
@@ -2104,16 +2110,21 @@ async def list_lessons(limit: int = 100, brief: bool = False, ctx: Optional[Cont
         logger.info(f"list_lessons called by {user_id}: limit={limit}, brief={brief}, db={db_name}")
 
         cursor = lessons_collection.find({}, _LESSON_NO_VECTOR).sort("created_at", -1).limit(limit)
-        results = compact_lesson_list(list(cursor), brief=brief)
+        results = compact_lesson_list(list(cursor), brief=bool(brief))
 
-        logger.info(f"list_lessons returned {len(results)} total lessons")
+        if brief is None:
+            results, diet = apply_lesson_diet(results)
+        else:
+            diet = "brief" if brief else "full"
 
-        return json.dumps({"items": results, "count": len(results)}, cls=MongoJSONEncoder)
+        logger.info(f"list_lessons returned {len(results)} total lessons (diet={diet})")
+
+        return json.dumps({"items": results, "count": len(results), "diet": diet}, cls=MongoJSONEncoder)
     except Exception as e:
         logger.error(f"Failed to list lessons: {str(e)}")
         return create_response(False, message=str(e))
 
-async def search_lessons(query: str, fields: Optional[list] = None, limit: int = 100, brief: bool = False, ctx: Optional[Context] = None) -> str:
+async def search_lessons(query: str, fields: Optional[list] = None, limit: int = 20, brief: Optional[bool] = None, ctx: Optional[Context] = None) -> str:
     """
     Search lessons with two-pass text search.
 
@@ -2121,10 +2132,27 @@ async def search_lessons(query: str, fields: Optional[list] = None, limit: int =
     Pass 2 (fuzzy):  any token matches (OR), ranked by how many tokens hit.
                      Fires only when strict returns nothing.
 
-    search_mode in response: 'strict' | 'fuzzy_or' so callers can tell which fired.
+    brief=None (default) auto-sizes the response: a fat result set comes back
+    with lesson_learned cut to a snippet around the query match, a small one
+    keeps full text. Pass brief=True/False to force. Response carries
+    search_mode ('strict'|'fuzzy_or') and diet ('full'|'brief'|'truncated').
     """
     if fields is None:
         fields = ["topic", "lesson_learned", "tags"]
+
+    auto = brief is None
+    fetch_brief = False if auto else brief
+
+    def _shape(docs: list, mode: str) -> str:
+        results = compact_lesson_list(docs, brief=fetch_brief)
+        if auto:
+            results, diet = apply_lesson_diet(results, query)
+        else:
+            diet = "brief" if fetch_brief else "full"
+        return json.dumps(
+            {"items": results, "count": len(results), "search_mode": mode, "diet": diet},
+            cls=MongoJSONEncoder,
+        )
 
     try:
         collections = db_connection.get_collections(ctx.user if ctx else None)
@@ -2140,14 +2168,13 @@ async def search_lessons(query: str, fields: Optional[list] = None, limit: int =
         results = list(lessons_collection.find(strict_query, _LESSON_NO_VECTOR).limit(limit))
         if results:
             logger.info(f"search_lessons strict returned {len(results)} results")
-            results = compact_lesson_list(results, brief=brief)
-            return json.dumps({"items": results, "count": len(results), "search_mode": "strict"}, cls=MongoJSONEncoder)
+            return _shape(results, "strict")
 
         # Pass 2 — OR fallback, ranked by token match density
         raw_tokens = re.split(r'\W+', query)
         meaningful = [t for t in raw_tokens if t.lower() not in _STOP_WORDS and (len(t) > 2 or t.isdigit())]
         if not meaningful:
-            return json.dumps({"items": [], "count": 0, "search_mode": "fuzzy_or"}, cls=MongoJSONEncoder)
+            return _shape([], "fuzzy_or")
 
         escaped = [re.escape(t) for t in meaningful]
         or_query = {"$or": [
@@ -2168,8 +2195,7 @@ async def search_lessons(query: str, fields: Optional[list] = None, limit: int =
         results = candidates[:limit]
 
         logger.info(f"search_lessons fuzzy_or returned {len(results)} results for query '{query}'")
-        results = compact_lesson_list(results, brief=brief)
-        return json.dumps({"items": results, "count": len(results), "search_mode": "fuzzy_or"}, cls=MongoJSONEncoder)
+        return _shape(results, "fuzzy_or")
 
     except Exception as e:
         logger.error(f"Failed to search lessons: {str(e)}")

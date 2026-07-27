@@ -251,14 +251,14 @@ TOOL_SCHEMAS = {
     },
     "search_lessons": {
         "name": "search_lessons",
-        "description": "Two-pass text search across lesson topic, content, and tags. Pass 1: strict AND (all tokens must match). Pass 2: OR ranked fallback when strict returns nothing. search_mode in response tells which fired. For semantic search, use find_relevant.",
+        "description": "Two-pass text search across lesson topic, content, and tags. Pass 1: strict AND (all tokens must match). Pass 2: OR ranked fallback when strict returns nothing. Response includes search_mode: 'strict'|'fuzzy_or' and diet: 'full'|'brief'|'truncated'. For semantic search, use find_relevant.",
         "inputSchema": {
             "type": "object",
             "properties": {
                 "query": {"type": "string", "description": "Search text"},
                 "fields": {"type": "array", "description": "Fields to search (default: topic, lesson_learned, tags)"},
-                "limit": {"type": "number", "description": "Max results (default: 100)"},
-                "brief": {"type": "boolean", "description": "Return compact results (default: false)"}
+                "limit": {"type": "number", "description": "Max results (default: 20)"},
+                "brief": {"type": "boolean", "description": "Force topic+tags only, no lesson_learned. Omit for auto: fat sets return a match-relevant snippet, small ones keep full text."}
             },
             "required": ["query"]
         }
@@ -277,12 +277,12 @@ TOOL_SCHEMAS = {
     },
     "list_lessons": {
         "name": "list_lessons",
-        "description": "Fetch all lessons paginated. Broad browse — use search_lessons or grep_lessons for targeted lookup.",
+        "description": "Fetch all lessons paginated. Broad browse — use search_lessons or grep_lessons for targeted lookup. Response includes diet: 'full'|'brief'|'truncated'.",
         "inputSchema": {
             "type": "object",
             "properties": {
-                "limit": {"type": "number", "description": "Max results (default: 100)"},
-                "brief": {"type": "boolean", "description": "Return compact results (default: false)"}
+                "limit": {"type": "number", "description": "Max results (default: 20)"},
+                "brief": {"type": "boolean", "description": "Force topic+tags only, no lesson_learned. Omit for auto: lesson_learned is snipped once the set gets fat, kept whole when small."}
             }
         }
     },

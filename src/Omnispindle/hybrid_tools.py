@@ -330,7 +330,7 @@ async def regenerate_embedding(lesson_id: str, ctx: Optional[Context] = None) ->
     """Regenerate embedding for a lesson - local only for now"""
     return await local_tools.regenerate_embedding(lesson_id, ctx=ctx)
 
-async def search_lessons(query: str, fields: Optional[list] = None, limit: int = 100, brief: bool = False, ctx: Optional[Context] = None) -> str:
+async def search_lessons(query: str, fields: Optional[list] = None, limit: int = 20, brief: Optional[bool] = None, ctx: Optional[Context] = None) -> str:
     """Search lessons - local only for now"""
     return await local_tools.search_lessons(query, fields, limit, brief, ctx=ctx)
 
@@ -338,7 +338,7 @@ async def grep_lessons(pattern: str, limit: int = 20, ctx: Optional[Context] = N
     """Grep lessons - local only for now"""
     return await local_tools.grep_lessons(pattern, limit, ctx=ctx)
 
-async def list_lessons(limit: int = 100, brief: bool = False, ctx: Optional[Context] = None) -> str:
+async def list_lessons(limit: int = 20, brief: Optional[bool] = None, ctx: Optional[Context] = None) -> str:
     """List lessons - local only for now"""
     return await local_tools.list_lessons(limit, brief, ctx=ctx)
 

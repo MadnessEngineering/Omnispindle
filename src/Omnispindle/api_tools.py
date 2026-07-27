@@ -626,7 +626,7 @@ async def regenerate_embedding(lesson_id: str, ctx: Optional[Context] = None) ->
     """Regenerate embedding for a lesson - API not yet available"""
     return create_response(False, message="Lesson management not yet available via API. Use local mode.")
 
-async def search_lessons(query: str, fields: Optional[list] = None, limit: int = 100, brief: bool = False, ctx: Optional[Context] = None) -> str:
+async def search_lessons(query: str, fields: Optional[list] = None, limit: int = 20, brief: Optional[bool] = None, ctx: Optional[Context] = None) -> str:
     """Search lessons with text search capabilities - API not yet available"""
     return create_response(False, message="Lesson management not yet available via API. Use local mode.")
 
@@ -634,7 +634,7 @@ async def grep_lessons(pattern: str, limit: int = 20, ctx: Optional[Context] = N
     """Search lessons with grep-style pattern matching - API not yet available"""
     return create_response(False, message="Lesson management not yet available via API. Use local mode.")
 
-async def list_lessons(limit: int = 100, brief: bool = False, ctx: Optional[Context] = None) -> str:
+async def list_lessons(limit: int = 20, brief: Optional[bool] = None, ctx: Optional[Context] = None) -> str:
     """List all lessons, sorted by creation date - API not yet available"""
     return create_response(False, message="Lesson management not yet available via API. Use local mode.")
 

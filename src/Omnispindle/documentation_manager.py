@@ -251,7 +251,12 @@ Response reports diet: 'full'|'brief'|'truncated'. Pass brief=true/false to forc
         "minimal": "Search lessons",
         "basic": "Text search lessons",
         "admin": "Regex search across topic, lesson_learned, tags.",
-        "full": "Search lessons with text search capabilities across specified fields. Default search fields are topic, lesson_learned, and tags. Supports regex patterns and case-insensitive search."
+        "full": """Search lessons with text search capabilities across specified fields. Default search fields are topic, lesson_learned, and tags. Supports regex patterns and case-insensitive search.
+
+Response size: brief is auto by default (limit 20) — a fat result set comes back
+with lesson_learned cut to a snippet around the query match, a small one keeps
+full text. Response reports diet: 'full'|'brief'|'truncated'. Pass brief=true to
+force topic+tags only, brief=false to force full text."""
     },
 
     "grep_lessons": {
@@ -265,7 +270,12 @@ Response reports diet: 'full'|'brief'|'truncated'. Pass brief=true/false to forc
         "minimal": "List lessons",
         "basic": "List all lessons (newest first)",
         "admin": "List lessons from knowledge base, sorted by date.",
-        "full": "List all lessons from the knowledge base, sorted by creation date in descending order (newest first). Supports optional brief mode for compact results."
+        "full": """List all lessons from the knowledge base, sorted by creation date in descending order (newest first).
+
+Response size: brief is auto by default (limit 20) — lesson_learned is trimmed to
+a snippet once the combined text blows the budget, kept whole when the set is
+small. Response reports diet: 'full'|'brief'|'truncated'. Pass brief=true to force
+topic+tags only, brief=false to force full text."""
     },
     
     "query_todo_logs": {
