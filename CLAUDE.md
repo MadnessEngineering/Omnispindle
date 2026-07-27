@@ -363,13 +363,39 @@ OMNISPINDLE_MODE="api" python test_api_client.py
 Omnispindle supports variable tool loadouts to reduce token usage for AI agents. Configure via the `OMNISPINDLE_TOOL_LOADOUT` environment variable:
 
 **Available Loadouts**:
-- `full` (default) - All 38 tools available
+- `full` (default for stdio) - All 38 tools available. **Remote HTTP defaults to `basic`** — see below.
 - `basic` - Core todo CRUD + context + quest system (15 tools): add_todo, query_todos, update_todo, get_todo, complete_todo, list_todos_by_status, list_project_todos, get_context_bundle, get_lesson, search_lessons, create_quest, check_quest, list_quests, link_quest, update_quest
 - `minimal` - Core functionality only (4 tools): add_todo, query_todos, get_todo, complete_todo
 - `lessons` - Knowledge management focus (8 tools): add_lesson, get_lesson, update_lesson, delete_lesson, regenerate_embedding, search_lessons, grep_lessons, list_lessons
 - `admin` - Administrative tools + sessions (16 tools): query_todos, update_todo, delete_todo, query_todo_logs, list_projects, explain, add_explanation + all session tools + agent journal
 - `agent_preflight` - Session startup bundle (6 tools): get_context_bundle, preflight_rag, find_relevant, query_todos, get_todo, get_lesson
 - `refine` - Todo enrichment mode (13 tools): query/search/get + update_todo + context intelligence tools (find_relevant, preflight_rag, search_lessons) + session linking. Use when auditing and enriching existing todos with missing tags, files, district/coordinates, or dependency (blockers) metadata.
+
+**Remote HTTP clients (`/api/mcp`) — per-request loadout**:
+
+Remote clients can't set the server's env vars, so `tools/list` accepts a per-request
+override. Precedence: query param → header → server env → `basic` default.
+
+```jsonc
+// mcp.json — widen this client to the full toolset
+{
+  "omnispindle": {
+    "type": "http",
+    "url": "https://mcp.madnessinteractive.cc/api/mcp/?loadout=full",
+    "headers": { "Authorization": "Bearer ..." }
+  }
+}
+```
+
+Headers work too: `X-Omnispindle-Loadout: refine`, `X-Omnispindle-Doc-Level: minimal`.
+Unknown values log a warning and fall back to the default rather than erroring.
+
+Approximate `tools/list` cost (remote mode, measured): `full`/full docs ~7.5k tokens,
+`basic`/basic ~2.4k, `refine`/basic ~2.0k, `agent_preflight`/basic ~0.9k, `minimal`/minimal ~0.6k.
+
+Note: `tools/call` is **not** loadout-gated (only tier-gated). A narrow loadout shrinks
+discovery, not capability — a client that knows a tool name can still call it. That's
+what keeps Inventorium's chat working, since it dispatches by name.
 
 **Usage**:
 ```bash

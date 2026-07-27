@@ -194,8 +194,13 @@ async def get_authenticated_context(request_headers: Optional[Dict[str, str]] = 
     return Context(user=user_payload)
 
 
-# Get tool loadout from environment (remote mode - filters local-only tools)
-loadout_name = os.getenv("OMNISPINDLE_TOOL_LOADOUT", "full")
+# Get tool loadout from environment (remote mode - filters local-only tools).
+# Defaults to 'basic' to match the /api/mcp JSON-RPC path — tools are registered at
+# import time here, so this transport has no per-request override; set
+# OMNISPINDLE_TOOL_LOADOUT to widen it.
+from src.Omnispindle.mcp_handler import DEFAULT_REMOTE_LOADOUT
+
+loadout_name = os.getenv("OMNISPINDLE_TOOL_LOADOUT", DEFAULT_REMOTE_LOADOUT)
 selected_tools = get_loadout(loadout_name, mode="remote")
 logger.info(f"Loading '{loadout_name}' loadout (remote mode, {len(selected_tools)} tools): {selected_tools}")
 

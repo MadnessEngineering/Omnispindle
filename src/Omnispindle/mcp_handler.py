@@ -9,11 +9,19 @@ import asyncio
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
-from .tool_loadouts import get_loadout, filter_by_tier
+from .tool_loadouts import get_loadout, filter_by_tier, get_loadout_names
 from .tool_metadata import is_pro_tool
-from .documentation_manager import get_tool_doc
+from .documentation_manager import DocumentationLevel, DocumentationManager, get_tool_doc
 
 logger = logging.getLogger(__name__)
+
+# Remote clients (Claude Code, Claude Desktop over HTTP) cannot set the server's
+# env vars, so before this default they were stuck with 'full': 41 tools, ~7.5k
+# tokens of tools/list paid on every session before a single tool is called.
+# 'basic' is ~15 tools. Callers that want more ask per-request (see
+# _resolve_client_prefs); tools/call is NOT loadout-gated, so a client that knows
+# a tool name can still call it — this shrinks discovery, not capability.
+DEFAULT_REMOTE_LOADOUT = "basic"
 
 
 def _as_text(result: Any) -> str:
@@ -573,11 +581,85 @@ TOOL_SCHEMAS = {
     }
 }
 
+# Hand-written fallbacks, captured before the doc manager overwrites them. Used when
+# a tool has no entry in TOOL_DOCUMENTATION at the requested level — otherwise the
+# manager hands back "Tool documentation not found."
+_FALLBACK_DESCRIPTIONS = {_n: _s.get("description", "") for _n, _s in TOOL_SCHEMAS.items()}
+
 # Apply tier-aware descriptions at startup — reads OMNISPINDLE_DOC_LEVEL / OMNISPINDLE_TOOL_LOADOUT
 for _name, _schema in TOOL_SCHEMAS.items():
     _doc = get_tool_doc(_name)
     if _doc:
         _schema["description"] = _doc
+
+# Per-doc-level schema cache. tools/list is hot and the schemas are immutable once
+# built, so build each level once and reuse.
+_SCHEMA_CACHE: Dict[str, Dict[str, Dict[str, Any]]] = {}
+
+
+def _schemas_at_level(doc_level: str) -> Dict[str, Dict[str, Any]]:
+    """Return {tool_name: schema} with descriptions rendered at `doc_level`."""
+    cached = _SCHEMA_CACHE.get(doc_level)
+    if cached is not None:
+        return cached
+
+    manager = DocumentationManager()
+    manager.level = DocumentationLevel(doc_level)
+
+    built = {}
+    for name, schema in TOOL_SCHEMAS.items():
+        doc = manager.get_tool_documentation(name)
+        if not doc or doc == "Tool documentation not found.":
+            doc = _FALLBACK_DESCRIPTIONS.get(name) or schema.get("description", "")
+        built[name] = {**schema, "description": doc}
+
+    _SCHEMA_CACHE[doc_level] = built
+    return built
+
+
+def _resolve_client_prefs(request: Request) -> tuple:
+    """
+    Resolve (loadout, doc_level) for this request.
+
+    Precedence: query param -> header -> env -> DEFAULT_REMOTE_LOADOUT. Remote clients
+    can only control the URL and headers, so both are accepted:
+        POST /api/mcp/?loadout=refine&doc_level=basic
+        X-Omnispindle-Loadout: refine
+        X-Omnispindle-Doc-Level: basic
+    Unknown values fall back to the default rather than erroring — a bad hint should
+    degrade the tool list, never break the session.
+    """
+    params = request.query_params
+    headers = request.headers
+
+    loadout = (
+        params.get("loadout")
+        or headers.get("x-omnispindle-loadout")
+        or os.getenv("OMNISPINDLE_TOOL_LOADOUT")
+        or DEFAULT_REMOTE_LOADOUT
+    ).strip().lower()
+
+    if loadout not in get_loadout_names():
+        logger.warning(f"Unknown loadout '{loadout}' requested; using '{DEFAULT_REMOTE_LOADOUT}'")
+        loadout = DEFAULT_REMOTE_LOADOUT
+
+    requested_level = (
+        params.get("doc_level")
+        or headers.get("x-omnispindle-doc-level")
+        or os.getenv("OMNISPINDLE_DOC_LEVEL")
+        or ""
+    ).strip().lower()
+
+    valid_levels = {level.value for level in DocumentationLevel}
+    if requested_level in valid_levels:
+        doc_level = requested_level
+    else:
+        if requested_level:
+            logger.warning(f"Unknown doc_level '{requested_level}' requested; deriving from loadout")
+        # Same loadout -> level mapping the doc manager uses.
+        doc_level = DocumentationManager(loadout=loadout).level.value
+
+    return loadout, doc_level
 
 async def mcp_handler(request: Request, get_current_user: Callable[[], Coroutine[Any, Any, Any]]) -> JSONResponse:
     """
@@ -648,20 +730,21 @@ async def mcp_handler(request: Request, get_current_user: Callable[[], Coroutine
             )
         elif method == "tools/list":
             # Get tools dynamically based on loadout (remote mode - filters local-only tools)
-            loadout = os.getenv("OMNISPINDLE_TOOL_LOADOUT", "full")
+            loadout, doc_level = _resolve_client_prefs(request)
             enabled_tools = get_loadout(loadout, mode="remote")
 
             # Filter by subscription tier — free users don't see pro-only tools
             user_tier = user.get("subscription_tier", "free")
             enabled_tools = filter_by_tier(enabled_tools, user_tier)
 
-            logger.info(f"🔧 MCP tools/list: Loading '{loadout}' loadout (remote mode, tier={user_tier}, {len(enabled_tools)} tools)")
+            logger.info(f"🔧 MCP tools/list: Loading '{loadout}' loadout at '{doc_level}' docs (remote mode, tier={user_tier}, {len(enabled_tools)} tools)")
 
             # Build tools list dynamically from TOOL_SCHEMAS
+            schemas = _schemas_at_level(doc_level)
             tools = [
-                TOOL_SCHEMAS[tool_name]
+                schemas[tool_name]
                 for tool_name in enabled_tools
-                if tool_name in TOOL_SCHEMAS
+                if tool_name in schemas
             ]
 
             logger.info(f"✅ Generated {len(tools)} tool schemas for remote client")
