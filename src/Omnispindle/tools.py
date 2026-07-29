@@ -750,8 +750,9 @@ async def add_todo(description: str, project: str, priority: str = "Medium", tar
             validated_metadata = metadata.copy() if metadata else {}
             validated_metadata["_validation_warning"] = f"Schema validation failed: {str(e)}"
 
-    # Enrich metadata with git context (branch, commit_hash) if available
-    validated_metadata = enrich_metadata_with_git(validated_metadata)
+    # Enrich metadata with git context (branch, commit_hash) — only when the repo
+    # we'd read is actually this project's; see git_root_matches_project.
+    validated_metadata = enrich_metadata_with_git(validated_metadata, project=validated_project)
 
     todo = {
         "id": todo_id,
@@ -1395,13 +1396,16 @@ async def complete_todo(todo_id: str, comment: Optional[str] = None, files: Opti
         elif not existing_todo.get("metadata", {}).get("files"):
             # Auto-detect changed files from git when caller didn't provide them
             # and the todo has no files yet. Only fires in local/stdio mode where
-            # the server runs in the user's working tree.
-            auto_files = get_changed_files()
+            # the server runs in THIS project's working tree — otherwise we'd
+            # staple an unrelated repo's dirty files onto the todo.
+            auto_files = get_changed_files(project=existing_todo.get("project"))
             if auto_files:
                 updates["metadata.files"] = auto_files
 
-        # Add git context on completion (branch and commit hash at completion time)
-        git_metadata = enrich_metadata_with_git()
+        # Add git context on completion (branch and commit hash at completion time).
+        # Gated on the repo matching the todo's project: the server's cwd is its own
+        # checkout in http/pm2 mode, and stamping that commit reads as authoritative.
+        git_metadata = enrich_metadata_with_git(project=existing_todo.get("project"))
         if "branch" in git_metadata:
             updates["metadata.completion_branch"] = git_metadata["branch"]
         if "commit_hash" in git_metadata:

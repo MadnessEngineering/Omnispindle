@@ -102,20 +102,55 @@ def get_current_commit_hash(path: Optional[str] = None, short: bool = True) -> O
         return None
 
 
-def get_changed_files(path: Optional[str] = None) -> List[str]:
+def _norm(name: str) -> str:
+    """Fold a project/directory name for comparison: lowercase, alphanumerics only."""
+    return "".join(c for c in name.lower() if c.isalnum())
+
+
+def git_root_matches_project(project: Optional[str], path: Optional[str] = None) -> bool:
+    """
+    Is the git repo we'd read context from actually the todo's project?
+
+    The server reads git state from its OWN cwd, which in http/pm2 mode (and any
+    stdio session started elsewhere) is the Omnispindle checkout — not the project
+    the todo belongs to. Stamping that commit onto another project's todo produces
+    metadata that is wrong but looks authoritative in the dashboard, so every git
+    read is gated on this check.
+
+    Args:
+        project: Project name from the todo (None => cannot verify => False)
+        path: Path to check (defaults to current directory)
+
+    Returns:
+        True only when the repo root's directory name matches the project name.
+    """
+    if not project:
+        return False
+    git_root = get_git_root(path)
+    if not git_root:
+        return False
+    return _norm(git_root.name) == _norm(project)
+
+
+def get_changed_files(path: Optional[str] = None, project: Optional[str] = None) -> List[str]:
     """
     Get files modified vs HEAD (staged + unstaged).
 
     Useful for auto-populating metadata.files on complete_todo when the caller
     doesn't provide an explicit list. Only meaningful in local/stdio mode where
-    the server runs in the user's working directory.
+    the server runs in the user's working directory — hence the project gate,
+    which keeps one project's dirty working tree off another project's todo.
 
     Args:
         path: Path to check (defaults to current directory)
+        project: Todo's project; the repo must match it or nothing is returned
 
     Returns:
         List of relative file paths changed since HEAD, or empty list if none/error
     """
+    if not git_root_matches_project(project, path):
+        logger.debug(f"Skipping changed-file detection: cwd repo is not project '{project}'")
+        return []
     try:
         search_path = Path(path) if path else Path.cwd()
         result = subprocess.run(
@@ -133,17 +168,24 @@ def get_changed_files(path: Optional[str] = None) -> List[str]:
         return []
 
 
-def get_git_metadata(path: Optional[str] = None) -> Dict[str, Any]:
+def get_git_metadata(path: Optional[str] = None, project: Optional[str] = None) -> Dict[str, Any]:
     """
     Get all available git metadata for the current context.
 
     Args:
         path: Path to check (defaults to current directory)
+        project: Todo's project; the repo must match it (see git_root_matches_project)
+                 or an empty dict is returned. Omitting it means "cannot verify",
+                 which is treated the same as a mismatch.
 
     Returns:
-        Dictionary with git metadata (branch, commit_hash, git_root)
-        Returns empty dict if not in a git repository
+        Dictionary with git metadata (branch, commit_hash)
+        Returns empty dict if not in a git repository, or if that repository is
+        not the todo's project.
     """
+    if not git_root_matches_project(project, path):
+        logger.debug(f"Skipping git metadata: cwd repo is not project '{project}'")
+        return {}
     git_root = get_git_root(path)
     if not git_root:
         return {}
@@ -163,7 +205,8 @@ def get_git_metadata(path: Optional[str] = None) -> Dict[str, Any]:
 
 def enrich_metadata_with_git(metadata: Optional[Dict[str, Any]] = None,
                              path: Optional[str] = None,
-                             auto_detect: bool = True) -> Dict[str, Any]:
+                             auto_detect: bool = True,
+                             project: Optional[str] = None) -> Dict[str, Any]:
     """
     Enrich existing metadata with git information.
 
@@ -171,6 +214,8 @@ def enrich_metadata_with_git(metadata: Optional[Dict[str, Any]] = None,
         metadata: Existing metadata dict (or None to create new)
         path: Path to check for git context
         auto_detect: Automatically detect and add git metadata
+        project: Todo's project. Without a match against the repo we're reading,
+                 nothing is added — no metadata beats confidently wrong metadata.
 
     Returns:
         Metadata dict enriched with git information (if available)
@@ -181,7 +226,7 @@ def enrich_metadata_with_git(metadata: Optional[Dict[str, Any]] = None,
         return result_metadata
 
     # Only add git metadata if not already present
-    git_data = get_git_metadata(path)
+    git_data = get_git_metadata(path, project)
 
     if "branch" in git_data and "branch" not in result_metadata:
         result_metadata["branch"] = git_data["branch"]
