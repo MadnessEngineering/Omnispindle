@@ -7,49 +7,25 @@ This module is the single source of truth for tool registration across:
 - mcp_handler.py (JSON-RPC endpoint)
 """
 
+import logging
 from typing import Dict, List
-from .tool_metadata import filter_remote_safe_loadout, is_pro_tool
+from .tool_metadata import (
+    TOOL_GROUPS,
+    ToolGroup,
+    filter_remote_safe_loadout,
+    get_group_tools,
+    is_pro_tool,
+)
+
+logger = logging.getLogger(__name__)
 
 
 # Base loadout definitions (before security filtering for remote mode)
 _BASE_LOADOUTS: Dict[str, List[str]] = {
-    "full": [
-        # Todo management (11 tools)
-        "add_todo", "query_todos", "update_todo", "delete_todo", "get_todo",
-        "complete_todo", "list_todos_by_status", "search_todos", "list_project_todos",
-        "query_todos_near", "link_todos",
-
-        # Lessons (8 tools)
-        "add_lesson", "get_lesson", "update_lesson", "delete_lesson", "regenerate_embedding",
-        "search_lessons", "grep_lessons", "list_lessons",
-
-        # Admin/System (5 tools)
-        "query_todo_logs", "list_projects", "explain", "add_explanation", "point_out_obvious",
-
-        # Custom Code (1 tool)
-        "bring_your_own",
-
-        # Inventorium Sessions (8 tools)
-        "inventorium_sessions_list", "inventorium_sessions_get",
-        "inventorium_sessions_create", "inventorium_sessions_spawn",
-        "inventorium_sessions_fork", "inventorium_sessions_genealogy",
-        "inventorium_sessions_tree", "inventorium_todos_link_session",
-
-        # Context bundle (1 tool)
-        "get_context_bundle",
-
-        # Semantic search (1 tool)
-        "find_relevant",
-
-        # Preflight RAG (1 tool)
-        "preflight_rag",
-
-        # Agent Journal (2 tools)
-        "write_agent_journal", "read_agent_journal",
-
-        # Quest system (5 tools)
-        "create_quest", "check_quest", "list_quests", "link_quest", "update_quest"
-    ],
+    # Derived, not hand-written: 'full' means every tool the server can dispatch,
+    # and TOOL_GROUPS is the registry that says what those are. Maintaining this as
+    # a literal list is what let bring_your_own sit in the loadout with no schema.
+    "full": list(TOOL_GROUPS),
 
     "basic": [
         # The default for remote HTTP clients. Read as "everything you want for a
@@ -77,11 +53,8 @@ _BASE_LOADOUTS: Dict[str, List[str]] = {
         "add_todo", "query_todos", "get_todo", "complete_todo"
     ],
 
-    "lessons": [
-        # Knowledge management focus (8 tools)
-        "add_lesson", "get_lesson", "update_lesson", "delete_lesson", "regenerate_embedding",
-        "search_lessons", "grep_lessons", "list_lessons"
-    ],
+    # Whole-group loadout — derived so a new lesson tool joins it automatically.
+    "lessons": get_group_tools(ToolGroup.LESSONS),
 
     "admin": [
         # Administrative tools + sessions (13 tools)
@@ -184,7 +157,13 @@ def get_loadout(loadout_name: str, mode: str = "local") -> List[str]:
         >>> get_loadout("lightweight", mode="local")
         ['add_todo', 'query_todos', ...]  # 10 tools
     """
-    tools = _BASE_LOADOUTS.get(loadout_name, _BASE_LOADOUTS["full"])
+    # Unknown name falls back NARROW, not wide. This used to return 'full', so a
+    # typo in a loadout hint quietly widened exposure to every tool — the opposite
+    # of what a bad input should do. Matches mcp_handler's DEFAULT_REMOTE_LOADOUT.
+    tools = _BASE_LOADOUTS.get(loadout_name)
+    if tools is None:
+        logger.warning(f"Unknown loadout '{loadout_name}'; falling back to 'basic'")
+        tools = _BASE_LOADOUTS["basic"]
 
     if mode == "remote":
         # Filter out local-only tools for remote mode

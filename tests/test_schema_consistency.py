@@ -19,6 +19,12 @@ from src.Omnispindle.mcp_handler import TOOL_SCHEMAS
 # Params that exist on every async tool but are never part of the MCP schema
 _SKIP_PARAMS = {"ctx", "self", "extra"}  # extra = **kwargs catch-all in add_todo
 
+# Tools the remote JSON-RPC handler deliberately cannot serve. bring_your_own
+# executes arbitrary code (LOCAL_ONLY), so it has no schema and no remote dispatch
+# entry — exempting it here is a decision, not an oversight. See
+# test_local_only_asymmetries_are_deliberate.
+_REMOTE_EXEMPT = {"bring_your_own"}
+
 # Map schema tool names → actual functions (explain uses explain_tool internally)
 TOOL_FUNCTION_MAP = {
     "add_todo": tools_module.add_todo,
@@ -78,6 +84,70 @@ def _func_params(func) -> set:
 
 def _schema_params(schema: dict) -> set:
     return set(schema.get("inputSchema", {}).get("properties", {}).keys())
+
+
+def test_registries_do_not_drift():
+    """
+    Every registry that names tools must name the SAME tools.
+
+    There are five of them and they were previously hand-synced, which is how
+    bring_your_own ended up in the full loadout with no schema. TOOL_GROUPS is the
+    source; the others must agree with it.
+    """
+    from src.Omnispindle.mcp_handler import get_tool_functions
+    from src.Omnispindle.tool_loadouts import _BASE_LOADOUTS
+    from src.Omnispindle.tool_metadata import TOOL_GROUPS
+
+    groups = set(TOOL_GROUPS)
+
+    # 'full' is derived from TOOL_GROUPS, so this asserts the derivation stays wired.
+    assert set(_BASE_LOADOUTS["full"]) == groups, "full loadout drifted from TOOL_GROUPS"
+
+    # The remote JSON-RPC handler serves everything EXCEPT the local-only exemptions.
+    missing = groups - set(TOOL_SCHEMAS) - _REMOTE_EXEMPT
+    extra = set(TOOL_SCHEMAS) - groups
+    assert not missing, f"in TOOL_GROUPS but no TOOL_SCHEMAS entry: {sorted(missing)}"
+    assert not extra, f"in TOOL_SCHEMAS but not registered in TOOL_GROUPS: {sorted(extra)}"
+
+    # Dispatch table must cover exactly what we advertise a schema for.
+    dispatch = set(get_tool_functions())
+    assert dispatch == set(TOOL_SCHEMAS), (
+        f"tools/call dispatch != TOOL_SCHEMAS; "
+        f"only-in-dispatch={sorted(dispatch - set(TOOL_SCHEMAS))} "
+        f"only-in-schemas={sorted(set(TOOL_SCHEMAS) - dispatch)}"
+    )
+
+    # This test's own map has to keep up too.
+    assert set(TOOL_FUNCTION_MAP) == groups, (
+        f"TOOL_FUNCTION_MAP drifted from TOOL_GROUPS: "
+        f"{sorted(groups ^ set(TOOL_FUNCTION_MAP))}"
+    )
+
+
+def test_local_only_asymmetries_are_deliberate():
+    """
+    Pin the two known asymmetries so they stay choices rather than accidents.
+
+    bring_your_own executes arbitrary code — it is LOCAL_ONLY and deliberately has
+    no schema and no entry in the remote dispatch table, so the remote JSON-RPC
+    handler cannot reach it at all.
+
+    list_projects touches the filesystem, so it is filtered out of remote tools/list
+    by mode='remote' — but it IS in the remote dispatch table and therefore callable
+    by name. Discovery is narrowed; capability is not. That asymmetry is intentional
+    (it mirrors loadouts, which shrink tools/list without gating tools/call).
+    """
+    from src.Omnispindle.mcp_handler import get_tool_functions
+    from src.Omnispindle.tool_loadouts import get_loadout
+    from src.Omnispindle.tool_metadata import ToolAccessLevel, TOOL_ACCESS_LEVELS
+
+    assert TOOL_ACCESS_LEVELS["bring_your_own"] == ToolAccessLevel.LOCAL_ONLY
+    assert "bring_your_own" not in TOOL_SCHEMAS
+    assert "bring_your_own" not in get_tool_functions()
+
+    assert TOOL_ACCESS_LEVELS["list_projects"] == ToolAccessLevel.LOCAL_ONLY
+    assert "list_projects" not in get_loadout("full", mode="remote")
+    assert "list_projects" in get_tool_functions()
 
 
 def test_schema_params_match_function_signatures():

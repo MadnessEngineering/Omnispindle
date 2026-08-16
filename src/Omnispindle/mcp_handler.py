@@ -2,7 +2,7 @@
 import json
 import logging
 import os
-from typing import Dict, Any, Callable, Coroutine
+from typing import Dict, Any, Callable, Coroutine, Optional
 
 import asyncio
 
@@ -22,6 +22,23 @@ logger = logging.getLogger(__name__)
 # _resolve_client_prefs); tools/call is NOT loadout-gated, so a client that knows
 # a tool name can still call it — this shrinks discovery, not capability.
 DEFAULT_REMOTE_LOADOUT = "basic"
+
+# Protocol versions this handler can serve. Newest first — PROTOCOL_VERSION is what
+# we announce when the client asks for something we don't speak (or asks for nothing).
+# We stay conservative here: claiming a version means claiming its semantics, and the
+# 2026-07-28 generation drops the initialize handshake entirely, which this handler
+# still relies on.
+PROTOCOL_VERSION = "2025-06-18"
+SUPPORTED_PROTOCOL_VERSIONS = ("2025-06-18", "2025-03-26", "2024-11-05")
+
+
+def _server_version() -> str:
+    """Installed package version, falling back to the pyproject value."""
+    try:
+        from importlib.metadata import PackageNotFoundError, version
+        return version("omnispindle")
+    except Exception:
+        return "1.0.0"
 
 
 def _as_text(result: Any) -> str:
@@ -661,6 +678,84 @@ def _resolve_client_prefs(request: Request) -> tuple:
 
     return loadout, doc_level
 
+
+def _build_tool_functions() -> Dict[str, Any]:
+    """
+    Tool name -> callable, for tools/call dispatch.
+
+    Built once at import instead of rebuilt on every single call, and module-level
+    so tests/test_schema_consistency.py can assert it against the other registries.
+    Imported lazily inside the function to keep the tools module out of the import
+    cycle at module load.
+    """
+    from . import tools
+
+    return {
+        # Todo tools
+        "add_todo": tools.add_todo,
+        "query_todos": tools.query_todos,
+        "update_todo": tools.update_todo,
+        "delete_todo": tools.delete_todo,
+        "get_todo": tools.get_todo,
+        "complete_todo": tools.complete_todo,
+        "list_todos_by_status": tools.list_todos_by_status,
+        "search_todos": tools.search_todos,
+        "list_project_todos": tools.list_project_todos,
+        "query_todos_near": tools.query_todos_near,
+        "link_todos": tools.link_todos,
+        # Lesson tools
+        "add_lesson": tools.add_lesson,
+        "get_lesson": tools.get_lesson,
+        "update_lesson": tools.update_lesson,
+        "delete_lesson": tools.delete_lesson,
+        "regenerate_embedding": tools.regenerate_embedding,
+        "search_lessons": tools.search_lessons,
+        "grep_lessons": tools.grep_lessons,
+        "list_lessons": tools.list_lessons,
+        # Admin/system tools
+        "query_todo_logs": tools.query_todo_logs,
+        "list_projects": tools.list_projects,
+        "explain": tools.explain_tool,
+        "add_explanation": tools.add_explanation,
+        "point_out_obvious": tools.point_out_obvious,
+        # Inventorium session tools
+        "inventorium_sessions_list": tools.inventorium_sessions_list,
+        "inventorium_sessions_get": tools.inventorium_sessions_get,
+        "inventorium_sessions_create": tools.inventorium_sessions_create,
+        "inventorium_sessions_spawn": tools.inventorium_sessions_spawn,
+        "inventorium_sessions_fork": tools.inventorium_sessions_fork,
+        "inventorium_sessions_genealogy": tools.inventorium_sessions_genealogy,
+        "inventorium_sessions_tree": tools.inventorium_sessions_tree,
+        "inventorium_todos_link_session": tools.inventorium_todos_link_session,
+        # Context bundle (Tier 1 RAG)
+        "get_context_bundle": tools.get_context_bundle,
+        # Semantic search (Tier 2 RAG)
+        "find_relevant": tools.find_relevant,
+        # Preflight RAG (Pre-processing lessons lookup)
+        "preflight_rag": tools.preflight_rag,
+        # Agent Journal tools
+        "write_agent_journal": tools.write_agent_journal,
+        "read_agent_journal": tools.read_agent_journal,
+        # Quest tools
+        "create_quest": tools.create_quest,
+        "check_quest": tools.check_quest,
+        "list_quests": tools.list_quests,
+        "link_quest": tools.link_quest,
+        "update_quest": tools.update_quest
+    }
+
+
+_TOOL_FUNCTIONS: Optional[Dict[str, Any]] = None
+
+
+def get_tool_functions() -> Dict[str, Any]:
+    """Memoized tools/call dispatch table."""
+    global _TOOL_FUNCTIONS
+    if _TOOL_FUNCTIONS is None:
+        _TOOL_FUNCTIONS = _build_tool_functions()
+    return _TOOL_FUNCTIONS
+
+
 async def mcp_handler(request: Request, get_current_user: Callable[[], Coroutine[Any, Any, Any]]) -> JSONResponse:
     """
     Handle MCP JSON-RPC requests over HTTP
@@ -707,27 +802,41 @@ async def mcp_handler(request: Request, get_current_user: Callable[[], Coroutine
 
         logger.info(f"🔗 MCP Request: {method} from user {user.get('email', 'unknown')}")
 
+        # Notifications carry no id and MUST NOT get a JSON-RPC response object —
+        # returning an error for notifications/initialized is itself a violation.
+        if isinstance(method, str) and method.startswith("notifications/"):
+            return JSONResponse(content=None, status_code=202)
+
         # Handle different MCP methods
         if method == "initialize":
-            # Return server capabilities for MCP protocol initialization
+            # Echo the client's protocol version when we speak it, rather than
+            # unilaterally announcing ours — a client that strict-matches the
+            # version string would otherwise refuse the connection.
+            requested = params.get("protocolVersion")
+            negotiated = requested if requested in SUPPORTED_PROTOCOL_VERSIONS else PROTOCOL_VERSION
+
             return JSONResponse(
                 content={
                     "jsonrpc": "2.0",
                     "id": request_id,
                     "result": {
-                        "protocolVersion": "2024-11-05",
+                        "protocolVersion": negotiated,
                         "serverInfo": {
                             "name": "Omnispindle",
-                            "version": "1.0.0"
+                            "version": _server_version()
                         },
+                        # Advertise ONLY what the dispatch below actually answers.
+                        # This previously claimed prompts and resources; neither has
+                        # a handler, so a client that trusted the handshake got
+                        # -32601 where the spec promises an empty list.
                         "capabilities": {
-                            "tools": {},
-                            "prompts": {},
-                            "resources": {}
+                            "tools": {}
                         }
                     }
                 }
             )
+        elif method == "ping":
+            return JSONResponse(content={"jsonrpc": "2.0", "id": request_id, "result": {}})
         elif method == "tools/list":
             # Get tools dynamically based on loadout (remote mode - filters local-only tools)
             loadout, doc_level = _resolve_client_prefs(request)
@@ -764,67 +873,12 @@ async def mcp_handler(request: Request, get_current_user: Callable[[], Coroutine
             tool_arguments.pop("ctx", None)
             tool_arguments.pop("user_ctx", None)
 
-            # Import tools module to access the actual tool functions
-            from . import tools
             from .context import Context
 
             # Create context for the user
             ctx = Context(user=user)
 
-            # Map tool names to actual functions (complete list)
-            tool_functions = {
-                # Todo tools
-                "add_todo": tools.add_todo,
-                "query_todos": tools.query_todos,
-                "update_todo": tools.update_todo,
-                "delete_todo": tools.delete_todo,
-                "get_todo": tools.get_todo,
-                "complete_todo": tools.complete_todo,
-                "list_todos_by_status": tools.list_todos_by_status,
-                "search_todos": tools.search_todos,
-                "list_project_todos": tools.list_project_todos,
-                "query_todos_near": tools.query_todos_near,
-                "link_todos": tools.link_todos,
-                # Lesson tools
-                "add_lesson": tools.add_lesson,
-                "get_lesson": tools.get_lesson,
-                "update_lesson": tools.update_lesson,
-                "delete_lesson": tools.delete_lesson,
-                "regenerate_embedding": tools.regenerate_embedding,
-                "search_lessons": tools.search_lessons,
-                "grep_lessons": tools.grep_lessons,
-                "list_lessons": tools.list_lessons,
-                # Admin/system tools
-                "query_todo_logs": tools.query_todo_logs,
-                "list_projects": tools.list_projects,
-                "explain": tools.explain_tool,
-                "add_explanation": tools.add_explanation,
-                "point_out_obvious": tools.point_out_obvious,
-                # Inventorium session tools
-                "inventorium_sessions_list": tools.inventorium_sessions_list,
-                "inventorium_sessions_get": tools.inventorium_sessions_get,
-                "inventorium_sessions_create": tools.inventorium_sessions_create,
-                "inventorium_sessions_spawn": tools.inventorium_sessions_spawn,
-                "inventorium_sessions_fork": tools.inventorium_sessions_fork,
-                "inventorium_sessions_genealogy": tools.inventorium_sessions_genealogy,
-                "inventorium_sessions_tree": tools.inventorium_sessions_tree,
-                "inventorium_todos_link_session": tools.inventorium_todos_link_session,
-                # Context bundle (Tier 1 RAG)
-                "get_context_bundle": tools.get_context_bundle,
-                # Semantic search (Tier 2 RAG)
-                "find_relevant": tools.find_relevant,
-                # Preflight RAG (Pre-processing lessons lookup)
-                "preflight_rag": tools.preflight_rag,
-                # Agent Journal tools
-                "write_agent_journal": tools.write_agent_journal,
-                "read_agent_journal": tools.read_agent_journal,
-                # Quest tools
-                "create_quest": tools.create_quest,
-                "check_quest": tools.check_quest,
-                "list_quests": tools.list_quests,
-                "link_quest": tools.link_quest,
-                "update_quest": tools.update_quest
-            }
+            tool_functions = get_tool_functions()
 
             if tool_name not in tool_functions:
                 return JSONResponse(content={

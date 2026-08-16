@@ -22,6 +22,28 @@ class ToolTier(str, Enum):
     PRO = "pro"         # Requires Madness Pass subscription
 
 
+class ToolGroup(str, Enum):
+    """
+    Functional grouping — what area of the server a tool belongs to.
+
+    Exactly one group per tool. This is the SOURCE that loadouts derive from, not a
+    parallel list to keep in sync: `_BASE_LOADOUTS["full"]` and the single-area
+    loadouts are computed from TOOL_GROUPS, so adding a tool here is what makes it
+    exist everywhere else.
+
+    Distinct from ToolFeature, which is a many-to-many capability vocabulary
+    (a tool can be both DATABASE_READ and MQTT_BROADCAST while belonging to one group).
+    """
+    TODOS = "todos"
+    LESSONS = "lessons"
+    QUESTS = "quests"
+    RAG = "rag"                  # context assembly + semantic retrieval
+    SESSIONS = "sessions"        # Inventorium chat sessions
+    JOURNAL = "journal"          # cross-agent journal
+    ADMIN = "admin"              # audit logs, projects, explanations, utilities
+    CUSTOM_CODE = "custom_code"  # arbitrary execution — local only
+
+
 class ToolFeature(str, Enum):
     """Features that tools may provide."""
     AUTO_GIT_METADATA = "auto_git_metadata"      # Adds git context automatically
@@ -81,6 +103,81 @@ TOOL_ACCESS_LEVELS: Dict[str, ToolAccessLevel] = {
     "link_quest": ToolAccessLevel.REMOTE_SAFE,
     "update_quest": ToolAccessLevel.REMOTE_SAFE,
 }
+
+
+# Functional grouping — the single source loadouts derive from.
+# Every tool the server can dispatch MUST appear here exactly once;
+# tests/test_schema_consistency.py enforces that against the other registries.
+TOOL_GROUPS: Dict[str, ToolGroup] = {
+    # Todos
+    "add_todo": ToolGroup.TODOS,
+    "query_todos": ToolGroup.TODOS,
+    "update_todo": ToolGroup.TODOS,
+    "delete_todo": ToolGroup.TODOS,
+    "get_todo": ToolGroup.TODOS,
+    "complete_todo": ToolGroup.TODOS,
+    "list_todos_by_status": ToolGroup.TODOS,
+    "search_todos": ToolGroup.TODOS,
+    "list_project_todos": ToolGroup.TODOS,
+    "query_todos_near": ToolGroup.TODOS,
+    "link_todos": ToolGroup.TODOS,
+
+    # Lessons
+    "add_lesson": ToolGroup.LESSONS,
+    "get_lesson": ToolGroup.LESSONS,
+    "update_lesson": ToolGroup.LESSONS,
+    "delete_lesson": ToolGroup.LESSONS,
+    "regenerate_embedding": ToolGroup.LESSONS,
+    "search_lessons": ToolGroup.LESSONS,
+    "grep_lessons": ToolGroup.LESSONS,
+    "list_lessons": ToolGroup.LESSONS,
+
+    # Quests (Quest → Chains → Todos)
+    "create_quest": ToolGroup.QUESTS,
+    "check_quest": ToolGroup.QUESTS,
+    "list_quests": ToolGroup.QUESTS,
+    "link_quest": ToolGroup.QUESTS,
+    "update_quest": ToolGroup.QUESTS,
+
+    # RAG / context
+    "get_context_bundle": ToolGroup.RAG,
+    "find_relevant": ToolGroup.RAG,
+    "preflight_rag": ToolGroup.RAG,
+
+    # Inventorium sessions
+    "inventorium_sessions_list": ToolGroup.SESSIONS,
+    "inventorium_sessions_get": ToolGroup.SESSIONS,
+    "inventorium_sessions_create": ToolGroup.SESSIONS,
+    "inventorium_sessions_spawn": ToolGroup.SESSIONS,
+    "inventorium_sessions_fork": ToolGroup.SESSIONS,
+    "inventorium_sessions_genealogy": ToolGroup.SESSIONS,
+    "inventorium_sessions_tree": ToolGroup.SESSIONS,
+    "inventorium_todos_link_session": ToolGroup.SESSIONS,
+
+    # Agent journal
+    "write_agent_journal": ToolGroup.JOURNAL,
+    "read_agent_journal": ToolGroup.JOURNAL,
+
+    # Admin / system
+    "query_todo_logs": ToolGroup.ADMIN,
+    "list_projects": ToolGroup.ADMIN,
+    "explain": ToolGroup.ADMIN,
+    "add_explanation": ToolGroup.ADMIN,
+    "point_out_obvious": ToolGroup.ADMIN,
+
+    # Custom code execution (local only)
+    "bring_your_own": ToolGroup.CUSTOM_CODE,
+}
+
+
+def get_group_tools(group: ToolGroup) -> List[str]:
+    """All tool names in a functional group, in registry order."""
+    return [name for name, g in TOOL_GROUPS.items() if g == group]
+
+
+def get_tool_group(tool_name: str) -> ToolGroup:
+    """Group for a tool. Unregistered tools are ADMIN — visible, not silently hidden."""
+    return TOOL_GROUPS.get(tool_name, ToolGroup.ADMIN)
 
 
 # Feature markers for tools

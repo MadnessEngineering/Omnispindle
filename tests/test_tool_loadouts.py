@@ -11,24 +11,37 @@ from src.Omnispindle.tool_loadouts import (
     get_loadout_names,
     get_loadout_info
 )
+from src.Omnispindle.tool_metadata import (
+    TOOL_ACCESS_LEVELS,
+    TOOL_GROUPS,
+    ToolAccessLevel,
+    ToolGroup,
+    get_group_tools,
+)
+
+# Counts here used to be hardcoded and went stale every time a tool was added —
+# six of these tests were failing against main before this comment existed.
+# Assert against the registries the code derives from instead.
+_LOCAL_ONLY = {n for n, lvl in TOOL_ACCESS_LEVELS.items() if lvl == ToolAccessLevel.LOCAL_ONLY}
 
 
 class TestToolLoadouts:
     """Test suite for tool loadout management."""
 
     def test_local_mode_includes_all_tools(self):
-        """Local mode should include all tools including local-only."""
+        """Local mode should include every registered tool, local-only included."""
         full = get_loadout("full", mode="local")
         assert "bring_your_own" in full
         assert "list_projects" in full
-        assert len(full) == 35  # All tools
+        # 'full' is derived from TOOL_GROUPS — this asserts the derivation, not a count.
+        assert set(full) == set(TOOL_GROUPS)
 
     def test_remote_mode_filters_local_only(self):
-        """Remote mode should exclude local-only tools."""
+        """Remote mode should exclude exactly the local-only tools."""
         full = get_loadout("full", mode="remote")
         assert "bring_your_own" not in full
         assert "list_projects" not in full
-        assert len(full) == 33  # Excluding 2 local-only
+        assert set(full) == set(TOOL_GROUPS) - _LOCAL_ONLY
 
     def test_write_only_loadout(self):
         """Write-only loadout should only have create/update/delete tools."""
@@ -51,7 +64,8 @@ class TestToolLoadouts:
         assert "add_todo" not in read_only
         assert "update_todo" not in read_only
         assert "delete_todo" not in read_only
-        assert len(read_only) == 16
+        # No write verbs at all — the property that actually defines this loadout.
+        assert not {"add_todo", "update_todo", "delete_todo", "add_lesson"} & set(read_only)
 
     def test_lightweight_has_minimal_token_cost(self):
         """Lightweight loadout should have 13 tools for token optimization."""
@@ -64,16 +78,29 @@ class TestToolLoadouts:
         assert "complete_todo" in lightweight
 
     def test_basic_loadout(self):
-        """Basic loadout should have 10 core CRUD + context + lesson lookup tools."""
-        basic = get_loadout("basic", mode="local")
-        assert len(basic) == 10
-        assert "add_todo" in basic
-        assert "query_todos" in basic
-        assert "update_todo" in basic
-        assert "get_todo" in basic
-        assert "complete_todo" in basic
-        assert "get_lesson" in basic
-        assert "search_lessons" in basic
+        """
+        Basic is the remote default and means 'a normal working session'.
+
+        Asserting membership rather than a count, because the contents are a
+        product decision: search and the RAG tools are in because working without
+        them means re-deriving context by hand; sessions, journal and deletes are
+        out because they are specialist or destructive.
+        """
+        basic = set(get_loadout("basic", mode="local"))
+
+        expected_in = {
+            "add_todo", "query_todos", "update_todo", "get_todo", "complete_todo",
+            "search_todos", "get_context_bundle", "find_relevant", "preflight_rag",
+            "add_lesson", "get_lesson", "search_lessons",
+        }
+        assert expected_in <= basic, f"missing from basic: {sorted(expected_in - basic)}"
+
+        expected_out = {
+            "delete_todo", "delete_lesson", "bring_your_own",
+            "write_agent_journal", "read_agent_journal",
+            "inventorium_sessions_list", "explain", "point_out_obvious",
+        }
+        assert not (expected_out & basic), f"should not be in basic: {sorted(expected_out & basic)}"
 
     def test_minimal_loadout(self):
         """Minimal loadout should have only 4 essential tools."""
@@ -85,9 +112,9 @@ class TestToolLoadouts:
         assert "complete_todo" in minimal
 
     def test_lessons_loadout(self):
-        """Lessons loadout should have 7 knowledge management tools."""
+        """Lessons loadout is derived from the LESSONS group — new lesson tools join it free."""
         lessons = get_loadout("lessons", mode="local")
-        assert len(lessons) == 7
+        assert set(lessons) == set(get_group_tools(ToolGroup.LESSONS))
         assert "add_lesson" in lessons
         assert "get_lesson" in lessons
         assert "search_lessons" in lessons
@@ -125,17 +152,23 @@ class TestToolLoadouts:
     def test_get_loadout_info(self):
         """Get loadout info should return metadata about a loadout."""
         info = get_loadout_info("basic")
+        expected = get_loadout("basic", mode="local")
         assert info["name"] == "basic"
-        assert info["tool_count"] == 10
-        assert "tools" in info
+        assert info["tool_count"] == len(expected)
+        assert len(info["tools"]) == len(expected)
         assert "description" in info
-        assert len(info["tools"]) == 10
 
-    def test_invalid_loadout_defaults_to_full(self):
-        """Invalid loadout name should default to full loadout."""
+    def test_invalid_loadout_defaults_narrow(self):
+        """
+        A bad loadout name must fall back NARROW.
+
+        This previously returned 'full', so a typo in a client's loadout hint
+        silently widened exposure to every tool. Bad input should never be the
+        path to the widest surface.
+        """
         result = get_loadout("invalid_loadout_name", mode="local")
-        full = get_loadout("full", mode="local")
-        assert result == full
+        assert result == get_loadout("basic", mode="local")
+        assert result != get_loadout("full", mode="local")
 
     def test_remote_mode_consistency_across_loadouts(self):
         """All loadouts should filter local-only tools in remote mode."""

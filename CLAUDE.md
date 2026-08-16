@@ -385,6 +385,17 @@ OMNISPINDLE_MODE="api" python test_api_client.py
 
 Omnispindle supports variable tool loadouts to reduce token usage for AI agents. Configure via the `OMNISPINDLE_TOOL_LOADOUT` environment variable:
 
+**Tool groups are the source.** `TOOL_GROUPS` in `src/Omnispindle/tool_metadata.py` assigns every
+tool exactly one `ToolGroup` (todos, lessons, quests, rag, sessions, journal, admin, custom_code).
+The `full` loadout and the whole-group loadouts (`lessons`) are **derived** from it — adding a tool
+to `TOOL_GROUPS` is what makes it exist everywhere else. Cross-group selections like `basic` and
+`admin` stay hand-curated on purpose. `tests/test_schema_consistency.py::test_registries_do_not_drift`
+fails if `TOOL_GROUPS`, `TOOL_SCHEMAS`, the `tools/call` dispatch table, and the full loadout ever
+disagree. Don't add a sixth parallel list; add to the group registry.
+
+Note `ToolGroup` (one per tool, functional area) is a different axis from `ToolFeature`
+(many-to-many capability tags like `DATABASE_READ`, `MQTT_BROADCAST`). Don't overload one for the other.
+
 **Available Loadouts**:
 - `full` (default for stdio) - All 38 tools available. **Remote HTTP defaults to `basic`** — see below.
 - `basic` - **Default for remote HTTP.** Everything wanted for a normal working session (21 tools): todo CRUD (add_todo, query_todos, update_todo, get_todo, complete_todo, list_todos_by_status, list_project_todos), finding things (search_todos, get_context_bundle, find_relevant, preflight_rag), lessons read+write (add_lesson, get_lesson, search_lessons), spatial/dependency (query_todos_near, link_todos), quests (create_quest, check_quest, list_quests, link_quest, update_quest). Deliberately excluded: session tools, agent journal, explain/add_explanation, point_out_obvious, bring_your_own, and all deletes — ask for `full` or `admin` per request when you need them.
