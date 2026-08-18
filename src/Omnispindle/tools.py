@@ -669,6 +669,48 @@ async def _recall_related_lessons(description: str, project: Optional[str], tags
     } for m in matched[: cfg["limit"]]]
 
 
+# Strong references to in-flight fire-and-forget follow-ups. asyncio only keeps a
+# weak reference to a task, so a coroutine that nothing holds can be garbage-collected
+# mid-execution -- the reason a backgrounded embedding regen could silently vanish.
+# Entries are discarded by the done-callback.
+_BACKGROUND_TASKS = set()
+
+
+def _spawn_background(task_name: str, coro, context: str = "") -> None:
+    """Fire-and-forget a follow-up without letting it block the response or disappear.
+
+    Never let slow follow-up work turn a committed write into a client-visible
+    failure: the caller returns as soon as the DB write lands, and anything
+    non-critical runs through here. Failures are logged rather than swallowed, so a
+    persistently broken follow-up is visible instead of silent.
+    """
+    task = asyncio.create_task(coro)
+    _BACKGROUND_TASKS.add(task)
+
+    def _done(t) -> None:
+        _BACKGROUND_TASKS.discard(t)
+        if t.cancelled():
+            logger.warning(f"Background task '{task_name}' cancelled{context}")
+            return
+        exc = t.exception()
+        if exc is not None:
+            logger.warning(f"Background task '{task_name}' failed{context}: {exc}")
+
+    task.add_done_callback(_done)
+
+
+def _add_todo_dedupe_window() -> int:
+    """Seconds within which an identical add_todo is treated as a retry, not a new todo.
+
+    Defaults above Cloudflare's 120s proxy read timeout so a 524-triggered retry
+    lands inside the window. OMNISPINDLE_ADD_TODO_DEDUPE_SECS=0 disables.
+    """
+    try:
+        return max(0, int(float(os.getenv("OMNISPINDLE_ADD_TODO_DEDUPE_SECS", "180"))))
+    except (TypeError, ValueError):
+        return 180
+
+
 async def add_todo(description: str, project: str, priority: str = "Medium", target_agent: str = "user", notes: str = "", ticket: str = "", metadata: Optional[Dict[str, Any]] = None, ctx: Optional[Context] = None, **extra) -> str:
     """
     Creates a task in the specified project with the given priority and target agent.
@@ -772,6 +814,40 @@ async def add_todo(description: str, project: str, priority: str = "Medium", tar
         collections = db_connection.get_collections(ctx.user if ctx else None)
         todos_collection = collections['todos']
 
+        # Retry safety. A proxy timeout (Cloudflare 524 at 120s) can hide a write that
+        # actually committed; a client treating that as failure retries, and on a create
+        # that means a duplicate todo. update_todo is idempotent so a replay is harmless,
+        # but add_todo is not -- so collapse an identical create seen inside the window
+        # onto the row already there instead of inserting a second one.
+        dedupe_window = _add_todo_dedupe_window()
+        if dedupe_window > 0:
+            prior = todos_collection.find_one(
+                {
+                    "description": description,
+                    "project": validated_project,
+                    "target_agent": target_agent,
+                    "status": "pending",
+                    "created_at": {"$gte": todo["created_at"] - dedupe_window},
+                },
+                {"_id": 0, "id": 1, "project": 1, "priority": 1,
+                 "target_agent": 1, "created_at": 1},
+                sort=[("created_at", -1)],
+            )
+            if prior:
+                logger.warning(
+                    f"add_todo deduplicated: identical pending create for project "
+                    f"'{validated_project}' within {dedupe_window}s -- returning existing "
+                    f"{prior['id']} instead of inserting {todo_id}"
+                )
+                return json.dumps({
+                    "id": prior["id"],
+                    "project": prior.get("project", validated_project),
+                    "priority": prior.get("priority", priority),
+                    "target_agent": prior.get("target_agent", target_agent),
+                    "created_at": prior.get("created_at"),
+                    "deduplicated": True,
+                })
+
         todos_collection.insert_one(todo)
         user_email = ctx.user.get("email", "anonymous") if ctx and ctx.user else "anonymous"
         logger.info(f"Todo created by {user_email} in user database: {todo_id}")
@@ -787,19 +863,9 @@ async def add_todo(description: str, project: str, priority: str = "Medium", tar
             if embedding:
                 todos_collection.update_one({"id": todo_id}, {"$set": {"embedding": embedding}})
 
-        def _track_background(task_name: str, coro):
-            task = asyncio.create_task(coro)
 
-            def _done(t):
-                try:
-                    t.result()
-                except Exception as bg_err:
-                    logger.warning(f"Background add_todo task '{task_name}' failed for {todo_id}: {bg_err}")
-
-            task.add_done_callback(_done)
-
-        _track_background("log_todo_create", _background_log_create())
-        _track_background("embedding_update", _background_embedding_update())
+        _spawn_background("log_todo_create", _background_log_create(), f" for {todo_id}")
+        _spawn_background("embedding_update", _background_embedding_update(), f" for {todo_id}")
 
         resp = {
             "id": todo_id,
@@ -1202,9 +1268,17 @@ async def update_todo(todo_id: str, updates: dict, ctx: Optional[Context] = None
 
                 changes.append({"field": field, "old_value": old_value, "new_value": value})
 
-            # Only log if there are actual changes
+            # Only log if there are actual changes. Backgrounded to match add_todo:
+            # the write has already committed, so the audit-log round trip must not be
+            # able to hold the response open past a proxy timeout and make a successful
+            # update look like a failure to the client.
             if changes:
-                await log_todo_update(todo_id, description, project, changes, user_email, ctx.user if ctx else None)
+                _spawn_background(
+                    "log_todo_update",
+                    log_todo_update(todo_id, description, project, changes, user_email,
+                                    ctx.user if ctx else None),
+                    f" for {todo_id}",
+                )
             else:
                 logger.debug(f"No actual changes detected for todo {todo_id}, skipping log entry")
 
@@ -1212,16 +1286,13 @@ async def update_todo(todo_id: str, updates: dict, ctx: Optional[Context] = None
             embedding_fields = {"description", "notes", "project"}
             if embedding_fields & set(updates.keys()):
                 async def _bg_regen_embedding(tid=todo_id, coll=todos_collection):
-                    try:
-                        updated_todo = coll.find_one({"id": tid})
-                        if updated_todo:
-                            embed_text = embeddings.embedding_text_for_todo(updated_todo)
-                            embedding = await embeddings.generate_embedding(embed_text)
-                            if embedding:
-                                coll.update_one({"id": tid}, {"$set": {"embedding": embedding}})
-                    except Exception:
-                        pass
-                asyncio.create_task(_bg_regen_embedding())
+                    updated_todo = coll.find_one({"id": tid})
+                    if updated_todo:
+                        embed_text = embeddings.embedding_text_for_todo(updated_todo)
+                        embedding = await embeddings.generate_embedding(embed_text)
+                        if embedding:
+                            coll.update_one({"id": tid}, {"$set": {"embedding": embedding}})
+                _spawn_background("embedding_regen", _bg_regen_embedding(), f" for {todo_id}")
 
             return json.dumps({"id": todo_id})
         else:
