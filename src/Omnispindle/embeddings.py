@@ -3,6 +3,11 @@ Vector embeddings for semantic RAG search (Phase 4).
 
 Uses Gemini text-embedding-004 (768 dims) via REST API.
 Graceful degradation: no GEMINI_API_KEY = no embeddings = regex fallback everywhere.
+
+Kill switch: OMNISPINDLE_EMBEDDINGS=0 disables ALL embedding work regardless of key --
+generation on write (add_todo/update_todo/add_lesson) and semantic search on read
+(find_similar, which otherwise streams every stored 768-dim vector out of Mongo and
+cosines them in Python). Read at call time, so a process restart is enough to flip it.
 """
 
 import logging
@@ -24,8 +29,19 @@ EMBEDDING_URL = f"https://generativelanguage.googleapis.com/v1beta/models/{EMBED
 EMBEDDING_DIMS = 768
 
 
+def _disabled() -> bool:
+    """True when the OMNISPINDLE_EMBEDDINGS kill switch is off.
+
+    Checked at call time rather than import time so flipping the env and restarting
+    is sufficient -- no code change, and the API key can stay in place.
+    """
+    return os.getenv("OMNISPINDLE_EMBEDDINGS", "1").strip().lower() in ("0", "false", "no", "off")
+
+
 def is_available() -> bool:
-    """Check if embedding generation is available (API key configured)."""
+    """Check if embedding generation is available (kill switch on AND API key configured)."""
+    if _disabled():
+        return False
     return bool(GEMINI_API_KEY)
 
 
@@ -35,7 +51,7 @@ async def generate_embedding(text: str) -> Optional[List[float]]:
 
     Returns None on any failure (missing key, API error, timeout).
     """
-    if not GEMINI_API_KEY:
+    if _disabled() or not GEMINI_API_KEY:
         return None
 
     if not text or not text.strip():

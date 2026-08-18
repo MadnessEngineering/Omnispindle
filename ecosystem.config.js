@@ -52,6 +52,12 @@ module.exports = {
             // per-request via ?loadout= or X-Omnispindle-Loadout. Setting this here
             // would pin every client to one loadout and override their choice.
             OMNISPINDLE_TOOL_LOADOUT: process.env.OMNISPINDLE_TOOL_LOADOUT,
+            // Embeddings OFF on the deployed HTTP surface. Kills Gemini calls on
+            // write AND find_similar's load-every-768-dim-vector-into-Python scan
+            // on read, which is the expensive half on a ~1GB box. GEMINI_API_KEY
+            // stays in the server .env; flip to '1' + restart to re-enable.
+            // Not set in the dev `env` block on purpose -- local dev keeps semantics.
+            OMNISPINDLE_EMBEDDINGS: process.env.OMNISPINDLE_EMBEDDINGS || '0',
             MADNESS_AUTH_TOKEN: process.env.MADNESS_AUTH_TOKEN,
             MADNESS_API_URL: process.env.MADNESS_API_URL || 'https://madnessinteractive.cc/api',
             MQTT_HOST: 'localhost',

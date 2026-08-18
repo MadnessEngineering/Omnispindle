@@ -31,6 +31,7 @@ from src.Omnispindle.embeddings import (
     embedding_text_for_todo,
     embedding_text_for_lesson,
     is_available,
+    _disabled,
 )
 
 
@@ -142,8 +143,13 @@ async def main():
     args = parser.parse_args()
 
     if not is_available():
-        print("ERROR: GEMINI_API_KEY not set. Cannot generate embeddings.")
-        print("Set the environment variable and try again.")
+        if _disabled():
+            print("ERROR: embeddings are disabled by OMNISPINDLE_EMBEDDINGS.")
+            print("This backfill exists to generate embeddings, so it will not")
+            print("silently no-op. Re-enable with OMNISPINDLE_EMBEDDINGS=1.")
+        else:
+            print("ERROR: GEMINI_API_KEY not set. Cannot generate embeddings.")
+            print("Set the environment variable and try again.")
         sys.exit(1)
 
     print("=== Omnispindle Embedding Backfill ===")

@@ -550,6 +550,12 @@ if __name__ == "__main__":
 
     print(f"=== Lesson Refiner ===")
     print(f"MongoDB: {MONGODB_URI}")
-    print(f"Embeddings: {'ON' if is_available() else 'OFF (no GEMINI_API_KEY)'}")
+    if is_available():
+        _emb_status = "ON"
+    elif _emb._disabled():
+        _emb_status = "OFF (disabled by OMNISPINDLE_EMBEDDINGS)"
+    else:
+        _emb_status = "OFF (no GEMINI_API_KEY)"
+    print(f"Embeddings: {_emb_status}")
     print(f"Serving on http://{args.host}:{args.port}")
     uvicorn.run(app, host=args.host, port=args.port)
