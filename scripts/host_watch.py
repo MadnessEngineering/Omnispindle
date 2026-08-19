@@ -127,6 +127,128 @@ def cpu_delta(prev, cur):
     }
 
 
+PM2_PIDS_DIR = os.path.expanduser("~/.pm2/pids")
+CLK_TCK = os.sysconf("SC_CLK_TCK")
+PAGE_SIZE = os.sysconf("SC_PAGE_SIZE")
+
+
+def read_procs():
+    """
+    Raw per-process counters for everything PM2 is running.
+
+    Sourced from ~/.pm2/pids/<name>-<id>.pid rather than `pm2 jlist`, which spawns a
+    node process per call. On a box already too starved to schedule anything, the
+    measurement must not need the resource being measured.
+
+    Two traps, both paid for:
+
+    /proc/<pid>/stat cannot be whitespace-split. Field 2 is the comm in parentheses
+    and it contains spaces for anything started as `node /opt/madness-backend/
+    server.js`, which shifts every later field and yields confident garbage — a
+    naive split reported state="/opt/madne)" and starttime=0. Split after the LAST
+    ')' instead.
+
+    Stale pid files accumulate in that directory (several from March, pointing at
+    long-dead pids). A pid whose /proc entry is gone is skipped. `cmd` is carried so
+    that a pid recycled by an unrelated process is visible rather than silently
+    mislabelled with whatever PM2 name happened to be on the file.
+    """
+    out = {}
+    try:
+        names = os.listdir(PM2_PIDS_DIR)
+    except Exception:
+        return out
+
+    for fname in names:
+        if not fname.endswith(".pid"):
+            continue
+        base = fname[:-4]
+        name, _, pm_id = base.rpartition("-")
+        try:
+            with open(os.path.join(PM2_PIDS_DIR, fname)) as f:
+                pid = int(f.read().strip())
+            raw = open(f"/proc/{pid}/stat").read()
+            fields = raw[raw.rindex(")") + 2:].split()
+            with open(f"/proc/{pid}/cmdline", "rb") as f:
+                cmd = f.read().replace(b"\x00", b" ").decode(errors="replace").strip()
+        except Exception:
+            continue  # dead process, stale pid file, or a race against a restart
+        try:
+            out[pid] = {
+                "name": name or base,
+                "pm_id": pm_id,
+                "pid": pid,
+                "state": fields[0],                                    # field 3
+                "cpu_j": int(fields[11]) + int(fields[12]),            # utime+stime
+                "threads": int(fields[17]),                            # field 20
+                "start_j": int(fields[19]),                            # field 22
+                "rss_mb": int(fields[21]) * PAGE_SIZE // (1024 * 1024),  # field 24
+                "cmd": cmd[:60],
+            }
+        except (IndexError, ValueError):
+            continue
+    return out
+
+
+def proc_deltas(prev, cur, window_s, uptime_s):
+    """
+    Two per-process snapshots into reportable rows, sorted busiest first.
+
+    Reports BOTH cpu numbers, explicitly named, because confusing them is what cost
+    seventeen hours. `cpu_pct` is this window. `cpu_pct_life` is the average since
+    the process started. PM2's list column looks like one and reads like the other,
+    and a screenshot of it is indistinguishable either way — the 143.8% that seeded
+    the original investigation was never resolved into which it was.
+
+    CAVEAT, load-bearing whenever this is worth reading: per-process CPU is inflated
+    by steal. The kernel charges a process for ticks during which its vCPU was
+    preempted by the hypervisor, so under heavy throttling these percentages sum
+    past what the box demonstrably had to give — measured live at 87.5% steal, the
+    rows summed to 82% of total capacity while the system line showed 9.8% user+sys.
+    Read them as a ranking of who is busiest, and read cpu.steal_pct first.
+    """
+    prev_by_name = {p["name"]: p["pid"] for p in prev.values()}
+    rows = []
+    for pid, c in cur.items():
+        life = max(uptime_s - c["start_j"] / CLK_TCK, 1.0)
+        row = {
+            "name": c["name"],
+            "pid": pid,
+            "state": c["state"],
+            "rss_mb": c["rss_mb"],
+            "threads": c["threads"],
+            "uptime_s": int(life),
+            "cpu_pct_life": round(100.0 * c["cpu_j"] / CLK_TCK / life, 1),
+        }
+        p = prev.get(pid)
+        if p and window_s > 0:
+            row["cpu_pct"] = round(100.0 * (c["cpu_j"] - p["cpu_j"]) / CLK_TCK / window_s, 1)
+        else:
+            # First sighting. Report null rather than 0 — a process with no previous
+            # counter to diff against is unmeasured, not idle, and 0 would read as
+            # an alibi.
+            row["cpu_pct"] = None
+            row["new"] = True
+            # A name whose pid moved since the last tick restarted between samples.
+            # PM2's restart counter resets with the daemon; this does not.
+            if c["name"] in prev_by_name and prev_by_name[c["name"]] != pid:
+                row["restarted"] = True
+                row["cmd"] = c["cmd"]
+        rows.append(row)
+
+    rows.sort(key=lambda r: (r["cpu_pct"] is None, -(r["cpu_pct"] or 0)))
+    return rows
+
+
+def top_line(procs, n=3):
+    """Busiest processes, for the human log line. Names the suspect at a glance."""
+    parts = []
+    for r in procs[:n]:
+        cpu = "?" if r["cpu_pct"] is None else f"{r['cpu_pct']:.0f}%"
+        parts.append(f"{r['name']}={cpu}/{r['rss_mb']}mb")
+    return " ".join(parts) if parts else "(no procs)"
+
+
 def read_mem():
     info = {}
     try:
@@ -309,6 +431,8 @@ def main():
                         help="seconds between samples; also the averaging window")
     parser.add_argument("--mqtt-host", default=os.getenv("MQTT_HOST", "localhost"))
     parser.add_argument("--mqtt-port", default=os.getenv("MQTT_PORT", "1883"))
+    parser.add_argument("--no-sample-log", action="store_true",
+                        help="stop writing the SAMPLE JSONL history line each tick")
     args = parser.parse_args()
 
     state_topic = f"status/{args.device}/host"
@@ -341,6 +465,7 @@ def main():
     signal.signal(signal.SIGINT, on_term)
 
     prev = read_cpu()
+    prev_procs = read_procs()
     window = PRIME_SECS
     time.sleep(PRIME_SECS)
     tick = 0
@@ -355,6 +480,11 @@ def main():
                 time.sleep(args.interval)
                 window = args.interval
                 continue
+
+            uptime_f = float(open("/proc/uptime").read().split()[0])
+            cur_procs = read_procs()
+            procs = proc_deltas(prev_procs, cur_procs, window, uptime_f)
+            prev_procs = cur_procs
 
             changed = steal.update(cpu["steal_pct"])
             level = StealState.level_for(cpu["steal_pct"])
@@ -372,11 +502,20 @@ def main():
                 "mem": read_mem(),
                 "disk": read_disk(),
                 "uptime_s": read_uptime(),
+                "procs": procs,
             }
             if ec2:
                 payload["ec2"] = ec2
 
             pub.publish(state_topic, payload, retain=True)
+
+            # Rolling history. The retained topic answers "right now" and says
+            # nothing about last Tuesday, which is when you will be asked. One JSON
+            # line per tick into a log pm2-logrotate already rotates costs nothing
+            # to maintain and makes the whole sample greppable after the fact:
+            #   grep '^\[.*\] SAMPLE ' host-watch-out.log | sed 's/.*SAMPLE //' | jq
+            if not args.no_sample_log:
+                log("SAMPLE " + json.dumps(payload, separators=(",", ":")))
 
             if changed:
                 alert = {
@@ -390,14 +529,28 @@ def main():
                 if changed["state"] == "throttled":
                     alert["hint"] = ("host is taking the CPU away; on a burstable "
                                      "instance this is burst-credit exhaustion, not app code")
+                # Ship the suspects with the alert. Naming who was busiest at the
+                # moment it fired is most of the triage, and by the time anyone
+                # reads it the moment is gone.
+                alert["top"] = [
+                    {k: v for k, v in r.items() if k in ("name", "cpu_pct", "cpu_pct_life", "rss_mb")}
+                    for r in procs[:3]
+                ]
                 pub.publish(alert_topic, alert)
-                log(f"STATE -> {changed['state']} (steal {cpu['steal_pct']}%) {changed}")
+                log(f"STATE -> {changed['state']} (steal {cpu['steal_pct']}%) {changed} "
+                    f"| top: {top_line(procs)}")
 
             if level != "ok":
                 log(f"steal={cpu['steal_pct']}% iowait={cpu['iowait_pct']}% "
-                    f"load1={load1:.2f} level={level} state={steal.state}")
+                    f"load1={load1:.2f} level={level} state={steal.state} "
+                    f"| top: {top_line(procs)}")
             elif tick % OK_HEARTBEAT_EVERY == 0:
-                log(f"ok — steal={cpu['steal_pct']}% idle={cpu['idle_pct']}% load1={load1:.2f}")
+                log(f"ok — steal={cpu['steal_pct']}% idle={cpu['idle_pct']}% "
+                    f"load1={load1:.2f} | top: {top_line(procs)}")
+
+            for r in procs:
+                if r.get("restarted"):
+                    log(f"RESTART {r['name']} -> pid {r['pid']} ({r.get('cmd', '')})")
 
             tick += 1
 
