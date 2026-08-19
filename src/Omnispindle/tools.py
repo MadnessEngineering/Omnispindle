@@ -5,6 +5,7 @@ import ssl
 import subprocess
 import asyncio
 import uuid
+import hashlib
 from datetime import datetime, timezone
 from typing import Union, List, Dict, Optional, Any
 
@@ -13,6 +14,7 @@ from dotenv import load_dotenv
 
 from .context import Context
 from pymongo import MongoClient
+from pymongo.errors import DuplicateKeyError
 
 from .database import db_connection
 from .utils import create_response, mqtt_publish, _format_duration, MongoJSONEncoder
@@ -711,6 +713,65 @@ def _add_todo_dedupe_window() -> int:
         return 180
 
 
+# Databases whose idempotency TTL index has been ensured this process. create_index is
+# idempotent in Mongo but still a round trip per call, so only pay it once.
+_IDEMPOTENCY_INDEXED = set()
+
+# The TTL here is only garbage collection, kept well above the logical dedupe window.
+# expireAfterSeconds is fixed when the index is built, so tying it to
+# OMNISPINDLE_ADD_TODO_DEDUPE_SECS would mean rebuilding the index whenever that
+# changes. The window is enforced by comparing timestamps instead, which also means a
+# stale-but-not-yet-reaped reservation is taken over rather than honoured -- Mongo's TTL
+# reaper only runs about once a minute, so expiry is approximate and cannot be trusted
+# as the boundary.
+_IDEMPOTENCY_TTL_SECS = 3600
+
+
+def _idempotency_collection(collections: dict):
+    """User-scoped collection reserving add_todo idempotency keys.
+
+    Deliberately NOT the todos collection. A TTL index deletes whole documents, so
+    putting one on todos would delete the todos. Reservations are disposable; todos are
+    not.
+
+    The key is stored as _id, so uniqueness comes from the _id index Mongo maintains
+    anyway -- nothing to declare, and insert_one is atomic. That atomicity is the point:
+    it closes the race a find-then-insert guard leaves open, where two concurrent
+    identical creates both read "nothing there" and both insert.
+    """
+    db = collections.get("database")
+    if db is None:
+        return None
+    coll = db["todo_idempotency"]
+    if db.name not in _IDEMPOTENCY_INDEXED:
+        try:
+            coll.create_index("created_at", expireAfterSeconds=_IDEMPOTENCY_TTL_SECS)
+            _IDEMPOTENCY_INDEXED.add(db.name)
+        except Exception as e:
+            # Reservations still work without the TTL index; they just accumulate.
+            logger.warning(f"Could not ensure idempotency TTL index on {db.name}: {e}")
+    return coll
+
+
+def _add_todo_idempotency_key(description: str, project: str, target_agent: str,
+                              priority: str, notes: str, ticket: str) -> str:
+    """Deterministic key identifying one logical create.
+
+    Deterministic is the entire trick. todo_id is a fresh uuid4 per attempt, so a retry
+    mints a different id and a unique index on id can never catch it -- it guarantees
+    the duplicate rows are distinct, which is the opposite of what is wanted. Hashing
+    the caller-supplied fields means a byte-identical retry maps to the same key.
+
+    metadata is excluded on purpose: enrich_metadata_with_git can stamp a different
+    branch or commit between attempts, which would defeat the match.
+    """
+    payload = "\x00".join([
+        description or "", project or "", target_agent or "",
+        priority or "", notes or "", ticket or "",
+    ])
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
 async def add_todo(description: str, project: str, priority: str = "Medium", target_agent: str = "user", notes: str = "", ticket: str = "", metadata: Optional[Dict[str, Any]] = None, ctx: Optional[Context] = None, **extra) -> str:
     """
     Creates a task in the specified project with the given priority and target agent.
@@ -817,38 +878,82 @@ async def add_todo(description: str, project: str, priority: str = "Medium", tar
         # Retry safety. A proxy timeout (Cloudflare 524 at 120s) can hide a write that
         # actually committed; a client treating that as failure retries, and on a create
         # that means a duplicate todo. update_todo is idempotent so a replay is harmless,
-        # but add_todo is not -- so collapse an identical create seen inside the window
-        # onto the row already there instead of inserting a second one.
+        # but add_todo is not.
+        #
+        # Reserve a deterministic key BEFORE inserting. insert_one on a duplicate _id
+        # fails atomically at the storage layer, so two concurrent identical creates
+        # cannot both win -- which a find-then-insert check could not guarantee.
         dedupe_window = _add_todo_dedupe_window()
-        if dedupe_window > 0:
-            prior = todos_collection.find_one(
-                {
-                    "description": description,
-                    "project": validated_project,
-                    "target_agent": target_agent,
-                    "status": "pending",
-                    "created_at": {"$gte": todo["created_at"] - dedupe_window},
-                },
-                {"_id": 0, "id": 1, "project": 1, "priority": 1,
-                 "target_agent": 1, "created_at": 1},
-                sort=[("created_at", -1)],
-            )
-            if prior:
-                logger.warning(
-                    f"add_todo deduplicated: identical pending create for project "
-                    f"'{validated_project}' within {dedupe_window}s -- returning existing "
-                    f"{prior['id']} instead of inserting {todo_id}"
-                )
-                return json.dumps({
-                    "id": prior["id"],
-                    "project": prior.get("project", validated_project),
-                    "priority": prior.get("priority", priority),
-                    "target_agent": prior.get("target_agent", target_agent),
-                    "created_at": prior.get("created_at"),
-                    "deduplicated": True,
-                })
+        idem_coll = _idempotency_collection(collections) if dedupe_window > 0 else None
+        reserved_key = None
+        if idem_coll is not None:
+            reserved_key = _add_todo_idempotency_key(
+                description, validated_project, target_agent, priority, notes, ticket)
+            now_dt = datetime.now(timezone.utc)
+            try:
+                idem_coll.insert_one(
+                    {"_id": reserved_key, "todo_id": todo_id, "created_at": now_dt})
+            except DuplicateKeyError:
+                prior = idem_coll.find_one({"_id": reserved_key}) or {}
+                prior_id = prior.get("todo_id")
+                prior_at = prior.get("created_at")
+                age = None
+                if isinstance(prior_at, datetime):
+                    # pymongo hands back naive UTC unless the client is tz_aware, so
+                    # normalize before subtracting or this raises.
+                    if prior_at.tzinfo is None:
+                        prior_at = prior_at.replace(tzinfo=timezone.utc)
+                    age = (now_dt - prior_at).total_seconds()
+                existing = todos_collection.find_one(
+                    {"id": prior_id},
+                    {"_id": 0, "id": 1, "project": 1, "priority": 1,
+                     "target_agent": 1, "created_at": 1, "status": 1},
+                ) if prior_id else None
 
-        todos_collection.insert_one(todo)
+                # Honour a reservation only if it is inside the window AND still points at
+                # a live pending todo. Three cases fall through to take-over instead: a
+                # stale key the TTL reaper has not collected, a todo since completed
+                # (matching the status=="pending" scope the previous guard had), and a
+                # reservation whose todo insert never landed -- honouring that last one
+                # would hand the caller a dangling id.
+                if (existing and existing.get("status") == "pending"
+                        and age is not None and age <= dedupe_window):
+                    logger.warning(
+                        f"add_todo deduplicated: identical create for project "
+                        f"'{validated_project}' {int(age)}s ago (window {dedupe_window}s) "
+                        f"-- returning existing {prior_id} instead of inserting {todo_id}"
+                    )
+                    return json.dumps({
+                        "id": existing["id"],
+                        "project": existing.get("project", validated_project),
+                        "priority": existing.get("priority", priority),
+                        "target_agent": existing.get("target_agent", target_agent),
+                        "created_at": existing.get("created_at"),
+                        "deduplicated": True,
+                    })
+                idem_coll.replace_one(
+                    {"_id": reserved_key},
+                    {"_id": reserved_key, "todo_id": todo_id, "created_at": now_dt},
+                )
+                logger.info(
+                    f"add_todo took over idempotency key for {todo_id} "
+                    f"(prior={prior_id}, age={age}, status="
+                    f"{(existing or {}).get('status')})"
+                )
+
+        try:
+            todos_collection.insert_one(todo)
+        except Exception:
+            # Never leave a reservation pointing at a todo that does not exist -- the next
+            # retry would dedupe onto a dangling id instead of creating anything.
+            if idem_coll is not None and reserved_key:
+                try:
+                    idem_coll.delete_one({"_id": reserved_key, "todo_id": todo_id})
+                except Exception as cleanup_err:
+                    logger.warning(
+                        f"Could not release idempotency key after failed insert of "
+                        f"{todo_id}: {cleanup_err}")
+            raise
         user_email = ctx.user.get("email", "anonymous") if ctx and ctx.user else "anonymous"
         logger.info(f"Todo created by {user_email} in user database: {todo_id}")
 
