@@ -119,11 +119,17 @@ def cpu_delta(prev, cur):
     if total <= 0:
         return None
     pct = lambda k: round(100.0 * (cur[k] - prev[k]) / total, 1)
+    nproc = os.cpu_count() or 1
+    # What the box ACTUALLY got, expressed as % of one core, so it is directly
+    # comparable to a per-process number. This is the figure per-process
+    # percentages get normalised against — see proc_deltas.
+    busy = sum((cur[k] - prev[k]) for k in ("user", "nice", "system", "irq", "softirq"))
     return {
         "steal_pct": pct("steal"),
         "iowait_pct": pct("iowait"),
         "idle_pct": pct("idle"),
-        "nproc": os.cpu_count(),
+        "nproc": nproc,
+        "busy_pct_of_one_core": round(100.0 * busy / total * nproc, 1),
     }
 
 
@@ -184,30 +190,90 @@ def read_procs():
                 "start_j": int(fields[19]),                            # field 22
                 "rss_mb": int(fields[21]) * PAGE_SIZE // (1024 * 1024),  # field 24
                 "cmd": cmd[:60],
+                "wait_ns": read_runq_wait(pid),
             }
         except (IndexError, ValueError):
             continue
     return out
 
 
-def proc_deltas(prev, cur, window_s, uptime_s):
+def read_runq_wait(pid):
+    """
+    Nanoseconds this process spent ON THE RUNQUEUE, ready but not scheduled, summed
+    across every thread. Second field of schedstat.
+
+    Summed across /proc/<pid>/task/* rather than read from /proc/<pid>/schedstat,
+    which covers the MAIN THREAD ONLY. That distinction is not cosmetic: measured
+    live on an 11-thread node process, the main thread showed 0.6% of a core while
+    the threads together showed 69.2%. Reading the top-level file makes a busy
+    process look idle, which is the most expensive way to be wrong here.
+
+    Only the wait figure is taken from schedstat. Its run figure is NOT used for CPU
+    — it agrees with utime+stime to the jiffy (6.92s vs 6.92s, measured), so paying
+    N extra file reads per process to compute the same number would buy nothing.
+    Neither of them can see steal, which is the actual problem; see proc_deltas.
+    """
+    total = 0
+    try:
+        for tid in os.listdir(f"/proc/{pid}/task"):
+            try:
+                with open(f"/proc/{pid}/task/{tid}/schedstat") as f:
+                    total += int(f.read().split()[1])
+            except Exception:
+                continue  # thread exited mid-walk; normal, not an error
+    except Exception:
+        return None  # no CONFIG_SCHEDSTATS, or the process died
+    return total
+
+
+def proc_deltas(prev, cur, window_s, uptime_s, box_cpu_pct):
     """
     Two per-process snapshots into reportable rows, sorted busiest first.
 
-    Reports BOTH cpu numbers, explicitly named, because confusing them is what cost
-    seventeen hours. `cpu_pct` is this window. `cpu_pct_life` is the average since
-    the process started. PM2's list column looks like one and reads like the other,
-    and a screenshot of it is indistinguishable either way — the 143.8% that seeded
-    the original investigation was never resolved into which it was.
+    THE PROBLEM THIS SOLVES. Per-process CPU counters cannot see steal. The guest
+    scheduler charges a task for the whole time it was assigned a vCPU, including
+    the part where the hypervisor had descheduled that vCPU entirely. Only
+    /proc/stat and the cgroup subtract steal, via the paravirt steal clock. So on a
+    throttled box the per-process numbers are inflated together, by a lot: measured
+    live at 55% steal, the processes summed to 97% of one core while the box had
+    demonstrably consumed 19.5%. A 5x lie, and it is `top`'s number, and `pm2
+    list`'s number, and it is what made a 143.8% reading look like a runaway backend
+    in the original incident.
 
-    CAVEAT, load-bearing whenever this is worth reading: per-process CPU is inflated
-    by steal. The kernel charges a process for ticks during which its vCPU was
-    preempted by the hypervisor, so under heavy throttling these percentages sum
-    past what the box demonstrably had to give — measured live at 87.5% steal, the
-    rows summed to 82% of total capacity while the system line showed 9.8% user+sys.
-    Read them as a ranking of who is busiest, and read cpu.steal_pct first.
+    Switching the source from utime+stime to schedstat does NOT fix this — the two
+    agree to the jiffy, because both are guest-side. Normalising against what the
+    box actually got does fix it.
+
+    So each row carries four CPU numbers, each answering a different question:
+
+      cpu_share_pct  share of all process demand this window. A RATIO, so the
+                     inflation cancels out completely — the one number that is
+                     equally true whether the box is throttled or idle. Start here.
+      cpu_pct        that share applied to what the box actually consumed. True
+                     percent of one core; these sum to the system's busy figure
+                     instead of five times it.
+      cpu_pct_guest  the raw uncorrected number, kept ONLY so it can be matched
+                     against what `top` and `pm2 list` will be showing on the same
+                     box at the same moment. Never read it on its own.
+      cpu_pct_life   average since this process started. Chronic vs acute: a
+                     process at 80% share now but 10% for life is spiking, not
+                     habitually greedy. (Tick-based, so historical throttling
+                     inflates it too — treat as an upper bound.)
+
+    Returns (rows, inflation), where inflation is guest-view total over actual box
+    usage: how many times over the per-process tools are lying, right now.
     """
     prev_by_name = {p["name"]: p["pid"] for p in prev.values()}
+
+    # Guest-view deltas first — the shares need the total before any row is final.
+    guest = {}
+    for pid, c in cur.items():
+        p = prev.get(pid)
+        if p and window_s > 0:
+            guest[pid] = max(0, c["cpu_j"] - p["cpu_j"]) / CLK_TCK / window_s * 100.0
+    total_guest = sum(guest.values())
+    inflation = round(total_guest / box_cpu_pct, 1) if box_cpu_pct and total_guest else None
+
     rows = []
     for pid, c in cur.items():
         life = max(uptime_s - c["start_j"] / CLK_TCK, 1.0)
@@ -221,13 +287,25 @@ def proc_deltas(prev, cur, window_s, uptime_s):
             "cpu_pct_life": round(100.0 * c["cpu_j"] / CLK_TCK / life, 1),
         }
         p = prev.get(pid)
-        if p and window_s > 0:
-            row["cpu_pct"] = round(100.0 * (c["cpu_j"] - p["cpu_j"]) / CLK_TCK / window_s, 1)
+        if pid in guest:
+            g = guest[pid]
+            share = (100.0 * g / total_guest) if total_guest else None
+            row["cpu_pct_guest"] = round(g, 1)
+            row["cpu_share_pct"] = round(share, 1) if share is not None else None
+            row["cpu_pct"] = (round(share * box_cpu_pct / 100.0, 1)
+                              if share is not None and box_cpu_pct is not None else None)
+            if c["wait_ns"] is not None and p.get("wait_ns") is not None:
+                # Ready but not scheduled. Steal-independent in meaning: high wait
+                # says this process wanted the CPU and did not get it, whoever took
+                # it. Distinguishes "starved" from "idle" when cpu_pct is low.
+                row["runq_wait_pct"] = round(
+                    100.0 * max(0, c["wait_ns"] - p["wait_ns"]) / 1e9 / window_s, 1)
         else:
             # First sighting. Report null rather than 0 — a process with no previous
             # counter to diff against is unmeasured, not idle, and 0 would read as
             # an alibi.
             row["cpu_pct"] = None
+            row["cpu_share_pct"] = None
             row["new"] = True
             # A name whose pid moved since the last tick restarted between samples.
             # PM2's restart counter resets with the daemon; this does not.
@@ -236,16 +314,30 @@ def proc_deltas(prev, cur, window_s, uptime_s):
                 row["cmd"] = c["cmd"]
         rows.append(row)
 
-    rows.sort(key=lambda r: (r["cpu_pct"] is None, -(r["cpu_pct"] or 0)))
-    return rows
+    rows.sort(key=lambda r: (r["cpu_share_pct"] is None, -(r["cpu_share_pct"] or 0)))
+    return rows, inflation
 
 
 def top_line(procs, n=3):
-    """Busiest processes, for the human log line. Names the suspect at a glance."""
+    """
+    Busiest processes, for the human log line. Names the suspect at a glance.
+
+    Leads with share-of-demand rather than percent-of-core. Under throttling the
+    percentages are inflated and the share is not, and the log line is exactly where
+    someone glances once and forms a theory.
+    """
     parts = []
     for r in procs[:n]:
-        cpu = "?" if r["cpu_pct"] is None else f"{r['cpu_pct']:.0f}%"
-        parts.append(f"{r['name']}={cpu}/{r['rss_mb']}mb")
+        if r.get("cpu_share_pct") is None:
+            parts.append(f"{r['name']}=?/{r['rss_mb']}mb")
+            continue
+        seg = f"{r['name']}={r['cpu_share_pct']:.0f}%share"
+        if r.get("cpu_pct") is not None:
+            seg += f"/{r['cpu_pct']:.0f}%core"
+        seg += f"/{r['rss_mb']}mb"
+        if r.get("runq_wait_pct"):
+            seg += f"/wait{r['runq_wait_pct']:.0f}%"
+        parts.append(seg)
     return " ".join(parts) if parts else "(no procs)"
 
 
@@ -483,8 +575,14 @@ def main():
 
             uptime_f = float(open("/proc/uptime").read().split()[0])
             cur_procs = read_procs()
-            procs = proc_deltas(prev_procs, cur_procs, window, uptime_f)
+            procs, inflation = proc_deltas(prev_procs, cur_procs, window, uptime_f,
+                                           cpu.get("busy_pct_of_one_core"))
             prev_procs = cur_procs
+            if inflation is not None:
+                # How many times over `top` and `pm2 list` are overstating things on
+                # this box right now. Published so a reader comparing against those
+                # tools can see WHY the numbers disagree instead of picking one.
+                cpu["accounting_inflation"] = inflation
 
             changed = steal.update(cpu["steal_pct"])
             level = StealState.level_for(cpu["steal_pct"])
@@ -533,9 +631,13 @@ def main():
                 # moment it fired is most of the triage, and by the time anyone
                 # reads it the moment is gone.
                 alert["top"] = [
-                    {k: v for k, v in r.items() if k in ("name", "cpu_pct", "cpu_pct_life", "rss_mb")}
+                    {k: v for k, v in r.items()
+                     if k in ("name", "cpu_share_pct", "cpu_pct", "cpu_pct_life",
+                              "runq_wait_pct", "rss_mb")}
                     for r in procs[:3]
                 ]
+                if inflation is not None:
+                    alert["accounting_inflation"] = inflation
                 pub.publish(alert_topic, alert)
                 log(f"STATE -> {changed['state']} (steal {cpu['steal_pct']}%) {changed} "
                     f"| top: {top_line(procs)}")
