@@ -138,13 +138,59 @@ CLK_TCK = os.sysconf("SC_CLK_TCK")
 PAGE_SIZE = os.sysconf("SC_PAGE_SIZE")
 
 
+def _read_cmdline(pid):
+    try:
+        with open(f"/proc/{pid}/cmdline", "rb") as f:
+            return f.read().replace(b"\x00", b" ").decode(errors="replace").strip()[:60]
+    except Exception:
+        return ""
+
+
+def read_pm2_names():
+    """
+    pid -> PM2 process name, from ~/.pm2/pids/<name>-<id>.pid.
+
+    Read from the pid files rather than `pm2 jlist`, which spawns a node process per
+    call. On a box already too starved to schedule anything, the measurement must
+    not need the resource being measured.
+
+    Stale pid files accumulate in that directory (several from March, pointing at
+    long-dead pids), so a pid with no live /proc entry simply never gets matched.
+    """
+    names = {}
+    try:
+        entries = os.listdir(PM2_PIDS_DIR)
+    except Exception:
+        return names
+    for fname in entries:
+        if not fname.endswith(".pid"):
+            continue
+        base = fname[:-4]
+        name, _, pm_id = base.rpartition("-")
+        try:
+            with open(os.path.join(PM2_PIDS_DIR, fname)) as f:
+                names[int(f.read().strip())] = (name or base, pm_id)
+        except Exception:
+            continue
+    return names
+
+
 def read_procs():
     """
-    Raw per-process counters for everything PM2 is running.
+    Raw per-process counters for EVERY process on the box.
 
-    Sourced from ~/.pm2/pids/<name>-<id>.pid rather than `pm2 jlist`, which spawns a
-    node process per call. On a box already too starved to schedule anything, the
-    measurement must not need the resource being measured.
+    Originally this sampled only PM2-managed pids, which produced a subtly wrong
+    answer once proc_deltas started normalising against whole-box CPU: shares were
+    computed across the sampled set but scaled by the total the WHOLE box consumed,
+    so any CPU burned outside PM2 — mongod, nginx, kernel threads, an ssh session —
+    was silently redistributed onto whatever PM2 happened to be running. Measured
+    live, that reported pm2-sysmonit at 21.1% of a core when its true usage was
+    1.4%, a fifteen times over-attribution. Sampling everything makes the
+    denominator honest.
+
+    PM2 names are still attached where they apply, because "madness-backend" is a
+    more useful label than "node", but they are now decoration rather than the
+    selection criterion.
 
     Two traps, both paid for:
 
@@ -160,28 +206,26 @@ def read_procs():
     mislabelled with whatever PM2 name happened to be on the file.
     """
     out = {}
+    pm2_names = read_pm2_names()
     try:
-        names = os.listdir(PM2_PIDS_DIR)
+        entries = os.listdir("/proc")
     except Exception:
         return out
 
-    for fname in names:
-        if not fname.endswith(".pid"):
+    for entry in entries:
+        if not entry.isdigit():
             continue
-        base = fname[:-4]
-        name, _, pm_id = base.rpartition("-")
+        pid = int(entry)
         try:
-            with open(os.path.join(PM2_PIDS_DIR, fname)) as f:
-                pid = int(f.read().strip())
             raw = open(f"/proc/{pid}/stat").read()
             fields = raw[raw.rindex(")") + 2:].split()
-            with open(f"/proc/{pid}/cmdline", "rb") as f:
-                cmd = f.read().replace(b"\x00", b" ").decode(errors="replace").strip()
+            comm = raw[raw.index("(") + 1:raw.rindex(")")]
         except Exception:
-            continue  # dead process, stale pid file, or a race against a restart
+            continue  # process exited between listdir and read; normal, not an error
         try:
+            pm2_name, pm_id = pm2_names.get(pid, (None, None))
             out[pid] = {
-                "name": name or base,
+                "name": pm2_name or comm,
                 "pm_id": pm_id,
                 "pid": pid,
                 "state": fields[0],                                    # field 3
@@ -189,8 +233,16 @@ def read_procs():
                 "threads": int(fields[17]),                            # field 20
                 "start_j": int(fields[19]),                            # field 22
                 "rss_mb": int(fields[21]) * PAGE_SIZE // (1024 * 1024),  # field 24
-                "cmd": cmd[:60],
-                "wait_ns": read_runq_wait(pid),
+                # Only for PM2 processes: it exists to expose a pid recycled by an
+                # unrelated process on a restart, and restart detection is scoped
+                # to PM2 names anyway.
+                "cmd": _read_cmdline(pid) if pm2_name else "",
+                # Runqueue wait is only collected for PM2-managed processes. It
+                # costs one file read per THREAD, and walking every thread of every
+                # process on the box would make the monitor a noticeable load in its
+                # own right — the opposite of the point. The services worth knowing
+                # are starved are the ones PM2 runs.
+                "wait_ns": read_runq_wait(pid) if pm2_name else None,
             }
         except (IndexError, ValueError):
             continue
@@ -274,6 +326,21 @@ def proc_deltas(prev, cur, window_s, uptime_s, box_cpu_pct):
     total_guest = sum(guest.values())
     inflation = round(total_guest / box_cpu_pct, 1) if box_cpu_pct and total_guest else None
 
+    # Scale DOWN when the guest view claims more than the box actually consumed —
+    # that surplus is stolen time being billed to whoever was on the runqueue, and
+    # dividing it out is the whole correction.
+    #
+    # Never scale UP. The guest total legitimately falls short of the box total
+    # whenever CPU went to processes that started and exited between two samples
+    # (an ssh login, a mongosh query, the shell running any of this). That work is
+    # real but unattributable, and inflating the surviving processes to absorb it
+    # invents usage they did not have — measured at steal 0, the guest total was
+    # half the box total, and scaling up reported pm2-sysmonit at 2.7% when its
+    # true usage was the 1.4% the kernel counters already said.
+    factor = 1.0
+    if box_cpu_pct and total_guest and total_guest > box_cpu_pct:
+        factor = box_cpu_pct / total_guest
+
     rows = []
     for pid, c in cur.items():
         life = max(uptime_s - c["start_j"] / CLK_TCK, 1.0)
@@ -292,8 +359,7 @@ def proc_deltas(prev, cur, window_s, uptime_s, box_cpu_pct):
             share = (100.0 * g / total_guest) if total_guest else None
             row["cpu_pct_guest"] = round(g, 1)
             row["cpu_share_pct"] = round(share, 1) if share is not None else None
-            row["cpu_pct"] = (round(share * box_cpu_pct / 100.0, 1)
-                              if share is not None and box_cpu_pct is not None else None)
+            row["cpu_pct"] = round(g * factor, 1)
             if c["wait_ns"] is not None and p.get("wait_ns") is not None:
                 # Ready but not scheduled. Steal-independent in meaning: high wait
                 # says this process wanted the CPU and did not get it, whoever took
