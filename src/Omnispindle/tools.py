@@ -772,6 +772,145 @@ def _add_todo_idempotency_key(description: str, project: str, target_agent: str,
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
+CLIENT_PREFS_KEY = "client_prefs"
+
+# Per-user cache of stored client prefs. _resolve_client_prefs runs on EVERY request,
+# including every tools/call, so this keeps a Mongo round trip off the hot path.
+_CLIENT_PREFS_CACHE: Dict[str, Any] = {}
+_CLIENT_PREFS_TTL_SECS = 60
+
+
+def _settings_collection(collections: dict):
+    """User-scoped collection holding this user's client preferences."""
+    db = collections.get("database")
+    return None if db is None else db["user_settings"]
+
+
+def _prefs_cache_key(user) -> str:
+    if isinstance(user, dict):
+        return user.get("email") or user.get("sub") or "anonymous"
+    return "anonymous"
+
+
+def _invalidate_client_prefs_cache(ctx: Optional[Context] = None) -> None:
+    _CLIENT_PREFS_CACHE.pop(_prefs_cache_key(ctx.user if ctx else None), None)
+
+
+def get_stored_client_prefs(user) -> dict:
+    """Stored loadout/doc_level for a user, briefly cached. Empty dict when unset.
+
+    Read by mcp_handler._resolve_client_prefs, which only calls this when the client
+    did not supply a query param or header -- an explicit per-request hint should never
+    pay for a database lookup.
+    """
+    key = _prefs_cache_key(user)
+    now = datetime.now(timezone.utc).timestamp()
+    cached = _CLIENT_PREFS_CACHE.get(key)
+    if cached and (now - cached[0]) < _CLIENT_PREFS_TTL_SECS:
+        return cached[1]
+
+    prefs = {}
+    try:
+        settings = _settings_collection(db_connection.get_collections(user))
+        if settings is not None:
+            doc = settings.find_one({"key": CLIENT_PREFS_KEY}, {"_id": 0}) or {}
+            prefs = {k: doc[k] for k in ("loadout", "doc_level") if doc.get(k)}
+    except Exception as e:
+        # A settings lookup must never break a session -- fall through to the default.
+        logger.warning(f"Could not read stored client prefs for {key}: {e}")
+
+    _CLIENT_PREFS_CACHE[key] = (now, prefs)
+    return prefs
+
+
+async def config(loadout: Optional[str] = None, doc_level: Optional[str] = None,
+                 ctx: Optional[Context] = None) -> str:
+    """
+    Read or change which tool loadout and documentation level your MCP sessions get.
+
+    Call with NO arguments to see the current setting plus every available option and
+    its tool count. Pass loadout and/or doc_level to change it.
+
+    Remote clients default to the 'basic' loadout (21 of 43 tools). Switching to 'full'
+    adds the rest, including delete_todo, list_lessons, grep_lessons, update_lesson,
+    query_todo_logs and the session tools.
+
+    The choice is stored per user and takes effect on the NEXT tools/list. The
+    stateless HTTP transport has no server-to-client channel, so it cannot push a
+    tools-changed notification into a live session -- reconnect (/mcp in Claude Code)
+    to pick it up.
+
+    Args:
+        loadout: Loadout name to store, e.g. 'full' or 'basic'. Omit to leave unchanged.
+        doc_level: Documentation detail level for tool descriptions. Omit to leave
+            unchanged, in which case it is derived from the loadout.
+        ctx: Context with user information
+    """
+    from .tool_loadouts import get_all_loadouts, get_loadout
+    from .documentation_manager import DocumentationLevel
+
+    # Count via get_loadout, not the raw table: it injects ALWAYS_PRESENT and filters
+    # local-only tools, so this reports what a remote client actually receives.
+    valid_loadouts = sorted(get_all_loadouts())
+    loadout_sizes = {n: len(get_loadout(n, mode="remote")) for n in valid_loadouts}
+    valid_levels = [lvl.value for lvl in DocumentationLevel]
+
+    requested = {}
+    if loadout is not None:
+        want = str(loadout).strip().lower()
+        if want not in valid_loadouts:
+            return create_response(False, message=(
+                f"Unknown loadout '{loadout}'. Valid: {', '.join(valid_loadouts)}"))
+        requested["loadout"] = want
+    if doc_level is not None:
+        want = str(doc_level).strip().lower()
+        if want not in valid_levels:
+            return create_response(False, message=(
+                f"Unknown doc_level '{doc_level}'. Valid: {', '.join(valid_levels)}"))
+        requested["doc_level"] = want
+
+    if requested and _is_read_only_user(ctx):
+        return create_response(False, message=(
+            "Demo mode: configuration changes are disabled. Please authenticate."))
+
+    try:
+        settings = _settings_collection(
+            db_connection.get_collections(ctx.user if ctx else None))
+        if settings is None:
+            return create_response(False, message="Settings storage unavailable")
+
+        if requested:
+            settings.update_one(
+                {"key": CLIENT_PREFS_KEY},
+                {"$set": {**requested,
+                          "updated_at": int(datetime.now(timezone.utc).timestamp())}},
+                upsert=True,
+            )
+            _invalidate_client_prefs_cache(ctx)
+            logger.info(f"config updated for "
+                        f"{_prefs_cache_key(ctx.user if ctx else None)}: {requested}")
+
+        doc = settings.find_one({"key": CLIENT_PREFS_KEY}, {"_id": 0}) or {}
+        stored = {k: doc[k] for k in ("loadout", "doc_level") if doc.get(k)}
+
+        resp = {
+            "stored": stored or None,
+            "available_loadouts": loadout_sizes,
+            "available_doc_levels": valid_levels,
+        }
+        if requested:
+            resp["changed"] = requested
+            resp["note"] = ("Stored. Reconnect (/mcp in Claude Code) to re-issue "
+                            "tools/list — a live session cannot be updated in place.")
+        elif not stored:
+            resp["note"] = ("No stored preference; sessions fall back to the server "
+                            "default. Pass loadout= to set one.")
+        return json.dumps(resp)
+    except Exception as e:
+        logger.error(f"config failed: {str(e)}")
+        return create_response(False, message=str(e))
+
+
 async def add_todo(description: str, project: str, priority: str = "Medium", target_agent: str = "user", notes: str = "", ticket: str = "", metadata: Optional[Dict[str, Any]] = None, ctx: Optional[Context] = None, **extra) -> str:
     """
     Creates a task in the specified project with the given priority and target agent.

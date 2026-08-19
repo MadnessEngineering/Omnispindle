@@ -255,6 +255,30 @@ TOOL_SCHEMAS = {
             "required": ["lesson_id"]
         }
     },
+    "config": {
+        "name": "config",
+        "description": (
+            "Read or change which tool loadout and documentation level your MCP sessions "
+            "get. Call with no arguments to see the current setting plus every available "
+            "option and its tool count. Remote clients default to 'basic' (21 of 43 "
+            "tools); 'full' adds the rest. Takes effect on the next tools/list — "
+            "reconnect (/mcp) to pick it up."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "loadout": {
+                    "type": "string",
+                    "description": "Loadout name to store, e.g. 'full' or 'basic'. Omit to leave unchanged."
+                },
+                "doc_level": {
+                    "type": "string",
+                    "description": "Documentation detail level for tool descriptions. Omit to derive it from the loadout."
+                }
+            },
+            "required": []
+        }
+    },
     "regenerate_embedding": {
         "name": "regenerate_embedding",
         "description": "Recompute vector embedding for a lesson and stamp embedding_updated_at. Use after edits or to fix stale/missing embeddings.",
@@ -634,11 +658,13 @@ def _schemas_at_level(doc_level: str) -> Dict[str, Dict[str, Any]]:
     return built
 
 
-def _resolve_client_prefs(request: Request) -> tuple:
+def _resolve_client_prefs(request: Request, user: Optional[Dict[str, Any]] = None) -> tuple:
     """
     Resolve (loadout, doc_level) for this request.
 
-    Precedence: query param -> header -> env -> DEFAULT_REMOTE_LOADOUT. Remote clients
+    Precedence: query param -> header -> stored user pref -> env -> DEFAULT_REMOTE_LOADOUT.
+    The stored pref is what the `config` tool writes, so an agent can widen its own tool
+    list without the user editing client config. Remote clients
     can only control the URL and headers, so both are accepted:
         POST /api/mcp/?loadout=refine&doc_level=basic
         X-Omnispindle-Loadout: refine
@@ -649,9 +675,22 @@ def _resolve_client_prefs(request: Request) -> tuple:
     params = request.query_params
     headers = request.headers
 
+    explicit_loadout = params.get("loadout") or headers.get("x-omnispindle-loadout")
+    explicit_level = params.get("doc_level") or headers.get("x-omnispindle-doc-level")
+
+    # Only pay for the lookup when the client did not say. An explicit per-request hint
+    # should never cost a database round trip, and this runs on every tools/call.
+    stored = {}
+    if user and (not explicit_loadout or not explicit_level):
+        try:
+            from . import tools as _tools
+            stored = _tools.get_stored_client_prefs(user)
+        except Exception as e:
+            logger.warning(f"Stored client prefs unavailable: {e}")
+
     loadout = (
-        params.get("loadout")
-        or headers.get("x-omnispindle-loadout")
+        explicit_loadout
+        or stored.get("loadout")
         or os.getenv("OMNISPINDLE_TOOL_LOADOUT")
         or DEFAULT_REMOTE_LOADOUT
     ).strip().lower()
@@ -661,8 +700,8 @@ def _resolve_client_prefs(request: Request) -> tuple:
         loadout = DEFAULT_REMOTE_LOADOUT
 
     requested_level = (
-        params.get("doc_level")
-        or headers.get("x-omnispindle-doc-level")
+        explicit_level
+        or stored.get("doc_level")
         or os.getenv("OMNISPINDLE_DOC_LEVEL")
         or ""
     ).strip().lower()
@@ -709,6 +748,7 @@ def _build_tool_functions() -> Dict[str, Any]:
         "update_lesson": tools.update_lesson,
         "delete_lesson": tools.delete_lesson,
         "regenerate_embedding": tools.regenerate_embedding,
+        "config": tools.config,
         "search_lessons": tools.search_lessons,
         "grep_lessons": tools.grep_lessons,
         "list_lessons": tools.list_lessons,
@@ -839,7 +879,7 @@ async def mcp_handler(request: Request, get_current_user: Callable[[], Coroutine
             return JSONResponse(content={"jsonrpc": "2.0", "id": request_id, "result": {}})
         elif method == "tools/list":
             # Get tools dynamically based on loadout (remote mode - filters local-only tools)
-            loadout, doc_level = _resolve_client_prefs(request)
+            loadout, doc_level = _resolve_client_prefs(request, user)
             enabled_tools = get_loadout(loadout, mode="remote")
 
             # Filter by subscription tier — free users don't see pro-only tools

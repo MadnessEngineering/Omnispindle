@@ -76,6 +76,7 @@ TOOL_ACCESS_LEVELS: Dict[str, ToolAccessLevel] = {
     "update_lesson": ToolAccessLevel.REMOTE_SAFE,
     "delete_lesson": ToolAccessLevel.REMOTE_SAFE,
     "regenerate_embedding": ToolAccessLevel.REMOTE_SAFE,
+    "config": ToolAccessLevel.REMOTE_SAFE,
     "search_lessons": ToolAccessLevel.REMOTE_SAFE,
     "grep_lessons": ToolAccessLevel.REMOTE_SAFE,
     "list_lessons": ToolAccessLevel.REMOTE_SAFE,
@@ -128,6 +129,8 @@ TOOL_GROUPS: Dict[str, ToolGroup] = {
     "update_lesson": ToolGroup.LESSONS,
     "delete_lesson": ToolGroup.LESSONS,
     "regenerate_embedding": ToolGroup.LESSONS,
+    # Server-side client preferences (loadout / doc level) — a utility.
+    "config": ToolGroup.ADMIN,
     "search_lessons": ToolGroup.LESSONS,
     "grep_lessons": ToolGroup.LESSONS,
     "list_lessons": ToolGroup.LESSONS,

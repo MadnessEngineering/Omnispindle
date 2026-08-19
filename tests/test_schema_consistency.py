@@ -65,6 +65,7 @@ TOOL_FUNCTION_MAP = {
     "query_todos_near": tools_module.query_todos_near,
     "link_todos": tools_module.link_todos,
     "regenerate_embedding": tools_module.regenerate_embedding,
+    "config": tools_module.config,
     "create_quest": tools_module.create_quest,
     "check_quest": tools_module.check_quest,
     "list_quests": tools_module.list_quests,

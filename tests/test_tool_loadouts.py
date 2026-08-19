@@ -6,6 +6,7 @@ Tests centralized loadout definitions and mode-based filtering.
 
 import pytest
 from src.Omnispindle.tool_loadouts import (
+    ALWAYS_PRESENT,
     get_loadout,
     get_all_loadouts,
     get_loadout_names,
@@ -52,7 +53,7 @@ class TestToolLoadouts:
         assert "complete_todo" in write_only
         assert "query_todos" not in write_only
         assert "get_todo" not in write_only
-        assert len(write_only) == 6
+        assert len(write_only) == 7
 
     def test_read_only_loadout(self):
         """Read-only loadout should only have query/get/search tools + sessions."""
@@ -70,7 +71,7 @@ class TestToolLoadouts:
     def test_lightweight_has_minimal_token_cost(self):
         """Lightweight loadout should have 13 tools for token optimization."""
         lightweight = get_loadout("lightweight", mode="local")
-        assert len(lightweight) == 13
+        assert len(lightweight) == 14
         # Should include core functionality
         assert "add_todo" in lightweight
         assert "query_todos" in lightweight
@@ -103,18 +104,25 @@ class TestToolLoadouts:
         assert not (expected_out & basic), f"should not be in basic: {sorted(expected_out & basic)}"
 
     def test_minimal_loadout(self):
-        """Minimal loadout should have only 4 essential tools."""
+        """Minimal loadout should have the 4 essential tools plus config.
+
+        config is present in every loadout on purpose: it is how an agent widens its
+        own tool list, and a narrow loadout that hid it would be a one-way door.
+        """
         minimal = get_loadout("minimal", mode="local")
-        assert len(minimal) == 4
+        assert len(minimal) == 5
         assert "add_todo" in minimal
         assert "query_todos" in minimal
         assert "get_todo" in minimal
         assert "complete_todo" in minimal
+        assert "config" in minimal
 
     def test_lessons_loadout(self):
         """Lessons loadout is derived from the LESSONS group — new lesson tools join it free."""
         lessons = get_loadout("lessons", mode="local")
-        assert set(lessons) == set(get_group_tools(ToolGroup.LESSONS))
+        # Group derivation plus the always-injected tools, and nothing else — keeps the
+        # derivation invariant tight instead of loosening it to a subset check.
+        assert set(lessons) == set(get_group_tools(ToolGroup.LESSONS)) | set(ALWAYS_PRESENT)
         assert "add_lesson" in lessons
         assert "get_lesson" in lessons
         assert "search_lessons" in lessons
@@ -122,7 +130,7 @@ class TestToolLoadouts:
     def test_admin_loadout(self):
         """Admin loadout should have administrative and session tools."""
         admin = get_loadout("admin", mode="local")
-        assert len(admin) == 16
+        assert len(admin) == 17
         assert "query_todo_logs" in admin
         assert "inventorium_sessions_list" in admin
         assert "inventorium_sessions_fork" in admin

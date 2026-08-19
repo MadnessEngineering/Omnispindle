@@ -135,6 +135,10 @@ _BASE_LOADOUTS: Dict[str, List[str]] = {
 }
 
 
+# Tools every loadout must expose regardless of how narrow it is.
+ALWAYS_PRESENT: List[str] = ["config"]
+
+
 def get_loadout(loadout_name: str, mode: str = "local") -> List[str]:
     """
     Get tool list for a loadout, filtered by deployment mode.
@@ -164,6 +168,13 @@ def get_loadout(loadout_name: str, mode: str = "local") -> List[str]:
     if tools is None:
         logger.warning(f"Unknown loadout '{loadout_name}'; falling back to 'basic'")
         tools = _BASE_LOADOUTS["basic"]
+
+    # ALWAYS_PRESENT is injected here rather than added to each list, so a loadout
+    # derived from TOOL_GROUPS (lessons, read_only, refine, npc, ...) cannot silently
+    # omit it. config is how a client widens its own tool list; a loadout that hid it
+    # would be a one-way door, since tools/call is reachable by name but an agent
+    # cannot call a tool it was never shown.
+    tools = list(tools) + [t for t in ALWAYS_PRESENT if t not in tools]
 
     if mode == "remote":
         # Filter out local-only tools for remote mode
@@ -234,7 +245,10 @@ def get_loadout_info(loadout_name: str) -> Dict[str, any]:
         "npc": "NPC Brain: context awareness + knowledge lookup + todo observation + journal. Placeholder for NPC-specific tools as built (13 tools)"
     }
 
-    tools = _BASE_LOADOUTS.get(loadout_name, [])
+    # Report what get_loadout actually returns, injection included — reading
+    # _BASE_LOADOUTS directly made tool_count disagree with the real tool list.
+    # Unknown names still report empty rather than get_loadout's basic fallback.
+    tools = get_loadout(loadout_name, mode="local") if loadout_name in _BASE_LOADOUTS else []
     return {
         "name": loadout_name,
         "tool_count": len(tools),
