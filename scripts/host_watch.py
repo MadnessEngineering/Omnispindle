@@ -74,6 +74,10 @@ PRIME_SECS = 2
 # Log an "everything is fine" line this often, so an idle log still proves liveness.
 OK_HEARTBEAT_EVERY = 30
 
+# Hard cap on published process rows. The whole box is sampled so the percentages
+# are honest; this bounds what actually goes on the wire and into the log.
+PROC_ROWS_MAX = 12
+
 
 def log(msg):
     """PM2 captures stdout; flush so the log is live rather than block-buffered."""
@@ -347,6 +351,7 @@ def proc_deltas(prev, cur, window_s, uptime_s, box_cpu_pct):
         row = {
             "name": c["name"],
             "pid": pid,
+            "pm_id": c.get("pm_id"),
             "state": c["state"],
             "rss_mb": c["rss_mb"],
             "threads": c["threads"],
@@ -381,7 +386,26 @@ def proc_deltas(prev, cur, window_s, uptime_s, box_cpu_pct):
         rows.append(row)
 
     rows.sort(key=lambda r: (r["cpu_share_pct"] is None, -(r["cpu_share_pct"] or 0)))
-    return rows, inflation
+
+    # Compute over every process, PUBLISH only the ones that say something.
+    #
+    # Sampling the whole box is what makes the denominator honest, but emitting all
+    # of it put ~110 kernel threads sitting at 0.0% into a retained payload every
+    # 60s and into a log line every 60s with them — about 15KB a tick, 21MB a day,
+    # enough to churn straight through logrotate to say nothing at all.
+    #
+    # Kept: everything PM2 runs, whether busy or not (a service at 0% is a fact
+    # worth publishing — it might be wedged), anything actually burning CPU, and
+    # anything new or newly restarted. Everything else is dropped.
+    keep = [r for r in rows
+            if r.get("pm_id") is not None
+            or (r.get("cpu_pct_guest") or 0) > 0.05
+            or r.get("new") or r.get("restarted")]
+    dropped = len(rows) - len(keep)
+    if len(keep) > PROC_ROWS_MAX:
+        dropped += len(keep) - PROC_ROWS_MAX
+        keep = keep[:PROC_ROWS_MAX]
+    return keep, inflation, dropped
 
 
 def top_line(procs, n=3):
@@ -641,8 +665,9 @@ def main():
 
             uptime_f = float(open("/proc/uptime").read().split()[0])
             cur_procs = read_procs()
-            procs, inflation = proc_deltas(prev_procs, cur_procs, window, uptime_f,
-                                           cpu.get("busy_pct_of_one_core"))
+            procs, inflation, procs_dropped = proc_deltas(
+                prev_procs, cur_procs, window, uptime_f,
+                cpu.get("busy_pct_of_one_core"))
             prev_procs = cur_procs
             if inflation is not None:
                 # How many times over `top` and `pm2 list` are overstating things on
@@ -668,6 +693,11 @@ def main():
                 "uptime_s": read_uptime(),
                 "procs": procs,
             }
+            # Say so when the list is trimmed. A truncated set that does not admit
+            # it reads as "this is everything", which is how a monitor talks someone
+            # out of looking further.
+            if procs_dropped:
+                payload["procs_omitted"] = procs_dropped
             if ec2:
                 payload["ec2"] = ec2
 
