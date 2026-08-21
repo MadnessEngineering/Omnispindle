@@ -516,13 +516,13 @@ class OmniSpindleStdioServer:
                         elif name == "search_todos":
                             @self.server.tool(description=docstring)
                             async def search_todos(
-                                query: Annotated[str, Field(description="Search text. Use 'project:Name' for project filter")],
+                                query: Annotated[str, Field(description="Search text. Tokenized regex over description+project; there is no 'project:Name' syntax")],
                                 fields: Annotated[Optional[list], Field(description="Fields to search")] = None,
                                 limit: Annotated[int, Field(description="Max results")] = 20,
                                 brief: Annotated[Optional[bool], Field(description="Force strip notes + non-essential metadata. Omit for auto-sizing.")] = None,
                                 ctx: Annotated[Optional[str], Field(description="Additional context")] = None
                             ) -> str:
-                                """Text search shorthand. Tokenized regex on description+project. Use 'project:Name' for project filter. Auto-sizes response: multi-hit brief, single hit full."""
+                                """Text search shorthand. Tokenized regex on description+project. No project param — filter by project with query_todos(filter={"project": "name"}). Auto-sizes response: multi-hit brief, single hit full."""
                                 context = _create_context()
                                 return await func(query, fields, limit, brief, ctx=context)
                             return search_todos

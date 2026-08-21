@@ -193,17 +193,17 @@ Always pass comment= — it's the only place to record what was actually accompl
     
     "search_todos": {
         "minimal": "Search todos",
-        "basic": "Text search across fields. Use 'project:Name' for project filter.",
-        "admin": "Regex text search across description, project, metadata. Supports 'project:Name' syntax.",
+        "basic": "Tokenized text search over description+project. No project param — to filter by project use query_todos(filter={\"project\": \"name\"}).",
+        "admin": "Tokenized regex search across description+project (or the fields you pass). Project filtering belongs to query_todos, not here.",
         "full": """Search todos with text search capabilities across specified fields.
 
 Default search fields: description, project
 Custom fields can be specified in the fields parameter.
 Supports regex patterns and case-insensitive search.
 
-Special formats:
-- "project:ProjectName" - Search by specific project
-- Regular text searches across description and metadata fields
+There is NO project parameter and no "project:Name" query syntax — the query is
+tokenized and regex-matched against the fields listed above. To scope a search to
+one project, use query_todos(filter={"project": "name"}) instead.
 
 Response size: brief is auto by default — multi-hit sets drop notes once the
 combined notes get fat and cut oversized descriptions to a match-centred
@@ -474,15 +474,18 @@ Returns: agent name, entries array (timestamp, content, type, author), count, to
 
     "create_quest": {
         "minimal": "Create quest (epic goal container)",
-        "compact": "Create a Quest — epic container for todo chains. TODOS FIRST: add_todo for each task, collect IDs, then create_quest with chains=[{label, todos:[id1,id2,...]}]. NOT a todo itself.",
+        "compact": "Create a Quest — epic container for todo chains. Requires name, description AND project. TODOS FIRST: add_todo for each task, collect IDs, then create_quest with chains=[{label, todos:[id1,id2,...]}]. NOT a todo itself.",
         "basic": """Create a Quest — epic container grouping chains of todos toward a goal.
 Model: Quest → Chains (phases/workstreams) → Todos (atomic tasks, created with add_todo).
+Required: name, description, project (project is NOT optional — it scopes the quest).
 
 TODOS FIRST workflow:
 1. add_todo for each task → collect the IDs
 2. create_quest with chains pre-loaded: '[{"label":"Phase 1","todos":["id1","id2"]}]'
 3. link_quest for any todos added later""",
         "full": """Create a Quest — the top-level epic container in the Quest→Chain→Todo hierarchy.
+
+Required params: name, description, project. Optional: chains, tags, success_criteria.
 
   Quest  = the goal (e.g. "Ship tag system overhaul")
   Chain  = a named sequence or workstream (e.g. "Backend", "Testing", "Docs")
@@ -579,8 +582,8 @@ Response: {items: [...], count, anchor_district, anchor_coords, radius}"""
     },
     "link_todos": {
         "minimal": "Link todo dependency",
-        "compact": "Mark blocker_id as dependency of blocked_id. Adds to metadata.blockers.",
-        "basic": "Set blocker_id as a prerequisite for blocked_id. blocker must complete before blocked. Use query_todos(graph_root=id) to visualize the dependency graph.",
+        "compact": "Mark blocker_id as dependency of blocked_id. Two ids, one edge — there is no todo_ids list param.",
+        "basic": "Set blocker_id as a prerequisite for blocked_id — exactly two ids per call (no todo_ids array; call once per edge). blocker must complete before blocked. Use query_todos(graph_root=id) to visualize the dependency graph.",
         "full": """Create a dependency edge between two todos.
 
 blocker_id must be completed before blocked_id can proceed.

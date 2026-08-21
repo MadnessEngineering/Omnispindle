@@ -1,8 +1,9 @@
 
+import inspect
 import json
 import logging
 import os
-from typing import Dict, Any, Callable, Coroutine, Optional
+from typing import Dict, Any, Callable, Coroutine, Optional, Tuple
 
 import asyncio
 
@@ -54,6 +55,83 @@ def _as_text(result: Any) -> str:
     if isinstance(result, str):
         return result
     return json.dumps(result, default=str)
+
+
+# ── Argument validation ─────────────────────────────────────────────
+# tools/call splats client arguments straight into the tool function. A missing
+# required param or a hallucinated one used to raise a bare TypeError, which the
+# handler reported as -32603 "Internal error" — and most clients render only
+# `message`, so the agent saw nothing actionable and concluded the whole server
+# was down. Validate first, and say exactly what was wrong in `message`.
+
+_SIGNATURE_CACHE: Dict[str, Tuple[Tuple[str, ...], Tuple[str, ...], bool]] = {}
+
+# Server-supplied; a client never passes these (they are stripped before dispatch).
+_SERVER_PARAMS = ("ctx", "user_ctx", "self")
+
+
+def _tool_params(tool_name: str, tool_func: Any) -> Tuple[Tuple[str, ...], Tuple[str, ...], bool]:
+    """(accepted, required, accepts_kwargs) read off the tool's real signature.
+
+    The signature is the truth at call time — TOOL_SCHEMAS is kept in sync with it
+    by tests/test_schema_consistency.py, but a drift there must not turn into a
+    misleading error message here.
+    """
+    cached = _SIGNATURE_CACHE.get(tool_name)
+    if cached is not None:
+        return cached
+
+    try:
+        sig = inspect.signature(tool_func)
+    except (TypeError, ValueError):
+        # Un-introspectable callable: accept anything and let the call decide.
+        return ((), (), True)
+
+    accepted, required, accepts_kwargs = [], [], False
+    for pname, param in sig.parameters.items():
+        if pname in _SERVER_PARAMS:
+            continue
+        if param.kind is param.VAR_KEYWORD:
+            accepts_kwargs = True
+            continue
+        if param.kind is param.VAR_POSITIONAL:
+            continue
+        accepted.append(pname)
+        if param.default is param.empty:
+            required.append(pname)
+
+    result = (tuple(accepted), tuple(required), accepts_kwargs)
+    _SIGNATURE_CACHE[tool_name] = result
+    return result
+
+
+def _param_signature(accepted: Tuple[str, ...], required: Tuple[str, ...]) -> str:
+    """'name*, description*, project*, chains, tags (* = required)'"""
+    if not accepted:
+        return "(no parameters)"
+    rendered = ", ".join(f"{p}*" if p in required else p for p in accepted)
+    return f"{rendered} (* = required)" if required else rendered
+
+
+def _validate_tool_arguments(tool_name: str, tool_func: Any, arguments: Dict[str, Any]) -> Optional[str]:
+    """Return a human-readable reason the args are invalid, or None if they're fine."""
+    accepted, required, accepts_kwargs = _tool_params(tool_name, tool_func)
+    if not accepted and accepts_kwargs:
+        return None
+
+    problems = []
+    missing = [p for p in required if p not in arguments]
+    if missing:
+        problems.append("missing required " + ", ".join(f"'{p}'" for p in missing))
+    if not accepts_kwargs:
+        unknown = [k for k in arguments if k not in accepted]
+        if unknown:
+            problems.append("unknown " + ", ".join(f"'{k}'" for k in unknown))
+
+    if not problems:
+        return None
+    return f"{tool_name}: {'; '.join(problems)}. Accepts: {_param_signature(accepted, required)}"
+
 
 
 # Centralized tool schemas - single source of truth for all MCP tools
@@ -155,7 +233,7 @@ TOOL_SCHEMAS = {
     },
     "search_todos": {
         "name": "search_todos",
-        "description": "Text search todos. Two-pass: strict AND-match first; fuzzy OR ranked by token density if empty. Response includes search_mode: 'strict'|'fuzzy_or' and diet: 'full'|'brief'|'truncated'.",
+        "description": "Text search todos. Two-pass: strict AND-match first; fuzzy OR ranked by token density if empty. No project param — filter by project with query_todos(filter={\"project\": \"name\"}). Response includes search_mode: 'strict'|'fuzzy_or' and diet: 'full'|'brief'|'truncated'.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -197,7 +275,7 @@ TOOL_SCHEMAS = {
     },
     "link_todos": {
         "name": "link_todos",
-        "description": "Mark blocker_id as a dependency of blocked_id. Adds to metadata.blockers. Use query_todos(graph_root=id) to visualize.",
+        "description": "Mark blocker_id as a dependency of blocked_id. Exactly two ids per call — no todo_ids array; call once per edge. Adds to metadata.blockers. Use query_todos(graph_root=id) to visualize.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -557,7 +635,7 @@ TOOL_SCHEMAS = {
     # Quest tools
     "create_quest": {
         "name": "create_quest",
-        "description": "Create a quest — epic container for todo chains. TODOS FIRST: add_todo for each task, collect IDs, then create_quest with chains pre-loaded. chains todos[] must be existing todo UUIDs.",
+        "description": "Create a quest — epic container for todo chains. Requires name, description AND project. TODOS FIRST: add_todo for each task, collect IDs, then create_quest with chains pre-loaded. chains todos[] must be existing todo UUIDs.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -638,6 +716,25 @@ for _name, _schema in TOOL_SCHEMAS.items():
 _SCHEMA_CACHE: Dict[str, Dict[str, Dict[str, Any]]] = {}
 
 
+
+def _with_param_line(doc: str, schema: Dict[str, Any]) -> str:
+    """Append the tool's parameter list to its prose description.
+
+    inputSchema already carries this, but prose is what a model actually reads —
+    and every misuse in the logs (create_quest without `project`, link_todos with
+    `todo_ids`, search_todos with `project`) was a param invented or dropped while
+    the schema sat right there. Generated from the schema, so it can never drift
+    out of date the way a hand-written "Params:" line does.
+    """
+    props = schema.get("inputSchema", {}).get("properties", {})
+    if not props:
+        return doc
+    required = set(schema.get("inputSchema", {}).get("required", []))
+    rendered = ", ".join(f"{p}*" if p in required else p for p in props)
+    suffix = f"Params: {rendered}" + (" (* = required)" if required else "")
+    return f"{doc.rstrip()}\n{suffix}"
+
+
 def _schemas_at_level(doc_level: str) -> Dict[str, Dict[str, Any]]:
     """Return {tool_name: schema} with descriptions rendered at `doc_level`."""
     cached = _SCHEMA_CACHE.get(doc_level)
@@ -652,7 +749,7 @@ def _schemas_at_level(doc_level: str) -> Dict[str, Dict[str, Any]]:
         doc = manager.get_tool_documentation(name)
         if not doc or doc == "Tool documentation not found.":
             doc = _FALLBACK_DESCRIPTIONS.get(name) or schema.get("description", "")
-        built[name] = {**schema, "description": doc}
+        built[name] = {**schema, "description": _with_param_line(doc, schema)}
 
     _SCHEMA_CACHE[doc_level] = built
     return built
@@ -940,9 +1037,31 @@ async def mcp_handler(request: Request, get_current_user: Callable[[], Coroutine
                     }
                 })
 
+            tool_func = tool_functions[tool_name]
+
+            # Validate before splatting. A bad call is the caller's to fix, so it
+            # gets -32602 with the reason in `message` — clients that render only
+            # `message` (most of them) still show the agent what to correct.
+            arg_error = _validate_tool_arguments(tool_name, tool_func, tool_arguments)
+            if arg_error:
+                logger.info(f"⚠️ Invalid params: {arg_error}")
+                accepted, required, _ = _tool_params(tool_name, tool_func)
+                return JSONResponse(content={
+                    "jsonrpc": "2.0",
+                    "id": request_id,
+                    "error": {
+                        "code": -32602,
+                        "message": f"Invalid params — {arg_error}",
+                        "data": {
+                            "tool": tool_name,
+                            "accepted": list(accepted),
+                            "required": list(required),
+                            "received": sorted(tool_arguments.keys()),
+                        }
+                    }
+                })
+
             try:
-                # Call the tool function with context
-                tool_func = tool_functions[tool_name]
                 result = await tool_func(**tool_arguments, ctx=ctx)
 
                 return JSONResponse(content={
@@ -951,12 +1070,35 @@ async def mcp_handler(request: Request, get_current_user: Callable[[], Coroutine
                     "result": {"content": [{"type": "text", "text": _as_text(result)}]}
                 })
 
-            except Exception as tool_error:
-                logger.error(f"Tool execution error: {tool_error}")
+            except TypeError as tool_error:
+                # Validation above catches name-level mistakes; a TypeError that
+                # still names this tool's signature is an arg problem, not a server
+                # fault (e.g. a param passed positionally-only or of the wrong kind).
+                if f"{tool_name}()" in str(tool_error):
+                    accepted, required, _ = _tool_params(tool_name, tool_func)
+                    logger.info(f"⚠️ Invalid params: {tool_error}")
+                    return JSONResponse(content={
+                        "jsonrpc": "2.0",
+                        "id": request_id,
+                        "error": {
+                            "code": -32602,
+                            "message": f"Invalid params — {tool_error}. Accepts: {_param_signature(accepted, required)}",
+                            "data": {"tool": tool_name, "accepted": list(accepted), "required": list(required)}
+                        }
+                    })
+                logger.error(f"Tool execution error in {tool_name}: {tool_error}", exc_info=True)
                 return JSONResponse(content={
                     "jsonrpc": "2.0",
                     "id": request_id,
-                    "error": {"code": -32603, "message": "Internal error", "data": str(tool_error)}
+                    "error": {"code": -32603, "message": f"Internal error in {tool_name}: {tool_error}", "data": str(tool_error)}
+                })
+
+            except Exception as tool_error:
+                logger.error(f"Tool execution error in {tool_name}: {tool_error}", exc_info=True)
+                return JSONResponse(content={
+                    "jsonrpc": "2.0",
+                    "id": request_id,
+                    "error": {"code": -32603, "message": f"Internal error in {tool_name}: {tool_error}", "data": str(tool_error)}
                 })
 
         else:
