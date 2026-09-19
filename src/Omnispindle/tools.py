@@ -1375,6 +1375,42 @@ def _resolve_todo_id(todo_id: str, user_context, db_conn) -> Optional[str]:
     return str(todo_id) if todo_id is not None else None
 
 
+def _find_todo_across_scopes(todo_id: str, user_context):
+    """Locate a todo across the caller's OWN scopes — personal first, then shared —
+    and return (todo, collections, source, searched):
+
+      todo        the document, or None if not found in either scope
+      collections the full scoped collections dict for the DB it was found in
+                  (so callers reach 'deleted_todos'/'logs' in the SAME scope), or None
+      source      'user' | 'shared' | None
+      searched    ["user database '...'", "shared database '...'"] for the 404 message
+
+    This is the ONE by-ID probe: get/update/complete/delete share it, so the
+    personal→shared fallback can't drift between them (delete previously had none,
+    which 404'd shared todos an agent had just completed — audit #13 asymmetry).
+
+    Team scope is deliberately NOT probed here. A team todo is reachable only via
+    an explicit, membership-gated scope (resolve_scope_collections), never by an
+    ambient by-ID guess — that is the isolation guarantee: you cannot stumble onto
+    a team's todo by knowing its UUID.
+    """
+    searched = []
+    if user_context and user_context.get('sub'):
+        user_collections = db_connection.get_collections(user_context)
+        searched.append(f"user database '{user_collections['database'].name}'")
+        todo = user_collections['todos'].find_one({"id": todo_id})
+        if todo:
+            return (todo, user_collections, "user", searched)
+
+    shared_collections = db_connection.get_collections(None)  # None = shared database
+    searched.append(f"shared database '{shared_collections['database'].name}'")
+    todo = shared_collections['todos'].find_one({"id": todo_id})
+    if todo:
+        return (todo, shared_collections, "shared", searched)
+
+    return (None, None, None, searched)
+
+
 async def update_todo(todo_id: str, updates: dict, ctx: Optional[Context] = None) -> str:
     """
     Update a todo with the provided changes. Metadata updates are MERGED with existing metadata.
@@ -1432,39 +1468,13 @@ async def update_todo(todo_id: str, updates: dict, ctx: Optional[Context] = None
         if resolved is None:
             return create_response(False, message=f"Todo {todo_id} not found.")
         todo_id = resolved
-        searched_databases = []
-        existing_todo = None
-        todos_collection = None
-        database_source = None
-
-        # First, try user-specific database
-        if user_context and user_context.get('sub'):
-            user_collections = db_connection.get_collections(user_context)
-            user_todos_collection = user_collections['todos']
-            user_db_name = user_collections['database'].name
-            searched_databases.append(f"user database '{user_db_name}'")
-
-            existing_todo = user_todos_collection.find_one({"id": todo_id})
-            if existing_todo:
-                todos_collection = user_todos_collection
-                database_source = "user"
-
-        # If not found in user database (or no user database), try shared database
-        if not existing_todo:
-            shared_collections = db_connection.get_collections(None)  # None = shared database
-            shared_todos_collection = shared_collections['todos']
-            shared_db_name = shared_collections['database'].name
-            searched_databases.append(f"shared database '{shared_db_name}'")
-
-            existing_todo = shared_todos_collection.find_one({"id": todo_id})
-            if existing_todo:
-                todos_collection = shared_todos_collection
-                database_source = "shared"
-
-        # If todo not found in any database
+        # Locate across the caller's own scopes (personal → shared); one shared helper
+        existing_todo, _found_collections, database_source, searched_databases = \
+            _find_todo_across_scopes(todo_id, user_context)
         if not existing_todo:
             searched_locations = " and ".join(searched_databases)
             return create_response(False, message=f"Todo {todo_id} not found. Searched in: {searched_locations}")
+        todos_collection = _found_collections['todos']
 
         # 🔧 MERGE metadata with existing instead of replacing
         if "metadata" in updates and updates["metadata"] is not None:
@@ -1560,13 +1570,15 @@ async def delete_todo(todo_id: str, ctx: Optional[Context] = None) -> str:
             return create_response(False, message=f"Todo {todo_id} not found.")
         todo_id = resolved
 
-        # Get user-scoped collections
-        collections = db_connection.get_collections(user_context)
-        todos_collection = collections['todos']
-
-        existing_todo = todos_collection.find_one({"id": todo_id})
+        # Locate across the caller's own scopes (personal → shared). delete now
+        # matches get/complete/update — previously it probed the user DB only, so a
+        # shared todo an agent had just completed 404'd on delete (audit #13 asymmetry).
+        # The tombstone + delete then land in the SAME scope the todo lives in.
+        existing_todo, collections, _source, searched_databases = _find_todo_across_scopes(todo_id, user_context)
         if not existing_todo:
-            return create_response(False, message=f"Todo {todo_id} not found.")
+            searched_locations = " and ".join(searched_databases)
+            return create_response(False, message=f"Todo {todo_id} not found. Searched in: {searched_locations}")
+        todos_collection = collections['todos']
 
         user_email = ctx.user.get("email", "anonymous") if ctx and ctx.user else "anonymous"
         logger.info(f"Todo soft-deleted by {user_email}: {todo_id}")
@@ -1599,31 +1611,12 @@ async def get_todo(todo_id: str, ctx: Optional[Context] = None) -> str:
             searched_locations = f"user database and shared database"
             return create_response(False, message=f"Todo with ID {todo_id} not found. Searched in: {searched_locations}")
         todo_id = resolved
-        searched_databases = []
 
-        # First, try user-specific database
-        if user_context and user_context.get('sub'):
-            user_collections = db_connection.get_collections(user_context)
-            user_todos_collection = user_collections['todos']
-            user_db_name = user_collections['database'].name
-            searched_databases.append(f"user database '{user_db_name}'")
-
-            todo = user_todos_collection.find_one({"id": todo_id})
-            if todo:
-                compacted = compact_todo(todo, iso_dates=True)
-                compacted['source'] = 'user'
-                return json.dumps(compacted)
-
-        # If not found in user database (or no user database), try shared database
-        shared_collections = db_connection.get_collections(None)  # None = shared database
-        shared_todos_collection = shared_collections['todos']
-        shared_db_name = shared_collections['database'].name
-        searched_databases.append(f"shared database '{shared_db_name}'")
-
-        todo = shared_todos_collection.find_one({"id": todo_id})
+        # One by-ID probe across the caller's own scopes (personal → shared).
+        todo, _found_collections, source, searched_databases = _find_todo_across_scopes(todo_id, user_context)
         if todo:
             compacted = compact_todo(todo, iso_dates=True)
-            compacted['source'] = 'shared'
+            compacted['source'] = source
             return json.dumps(compacted)
 
         # Not found in any database
@@ -1659,39 +1652,13 @@ async def complete_todo(todo_id: str, comment: Optional[str] = None, files: Opti
         if resolved is None:
             return create_response(False, message=f"Todo {todo_id} not found.")
         todo_id = resolved
-        searched_databases = []
-        existing_todo = None
-        todos_collection = None
-        database_source = None
-
-        # First, try user-specific database
-        if user_context and user_context.get('sub'):
-            user_collections = db_connection.get_collections(user_context)
-            user_todos_collection = user_collections['todos']
-            user_db_name = user_collections['database'].name
-            searched_databases.append(f"user database '{user_db_name}'")
-
-            existing_todo = user_todos_collection.find_one({"id": todo_id})
-            if existing_todo:
-                todos_collection = user_todos_collection
-                database_source = "user"
-
-        # If not found in user database (or no user database), try shared database
-        if not existing_todo:
-            shared_collections = db_connection.get_collections(None)  # None = shared database
-            shared_todos_collection = shared_collections['todos']
-            shared_db_name = shared_collections['database'].name
-            searched_databases.append(f"shared database '{shared_db_name}'")
-
-            existing_todo = shared_todos_collection.find_one({"id": todo_id})
-            if existing_todo:
-                todos_collection = shared_todos_collection
-                database_source = "shared"
-
-        # If todo not found in any database
+        # Locate across the caller's own scopes (personal → shared); one shared helper
+        existing_todo, _found_collections, database_source, searched_databases = \
+            _find_todo_across_scopes(todo_id, user_context)
         if not existing_todo:
             searched_locations = " and ".join(searched_databases)
             return create_response(False, message=f"Todo {todo_id} not found. Searched in: {searched_locations}")
+        todos_collection = _found_collections['todos']
 
         completed_at = int(datetime.now(timezone.utc).timestamp())
         duration_sec = completed_at - existing_todo.get('created_at', completed_at)
