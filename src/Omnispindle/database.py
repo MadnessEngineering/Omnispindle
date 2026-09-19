@@ -47,6 +47,89 @@ def sanitize_database_name(user_context: Dict[str, Any]) -> str:
     return database_name
 
 
+# ---------------------------------------------------------------------------
+# Teams scope resolution — the Python MCP mirror of the Node backend's
+# resolveScope + the assertNoTeamInProbeSet invariant (see TEAMS_AUDIT #13).
+#
+# sanitize_database_name only ever emits `user_<...>` or `swarmonomicon`, so a
+# team database (`team_<slug>`) can NEVER be produced by the personal/shared
+# path. A team scope is therefore reachable only through resolve_scope_collections,
+# which verifies membership against `swarmonomicon.teams` BEFORE returning any
+# handle. Everything here fails CLOSED: an unknown team, a non-member, a viewer
+# writing, or a malformed token yields no team handle.
+# ---------------------------------------------------------------------------
+
+TEAM_SCOPE_PREFIX = "team:"
+
+
+def is_team_database(name: Optional[str]) -> bool:
+    """True for a team database (team_<slug>)."""
+    return isinstance(name, str) and name.startswith("team_")
+
+
+def parse_scope_token(scope: Optional[str]):
+    """Normalize a client-supplied scope token to (kind, slug).
+
+    None / '' / 'personal' -> ('personal', None)
+    'shared' / 'swarmonomicon' -> ('shared', None)
+    'team:<slug>' -> ('team', slug)
+
+    Raises ValueError for a malformed team token ('team:'). Any other string
+    falls back to ('personal', None) — never guess shared/team from junk.
+    """
+    if not scope:
+        return ("personal", None)
+    token = str(scope)
+    if token in ("shared", "swarmonomicon"):
+        return ("shared", None)
+    if token.startswith(TEAM_SCOPE_PREFIX):
+        slug = token[len(TEAM_SCOPE_PREFIX):]
+        if not slug:
+            raise ValueError("malformed team scope token")
+        return ("team", slug)
+    return ("personal", None)
+
+
+def _member_candidate_ids(user_context: Optional[Dict[str, Any]]) -> set:
+    """The identifiers a team member row may key on for this caller — mirrors the
+    Node resolveTeamScope candidate set (sub / auth0Subject / id / email /
+    'auth0|'+email)."""
+    candidates = set()
+    if not user_context:
+        return candidates
+    for key in ("sub", "auth0Subject", "id"):
+        val = user_context.get(key)
+        if val:
+            candidates.add(val)
+    email = user_context.get("email")
+    if email:
+        candidates.add(email)
+        candidates.add(f"auth0|{email}")
+    return candidates
+
+
+def match_team_member(team_doc: Optional[Dict[str, Any]], user_context: Optional[Dict[str, Any]]):
+    """Return the caller's member sub-doc within team_doc, or None.
+
+    Fails CLOSED: a caller whose user_context carries email_verified == False is
+    never matched (mirrors the Node require-on-true at the team boundary). When
+    the flag is absent the identity came from a trusted server path (API key /
+    get_current_user), so it is not re-litigated here.
+    """
+    if not team_doc or not user_context:
+        return None
+    if user_context.get("email_verified") is False:
+        return None
+    candidates = _member_candidate_ids(user_context)
+    email = user_context.get("email")
+    for member in (team_doc.get("members") or []):
+        if member.get("sub") in candidates:
+            return member
+        if email and member.get("email") == email:
+            return member
+    return None
+
+
 class Database:
     """A singleton class to manage MongoDB connections with user-scoped databases."""
     _instance = None
@@ -108,11 +191,8 @@ class Database:
         print(f"✅ Database routing: Initialized user database: {db_name} for user {user_id}")
         return user_db
 
-    def get_collections(self, user_context: Optional[Dict[str, Any]] = None) -> Dict[str, Collection]:
-        """
-        Get all collections for the appropriate database (user-scoped or shared).
-        """
-        db = self.get_user_database(user_context)
+    def _collections_for_db(self, db: MongoDatabase) -> Dict[str, Collection]:
+        """Build the standard collections dict for a resolved database handle."""
         collections_dict = {
             'todos': db["todos"],
             'deleted_todos': db["deleted_todos"],
@@ -126,6 +206,63 @@ class Database:
         # Add database reference for custom collection access
         collections_dict['database'] = db
         return collections_dict
+
+    def get_collections(self, user_context: Optional[Dict[str, Any]] = None) -> Dict[str, Collection]:
+        """
+        Get all collections for the appropriate database (user-scoped or shared).
+
+        Personal/shared ONLY. A team database must be resolved through
+        resolve_scope_collections (membership-gated) — never here. The guard is
+        belt-and-suspenders: get_user_database can't emit a team_ name today, so
+        this only fires if that ever changes, and it fails CLOSED.
+        """
+        db = self.get_user_database(user_context)
+        if is_team_database(getattr(db, "name", "")):
+            raise PermissionError(
+                "get_collections resolved a team database; use resolve_scope_collections (teams isolation invariant)"
+            )
+        return self._collections_for_db(db)
+
+    def resolve_scope_collections(
+        self,
+        user_context: Optional[Dict[str, Any]],
+        scope: Optional[str] = None,
+        write: bool = False,
+    ) -> Dict[str, Collection]:
+        """
+        Resolve a CLIENT-SUPPLIED scope token to a collections dict, membership-gated.
+        The single place a scope string becomes trusted handles on the MCP side —
+        the mirror of the Node resolveScope + scopedStore.
+
+        scope: None / 'personal' -> caller's own DB; 'shared' / 'swarmonomicon' ->
+        shared DB; 'team:<slug>' -> the team DB, but only if the caller is a member.
+
+        Fails CLOSED. Raises PermissionError for a denied team scope, ValueError
+        for a malformed token. Personal/shared behaviour is unchanged.
+        """
+        kind, slug = parse_scope_token(scope)
+        if kind == "personal":
+            return self.get_collections(user_context)
+        if kind == "shared":
+            return self.get_collections(None)
+
+        # kind == 'team' — verify membership before returning any handle.
+        if self.client is None or self.shared_db is None:
+            raise PermissionError(f"cannot verify membership for team '{slug}' (no database)")
+        team_doc = self.shared_db["teams"].find_one({"slug": slug})
+        member = match_team_member(team_doc, user_context)
+        if not member:
+            raise PermissionError(f"not a member of team '{slug}'")
+        if write and member.get("role") == "viewer":
+            raise PermissionError(f"viewer cannot write to team '{slug}'")
+
+        # db_name on the team doc is authoritative (schema D7). It MUST be a
+        # team_ database; anything else is a misconfiguration — fail closed.
+        db_name = team_doc.get("db_name")
+        if not is_team_database(db_name):
+            raise PermissionError(f"team '{slug}' has an invalid db_name")
+        team_db = self.client[db_name]
+        return self._collections_for_db(team_db)
 
     # Legacy properties for backward compatibility (use shared database)
     @property
