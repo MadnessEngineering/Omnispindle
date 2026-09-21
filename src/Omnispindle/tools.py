@@ -1138,17 +1138,48 @@ async def add_todo(description: str, project: str, priority: str = "Medium", tar
         logger.error(f"Failed to create todo: {str(e)}")
         return create_response(False, message=str(e))
 
-async def query_todos(filter: Optional[Dict[str, Any]] = None, projection: Optional[Dict[str, Any]] = None, limit: int = 100, offset: int = 0, exclude_completed: bool = True, since: Optional[int] = None, graph_root: Optional[str] = None, brief: Optional[bool] = None, ctx: Optional[Context] = None) -> str:
+def _query_scoped_todos(scope_pairs, query_filter, projection, offset, limit):
+    """Query the 'todos' collection across each (scope_label, collections) pair,
+    tag every row with _scope=scope_label, then GLOBALLY sort by created_at desc
+    and page. Bounded fetch of offset+limit per scope so a merged page is correct
+    without pulling whole collections. The _scope tag survives compaction (it is a
+    normal top-level field), so the caller sees which scope each row came from.
+    """
+    proj = projection
+    # An inclusion projection that omits created_at would strip the sort key the
+    # client-side merge needs — keep it.
+    if isinstance(proj, dict) and proj and any(proj.values()) and 'created_at' not in proj:
+        proj = {**proj, 'created_at': 1}
+    cap = (offset + limit) if limit else 0
+    rows = []
+    for label, cols in scope_pairs:
+        cursor = cols['todos'].find(query_filter, proj).sort("created_at", -1)
+        if cap:
+            cursor = cursor.limit(cap)
+        for doc in cursor:
+            doc['_scope'] = label
+            rows.append(doc)
+    rows.sort(key=lambda d: d.get('created_at', 0) or 0, reverse=True)
+    return rows[offset:(offset + limit) if limit else None]
+
+
+async def query_todos(filter: Optional[Dict[str, Any]] = None, projection: Optional[Dict[str, Any]] = None, limit: int = 100, offset: int = 0, exclude_completed: bool = True, since: Optional[int] = None, graph_root: Optional[str] = None, brief: Optional[bool] = None, scope: Optional[str] = None, ctx: Optional[Context] = None) -> str:
     """
     Query todos with flexible filtering options and pagination.
-    - Authenticated users: returns their personal todos
-    - Unauthenticated users: returns shared database todos (read-only demo mode)
+    - scope (default 'all'): which scope(s) to read.
+        'all'          personal + shared + every team you belong to, each row
+                       tagged with its _scope ('personal'|'shared'|'team:<slug>')
+        'personal'     just your own todos
+        'shared'       the shared database only
+        'team:<slug>'  one team's board (you must be a member)
+      A teamless caller's 'all' is just personal + shared, so nothing changes for
+      them. Unauthenticated callers always get shared only (read-only demo).
     - By default, excludes completed items (set exclude_completed=False to include them)
-    - Supports pagination via offset parameter
+    - Supports pagination via offset parameter (applied to the merged, sorted set)
     - Use 'since' (unix timestamp) to get only items modified after that time
-    - Use 'graph_root' (todo ID or short prefix) to return a dependency subgraph:
-        Returns nodes (todos) and edges (blocker relationships) starting from that todo,
-        traversing metadata.blockers in both directions up to 2 hops.
+    - Use 'graph_root' (todo ID) to return a dependency subgraph within the root's
+        own scope: nodes (todos) + edges (blocker relations), traversing
+        metadata.blockers in both directions up to 2 hops.
         Response shape: {"nodes": [...], "edges": [{"from": id, "to": id, "relation": "blocks"}], "root": id}
 
     brief=None (default) auto-sizes the response: a fat multi-item set collapses
@@ -1160,23 +1191,23 @@ async def query_todos(filter: Optional[Dict[str, Any]] = None, projection: Optio
     try:
         user_context = ctx.user if ctx else None
 
-        # For authenticated users with Auth0 'sub', use their personal database
-        if user_context and user_context.get('sub'):
-            collections = db_connection.get_collections(user_context)
-            todos_collection = collections['todos']
-            database_source = "personal"
-        else:
-            # For unauthenticated users, provide read-only access to shared database
-            collections = db_connection.get_collections(None)  # None = shared database
-            todos_collection = collections['todos']
-            database_source = "shared (read-only demo)"
-
-        # Graph traversal mode
+        # Graph traversal stays single-scope — traversal walks metadata.blockers
+        # within ONE collection. Locate the root across the caller's scopes and
+        # traverse where it lives (so a shared/team root works, not just personal).
         if graph_root is not None:
             resolved_root = _resolve_todo_id(graph_root, user_context, db_connection)
-            if resolved_root is None:
+            root_todo, root_cols, _src, _searched = _find_todo_across_scopes(resolved_root, user_context)
+            if not root_todo:
                 return create_response(False, message=f"graph_root todo '{graph_root}' not found.")
-            return _query_todo_graph(todos_collection, resolved_root)
+            return _query_todo_graph(root_cols['todos'], root_todo['id'])
+
+        # Resolve the read scope(s): default 'all' = personal + shared + your teams.
+        try:
+            scope_pairs = db_connection.resolve_scope_collection_list(user_context, scope)
+        except PermissionError as pe:
+            return create_response(False, message=str(pe))
+        except ValueError as ve:
+            return create_response(False, message=str(ve))
 
         # Build query filter
         query_filter = filter.copy() if filter else {}
@@ -1189,10 +1220,12 @@ async def query_todos(filter: Optional[Dict[str, Any]] = None, projection: Optio
         if since is not None:
             query_filter["updated_at"] = {"$gte": since}
 
-        cursor = todos_collection.find(query_filter, projection).sort("created_at", -1).skip(offset).limit(limit)
-        results = list(cursor)
+        # Fan out across scopes, tag each row _scope, merge/sort/page.
+        results = _query_scoped_todos(scope_pairs, query_filter, projection, offset, limit)
 
-        logger.info(f"Query returned {len(results)} todos from {database_source} database (offset={offset}, limit={limit}, exclude_completed={exclude_completed}, since={since}, brief={brief})")
+        source = scope if scope else "all"
+        scope_labels = [label for label, _cols in scope_pairs]
+        logger.info(f"Query returned {len(results)} todos for scope '{source}' (scopes={scope_labels}, offset={offset}, limit={limit}, exclude_completed={exclude_completed}, since={since}, brief={brief})")
         # Explicit brief wins; only brief=None auto-sizes. compact_todo's own
         # brief flag stays off in the auto path so the diet sees the real bytes.
         compacted = compact_todo_list(results, brief=bool(brief))
@@ -1200,7 +1233,7 @@ async def query_todos(filter: Optional[Dict[str, Any]] = None, projection: Optio
             compacted, diet = apply_todo_list_diet(compacted)
         else:
             diet = "brief" if brief else "full"
-        return json.dumps({"items": compacted, "count": len(compacted), "source": database_source, "diet": diet}, cls=MongoJSONEncoder)
+        return json.dumps({"items": compacted, "count": len(compacted), "source": source, "diet": diet}, cls=MongoJSONEncoder)
     except Exception as e:
         logger.error(f"Failed to query todos: {str(e)}")
         return create_response(False, message=str(e))
@@ -1708,15 +1741,17 @@ async def complete_todo(todo_id: str, comment: Optional[str] = None, files: Opti
         return create_response(False, message=str(e))
 
 
-async def list_todos_by_status(status: str, limit: int = 100, offset: int = 0, brief: bool = True, ctx: Optional[Context] = None) -> str:
+async def list_todos_by_status(status: str, limit: int = 100, offset: int = 0, brief: bool = True, scope: Optional[str] = None, ctx: Optional[Context] = None) -> str:
     """
     List todos filtered by their status with pagination support.
+    scope (default 'all'): personal + shared + your teams, each row _scope-tagged;
+    narrow with 'personal' / 'shared' / 'team:<slug>'. See query_todos.
     Defaults to brief=True for token efficiency — pass brief=false for full notes/metadata.
     """
     if status.lower() not in ['pending', 'completed', 'initial', 'blocked', 'in_progress', 'review']:
         return create_response(False, message="Invalid status. Must be one of 'pending', 'completed', 'initial', 'blocked', 'in_progress', 'review'.")
     # When querying by status, don't apply the default completed filter
-    return await query_todos(filter={"status": status.lower()}, limit=limit, offset=offset, exclude_completed=False, brief=brief, ctx=ctx)
+    return await query_todos(filter={"status": status.lower()}, limit=limit, offset=offset, exclude_completed=False, brief=brief, scope=scope, ctx=ctx)
 
 async def add_lesson(language: str, topic: str, lesson_learned: str, tags: Optional[list] = None, ctx: Optional[Context] = None) -> str:
     """
@@ -2176,10 +2211,12 @@ async def grep_lessons(pattern: str, limit: int = 20, ctx: Optional[Context] = N
         logger.error(f"Failed to grep lessons: {str(e)}")
         return create_response(False, message=str(e))
 
-async def list_project_todos(project: str, limit: int = 5, offset: int = 0, brief: bool = True, projection: Optional[Dict[str, Any]] = None, ctx: Optional[Context] = None) -> str:
+async def list_project_todos(project: str, limit: int = 5, offset: int = 0, brief: bool = True, projection: Optional[Dict[str, Any]] = None, scope: Optional[str] = None, ctx: Optional[Context] = None) -> str:
     """
     List recent active todos for a specific project with pagination support.
     Returns pending and in_progress todos (excludes review, completed, cancelled).
+    scope (default 'all'): personal + shared + your teams, each row _scope-tagged;
+    narrow with 'personal' / 'shared' / 'team:<slug>'. See query_todos.
     Defaults to brief=True for token efficiency — pass brief=false for full notes/metadata.
     """
     return await query_todos(
@@ -2189,6 +2226,7 @@ async def list_project_todos(project: str, limit: int = 5, offset: int = 0, brie
         offset=offset,
         exclude_completed=False,  # Already filtering by status
         brief=brief,
+        scope=scope,
         ctx=ctx
     )
 
