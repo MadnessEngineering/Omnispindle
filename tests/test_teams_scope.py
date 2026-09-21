@@ -115,40 +115,67 @@ def test_empty_inputs():
 # --------------------------------------------------------------------------- #
 # resolve_scope_collections — fake Mongo client, real gate
 # --------------------------------------------------------------------------- #
-class _FakeTeams:
-    def __init__(self, doc):
-        self._doc = doc
+def _as_team_list(team_docs):
+    if team_docs is None:
+        return []
+    return team_docs if isinstance(team_docs, list) else [team_docs]
 
-    def find_one(self, _query):
-        return self._doc
+
+class _FakeTeams:
+    def __init__(self, team_docs):
+        self._docs = _as_team_list(team_docs)
+
+    def find_one(self, query):
+        slug = query.get("slug") if query else None
+        for d in self._docs:
+            if slug is None or d.get("slug") == slug:
+                return d
+        return None
+
+    def find(self, _query=None):
+        return list(self._docs)
 
 
 class _FakeDb:
-    def __init__(self, name, team_doc=None):
+    def __init__(self, name, team_docs=None):
         self.name = name
-        self._team_doc = team_doc
+        self._team_docs = team_docs
 
     def __getitem__(self, coll):
         if coll == "teams":
-            return _FakeTeams(self._team_doc)
+            return _FakeTeams(self._team_docs)
         return f"{self.name}::{coll}"
 
 
 class _FakeClient:
-    def __init__(self, team_doc=None):
-        self._team_doc = team_doc
+    def __init__(self, team_docs=None):
+        self._team_docs = team_docs
 
     def __getitem__(self, dbname):
-        return _FakeDb(dbname, self._team_doc)
+        return _FakeDb(dbname, self._team_docs)
 
 
 def make_db(team_doc=TEAM):
-    """A Database instance with fakes wired in — bypasses __new__ (no real Mongo)."""
+    """A Database instance with fakes wired in — bypasses __new__ (no real Mongo).
+    team_doc may be a single team, a list of teams, or None."""
     d = object.__new__(Database)
     d.client = _FakeClient(team_doc)
     d.shared_db = _FakeDb("swarmonomicon", team_doc)
     d._user_databases = {}
     return d
+
+
+# A second team for enumeration tests: EDITOR is a member of acme + beta, not gamma.
+TEAM_BETA = {
+    "slug": "beta",
+    "db_name": "team_beta",
+    "members": [{"sub": "google-oauth2|123", "email": "dan@acme.com", "role": "editor"}],
+}
+TEAM_GAMMA = {
+    "slug": "gamma",
+    "db_name": "team_gamma",
+    "members": [{"sub": "someone-else", "email": "other@x.com", "role": "editor"}],
+}
 
 
 EDITOR = {"sub": "google-oauth2|123", "email": "dan@acme.com"}
@@ -205,3 +232,78 @@ def test_resolve_team_invalid_db_name_denied():
 def test_resolve_malformed_team_token_raises_value_error():
     with pytest.raises(ValueError):
         make_db().resolve_scope_collections(EDITOR, "team:")
+
+
+# --------------------------------------------------------------------------- #
+# member_teams — enumerate the caller's teams
+# --------------------------------------------------------------------------- #
+def test_member_teams_returns_only_the_callers_teams():
+    db = make_db([TEAM, TEAM_BETA, TEAM_GAMMA])
+    teams = db.member_teams(EDITOR)
+    slugs = sorted(slug for slug, _m, _db in teams)
+    assert slugs == ["acme", "beta"]  # not gamma
+    # db_name threaded through for each
+    by_slug = {slug: db_name for slug, _m, db_name in teams}
+    assert by_slug["acme"] == "team_acme"
+    assert by_slug["beta"] == "team_beta"
+
+
+def test_member_teams_non_member_gets_none():
+    assert make_db([TEAM, TEAM_BETA]).member_teams(OUTSIDER) == []
+
+
+def test_member_teams_no_context():
+    assert make_db([TEAM]).member_teams(None) == []
+
+
+def test_member_teams_skips_invalid_db_name():
+    bad = {"slug": "acme", "db_name": "user_not_a_team", "members": [{"sub": "google-oauth2|123", "role": "editor"}]}
+    assert make_db([bad]).member_teams(EDITOR) == []
+
+
+# --------------------------------------------------------------------------- #
+# resolve_scope_collection_list — the set-returning read fan-out
+# --------------------------------------------------------------------------- #
+def _labels(pairs):
+    return [label for label, _cols in pairs]
+
+
+def test_scope_list_all_default_member_of_one_team():
+    pairs = make_db(TEAM).resolve_scope_collection_list(EDITOR)  # scope omitted → 'all'
+    assert _labels(pairs) == ["personal", "shared", "team:acme"]
+    # each entry is a real collections dict
+    for _label, cols in pairs:
+        assert "todos" in cols and "database" in cols
+
+
+def test_scope_list_all_member_of_two_teams():
+    pairs = make_db([TEAM, TEAM_BETA, TEAM_GAMMA]).resolve_scope_collection_list(EDITOR, "all")
+    assert _labels(pairs) == ["personal", "shared", "team:acme", "team:beta"]
+
+
+def test_scope_list_all_teamless_collapses_to_personal_and_shared():
+    pairs = make_db(team_doc=None).resolve_scope_collection_list(EDITOR, "all")
+    assert _labels(pairs) == ["personal", "shared"]
+
+
+def test_scope_list_all_unauthenticated_is_shared_only():
+    # No Auth0 sub → no personal scope, no team membership; just shared.
+    pairs = make_db(TEAM).resolve_scope_collection_list({"email": "anon@x.com"}, "all")
+    assert _labels(pairs) == ["shared"]
+
+
+def test_scope_list_explicit_personal():
+    pairs = make_db(TEAM).resolve_scope_collection_list(EDITOR, "personal")
+    assert _labels(pairs) == ["personal"]
+    assert pairs[0][1]["todos"] == "user_dan_acme_com::todos"
+
+
+def test_scope_list_explicit_team_member():
+    pairs = make_db(TEAM).resolve_scope_collection_list(EDITOR, "team:acme")
+    assert _labels(pairs) == ["team:acme"]
+    assert pairs[0][1]["todos"] == "team_acme::todos"
+
+
+def test_scope_list_explicit_team_non_member_denied():
+    with pytest.raises(PermissionError):
+        make_db(TEAM).resolve_scope_collection_list(OUTSIDER, "team:acme")

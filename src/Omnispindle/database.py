@@ -264,6 +264,68 @@ class Database:
         team_db = self.client[db_name]
         return self._collections_for_db(team_db)
 
+    def member_teams(self, user_context: Optional[Dict[str, Any]]):
+        """Every team the caller belongs to, as a list of (slug, member, db_name).
+
+        The Python mirror of the Node resolveTeamScope. Fails CLOSED: no context,
+        no shared DB, or any error yields []. Only teams with a valid team_ db_name
+        are returned (a misconfigured row is skipped, never routed to). Dev-scale
+        full scan of swarmonomicon.teams; add an index/targeted query if it grows.
+        """
+        if self.shared_db is None or not user_context:
+            return []
+        try:
+            teams = self.shared_db["teams"].find({})
+        except Exception:
+            return []
+        out = []
+        for team in teams:
+            member = match_team_member(team, user_context)
+            if not member:
+                continue
+            db_name = team.get("db_name")
+            if is_team_database(db_name):
+                out.append((team.get("slug"), member, db_name))
+        return out
+
+    def resolve_scope_collection_list(
+        self,
+        user_context: Optional[Dict[str, Any]],
+        scope: Optional[str] = None,
+        write: bool = False,
+    ):
+        """Return a LIST of (scope_label, collections) for a SET-returning query.
+
+        This is the read-side counterpart of resolve_scope_collections: the
+        set-returning tools iterate it, query each scope, and tag every row with
+        its _scope so one call surfaces personal + shared + team work.
+
+        scope='all' (default): personal (if authenticated) + shared + every team
+        the caller is a member of. A caller with no teams gets exactly personal +
+        shared, so 'all' collapses to today's reachable set for a teamless user.
+
+        scope='personal'|'shared'|'team:<slug>': just that one scope (team is
+        membership-gated via resolve_scope_collections; raises on denial).
+
+        Merging what YOU can read never overshares: a row is only in a team scope
+        because someone wrote it there. Fails CLOSED (team enumeration returns []).
+        """
+        token = scope if scope else "all"
+
+        if token == "all":
+            result = []
+            if user_context and user_context.get("sub"):
+                result.append(("personal", self.get_collections(user_context)))
+            result.append(("shared", self.get_collections(None)))
+            for slug, _member, db_name in self.member_teams(user_context):
+                result.append((f"team:{slug}", self._collections_for_db(self.client[db_name])))
+            return result
+
+        # A single explicit scope — reuse the gated resolver, labelled.
+        kind, slug = parse_scope_token(token)
+        label = f"team:{slug}" if kind == "team" else kind
+        return [(label, self.resolve_scope_collections(user_context, token, write=write))]
+
     # Legacy properties for backward compatibility (use shared database)
     @property
     def db(self) -> MongoDatabase:
