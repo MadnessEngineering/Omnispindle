@@ -78,7 +78,12 @@ def _convert_api_todo_to_mcp_format(api_todo: dict) -> dict:
     # Handle completion comment from metadata
     if api_todo.get("completion_comment"):
         mcp_todo["metadata"]["completion_comment"] = api_todo["completion_comment"]
-    
+
+    # Carry the backend's scope tag through ('personal'|'shared'|'team:<slug>') so
+    # an 'all' query still tells the caller which scope each row came from.
+    if api_todo.get("_scope"):
+        mcp_todo["_scope"] = api_todo["_scope"]
+
     return mcp_todo
 
 def _handle_api_response(api_response: APIResponse) -> str:
@@ -162,11 +167,13 @@ async def add_todo(description: str, project: str, priority: str = "Medium",
         return create_response(False, message=f"API error: {str(e)}")
 
 async def query_todos(filter: Optional[Dict[str, Any]] = None, projection: Optional[Dict[str, Any]] = None,
-                     limit: int = 100, brief: Optional[bool] = None, ctx: Optional[Context] = None) -> str:
+                     limit: int = 100, brief: Optional[bool] = None, scope: Optional[str] = None, ctx: Optional[Context] = None) -> str:
     """
     Query todos with flexible filtering options from API.
 
-    brief=None (default) auto-sizes the response — see apply_todo_list_diet.
+    scope ('all'|'personal'|'shared'|'team:<slug>') forwards to the backend, which
+    membership-gates it and tags each row with its _scope. brief=None (default)
+    auto-sizes the response — see apply_todo_list_diet.
     """
     try:
         auth_token, api_key = _get_auth_from_context(ctx)
@@ -189,7 +196,8 @@ async def query_todos(filter: Optional[Dict[str, Any]] = None, projection: Optio
             project=project,
             status=status,
             priority=priority,
-            limit=limit
+            limit=limit,
+            scope=scope
         )
         
         if not api_response.success:
@@ -324,14 +332,14 @@ async def complete_todo(todo_id: str, comment: Optional[str] = None, ctx: Option
         logger.error(f"Failed to complete todo via API: {str(e)}")
         return create_response(False, message=f"API error: {str(e)}")
 
-async def list_todos_by_status(status: str, limit: int = 100, ctx: Optional[Context] = None) -> str:
+async def list_todos_by_status(status: str, limit: int = 100, scope: Optional[str] = None, ctx: Optional[Context] = None) -> str:
     """
-    List todos filtered by their status.
+    List todos filtered by their status. scope forwards to the backend (see query_todos).
     """
     if status.lower() not in ['pending', 'completed', 'review']:
         return create_response(False, message="Invalid status. Must be one of 'pending', 'completed', 'review'.")
-    
-    return await query_todos(filter={"status": status.lower()}, limit=limit, ctx=ctx)
+
+    return await query_todos(filter={"status": status.lower()}, limit=limit, scope=scope, ctx=ctx)
 
 async def search_todos(query: str, fields: Optional[list] = None, limit: int = 20,
                        brief: Optional[bool] = None, ctx: Optional[Context] = None) -> str:
@@ -409,13 +417,14 @@ async def search_todos(query: str, fields: Optional[list] = None, limit: int = 2
         logger.error(f"Failed to search todos via API: {str(e)}")
         return create_response(False, message=f"API error: {str(e)}")
 
-async def list_project_todos(project: str, limit: int = 5, ctx: Optional[Context] = None) -> str:
+async def list_project_todos(project: str, limit: int = 5, scope: Optional[str] = None, ctx: Optional[Context] = None) -> str:
     """
-    List recent active todos for a specific project.
+    List recent active todos for a specific project. scope forwards to the backend.
     """
     return await query_todos(
         filter={"project": project.lower(), "status": {"$in": ["pending", "in_progress"]}},
         limit=limit,
+        scope=scope,
         ctx=ctx
     )
 

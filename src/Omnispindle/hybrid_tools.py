@@ -217,14 +217,17 @@ async def add_todo(description: str, project: str, priority: str = "Medium",
     )
 
 async def query_todos(filter: Optional[Dict[str, Any]] = None, projection: Optional[Dict[str, Any]] = None,
-                     limit: int = 100, brief: Optional[bool] = None, ctx: Optional[Context] = None) -> str:
-    """Query todos using hybrid mode. brief=None auto-sizes — see apply_todo_list_diet."""
+                     limit: int = 100, brief: Optional[bool] = None, scope: Optional[str] = None, ctx: Optional[Context] = None) -> str:
+    """Query todos using hybrid mode. scope ('all'|'personal'|'shared'|'team:<slug>')
+    forwards to the backend (api path) or the local resolver (fallback), both
+    membership-gated. brief=None auto-sizes — see apply_todo_list_diet."""
     return await _execute_with_fallback(
         "query_todos",
         api_tools.query_todos,
         local_tools.query_todos,
         filter, projection, limit,
         brief=brief,
+        scope=scope,
         ctx=ctx
     )
 
@@ -268,13 +271,14 @@ async def complete_todo(todo_id: str, comment: Optional[str] = None, ctx: Option
         ctx=ctx
     )
 
-async def list_todos_by_status(status: str, limit: int = 100, ctx: Optional[Context] = None) -> str:
-    """List todos by status using hybrid mode"""
+async def list_todos_by_status(status: str, limit: int = 100, scope: Optional[str] = None, ctx: Optional[Context] = None) -> str:
+    """List todos by status using hybrid mode. scope forwards to the gated backend/local."""
     return await _execute_with_fallback(
         "list_todos_by_status",
         api_tools.list_todos_by_status,
         local_tools.list_todos_by_status,
         status, limit,
+        scope=scope,
         ctx=ctx
     )
 
@@ -289,13 +293,14 @@ async def search_todos(query: str, fields: Optional[list] = None, limit: int = 2
         ctx=ctx
     )
 
-async def list_project_todos(project: str, limit: int = 5, ctx: Optional[Context] = None) -> str:
-    """List project todos using hybrid mode"""
+async def list_project_todos(project: str, limit: int = 5, scope: Optional[str] = None, ctx: Optional[Context] = None) -> str:
+    """List project todos using hybrid mode. scope forwards to the gated backend/local."""
     return await _execute_with_fallback(
         "list_project_todos",
         api_tools.list_project_todos,
         local_tools.list_project_todos,
         project, limit,
+        scope=scope,
         ctx=ctx
     )
 

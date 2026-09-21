@@ -201,8 +201,10 @@ class MadnessAPIClient:
         return await self._make_request("GET", "/health")
 
     # Todo operations
-    async def get_todos(self, project: str = None, status: str = None, priority: str = None, limit: int = 100) -> APIResponse:
-        """Get todos with optional filtering"""
+    async def get_todos(self, project: str = None, status: str = None, priority: str = None, limit: int = 100, scope: str = None) -> APIResponse:
+        """Get todos with optional filtering. scope ('all'|'personal'|'shared'|
+        'team:<slug>') forwards to the backend, which membership-gates it and tags
+        each row with its _scope; omitted → the backend's personal default."""
         params = {}
         if project:
             params["project"] = project
@@ -212,7 +214,9 @@ class MadnessAPIClient:
             params["priority"] = priority
         if limit:
             params["limit"] = limit
-            
+        if scope:
+            params["scope"] = scope
+
         return await self._make_request("GET", "/todos", params=params)
 
     async def get_todo(self, todo_id: str) -> APIResponse:
