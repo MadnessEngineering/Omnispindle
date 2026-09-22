@@ -97,7 +97,7 @@ def _handle_api_response(api_response: APIResponse) -> str:
 
 async def add_todo(description: str, project: str, priority: str = "Medium",
                   target_agent: str = "user", notes: str = "", ticket: str = "",
-                  metadata: Optional[Dict[str, Any]] = None,
+                  metadata: Optional[Dict[str, Any]] = None, scope: Optional[str] = None,
                   ctx: Optional[Context] = None) -> str:
     """
     Creates a task in the specified project with the given priority and target agent.
@@ -112,6 +112,8 @@ async def add_todo(description: str, project: str, priority: str = "Medium",
         metadata: Optional structured metadata. Always include 'files': ['path/to/main/file']
             so SwarmDesk can link this todo to its source node in the 3D view.
             Example: {"files": ["src/components/Dashboard.js"], "tags": ["bug", "ui"]}
+        scope: Where to create it (default 'personal'). 'shared'/'team:<slug>' routes
+            the write through the backend's membership gate (viewer role refused).
         ctx: Context with user information
 
     Returns a compact representation of the created todo with an ID for reference.
@@ -128,14 +130,15 @@ async def add_todo(description: str, project: str, priority: str = "Medium",
         if target_agent and target_agent != "user":
             metadata["target_agent"] = target_agent
 
-        logger.info(f"🐛 add_todo sending to API with metadata: {metadata}")
+        logger.info(f"🐛 add_todo sending to API with metadata: {metadata}, scope={scope}")
 
         client = await get_cached_client(auth_token=auth_token, api_key=api_key)
         api_response = await client.create_todo(
             description=description,
             project=project,
             priority=priority,
-            metadata=metadata
+            metadata=metadata,
+            scope=scope
         )
         
         if not api_response.success:

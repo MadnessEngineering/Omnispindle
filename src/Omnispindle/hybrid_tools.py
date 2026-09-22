@@ -205,14 +205,16 @@ async def _execute_with_fallback(operation_name: str, api_func, local_func, *arg
 
 async def add_todo(description: str, project: str, priority: str = "Medium",
                   target_agent: str = "user", notes: str = "", ticket: str = "",
-                  metadata: Optional[Dict[str, Any]] = None,
+                  metadata: Optional[Dict[str, Any]] = None, scope: Optional[str] = None,
                   ctx: Optional[Context] = None) -> str:
-    """Create a todo using hybrid mode"""
+    """Create a todo using hybrid mode. scope (default 'personal') routes the write
+    through the gated backend (api) / local resolver — 'shared'/'team:<slug>'."""
     return await _execute_with_fallback(
         "add_todo",
         api_tools.add_todo,
         local_tools.add_todo,
         description, project, priority, target_agent, notes, ticket, metadata,
+        scope=scope,
         ctx=ctx
     )
 
@@ -318,9 +320,9 @@ async def list_projects(include_details: Union[bool, str] = False, madness_root:
 
 # For non-todo operations, prefer local mode since they're not yet available via API
 
-async def add_lesson(language: str, topic: str, lesson_learned: str, tags: Optional[list] = None, ctx: Optional[Context] = None) -> str:
-    """Add lesson - local only for now"""
-    return await local_tools.add_lesson(language, topic, lesson_learned, tags, ctx=ctx)
+async def add_lesson(language: str, topic: str, lesson_learned: str, tags: Optional[list] = None, scope: Optional[str] = None, ctx: Optional[Context] = None) -> str:
+    """Add lesson - local only. scope (default 'personal') routes 'shared'/'team:<slug>' through the gate."""
+    return await local_tools.add_lesson(language, topic, lesson_learned, tags, scope=scope, ctx=ctx)
 
 async def get_lesson(lesson_id: str, ctx: Optional[Context] = None) -> str:
     """Get lesson - local only for now"""

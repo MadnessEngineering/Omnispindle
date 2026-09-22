@@ -148,7 +148,8 @@ TOOL_SCHEMAS = {
                 "target_agent": {"type": "string", "description": "user|AI name"},
                 "notes": {"type": "string", "description": "User-facing notes/context (optional)"},
                 "ticket": {"type": "string", "description": "External ticket reference (optional)"},
-                "metadata": {"type": "object", "description": "{key: value} pairs"}
+                "metadata": {"type": "object", "description": "{key: value} pairs"},
+                "scope": {"type": "string", "description": "Where to create it: personal (default) | shared | team:<slug>. Team writes are membership-gated (viewer role refused). Per-todo sharing — you choose which todos land in a team."}
             },
             "required": ["description", "project"]
         }
@@ -166,7 +167,8 @@ TOOL_SCHEMAS = {
                 "since": {"type": "number", "description": "Unix timestamp — only return items modified after this time"},
                 "projection": {"type": "object", "description": "{field: 1} to include, {field: 0} to exclude"},
                 "graph_root": {"type": "string", "description": "Todo ID or short prefix — returns dependency subgraph: {root, nodes, edges} traversing metadata.blockers up to 2 hops in both directions"},
-                "brief": {"type": "boolean", "description": "Force strip notes + prose metadata. Omit for auto: a fat multi-item set slims to id/description/project/status/priority/tags + metadata.tags/files."}
+                "brief": {"type": "boolean", "description": "Force strip notes + prose metadata. Omit for auto: a fat multi-item set slims to id/description/project/status/priority/tags + metadata.tags/files."},
+                "scope": {"type": "string", "description": "Which scope(s) to read: personal | shared | team:<slug> | all. Default 'all' merges personal + shared + every team you belong to, each row _scope-tagged. Narrow with a single value."}
             }
         }
     },
@@ -226,7 +228,8 @@ TOOL_SCHEMAS = {
                 "status": {"type": "string", "description": "pending|completed|initial|blocked|in_progress|review"},
                 "limit": {"type": "number", "description": "Max results (default: 100)"},
                 "offset": {"type": "number", "description": "Skip N results for pagination (default: 0)"},
-                "brief": {"type": "boolean", "description": "Strip notes + non-essential metadata (default: true)"}
+                "brief": {"type": "boolean", "description": "Strip notes + non-essential metadata (default: true)"},
+                "scope": {"type": "string", "description": "Which scope(s) to read: personal | shared | team:<slug> | all (default 'all' merges personal + shared + your teams, each row _scope-tagged)."}
             },
             "required": ["status"]
         }
@@ -240,7 +243,8 @@ TOOL_SCHEMAS = {
                 "query": {"type": "string", "description": "Search text. Tokenized regex across description+project."},
                 "limit": {"type": "number", "description": "Max results (default: 20)"},
                 "fields": {"type": "array", "description": "Fields to search (default: description, project)"},
-                "brief": {"type": "boolean", "description": "Force strip notes + non-essential metadata. Omit for auto: multi-hit sets go brief when notes are fat, long descriptions become match-centred snippets, coordinates are dropped; single hit keeps notes."}
+                "brief": {"type": "boolean", "description": "Force strip notes + non-essential metadata. Omit for auto: multi-hit sets go brief when notes are fat, long descriptions become match-centred snippets, coordinates are dropped; single hit keeps notes."},
+                "scope": {"type": "string", "description": "Which scope(s) to search: personal | shared | team:<slug> | all (default 'all' — pool spans personal + shared + your teams, each hit _scope-tagged)."}
             },
             "required": ["query"]
         }
@@ -255,7 +259,8 @@ TOOL_SCHEMAS = {
                 "limit": {"type": "number", "description": "Max results (default: 5)"},
                 "offset": {"type": "number", "description": "Skip N results for pagination (default: 0)"},
                 "brief": {"type": "boolean", "description": "Strip notes + non-essential metadata (default: true)"},
-                "projection": {"type": "object", "description": "{field: 1} include / {field: 0} exclude — passes through to MongoDB"}
+                "projection": {"type": "object", "description": "{field: 1} include / {field: 0} exclude — passes through to MongoDB"},
+                "scope": {"type": "string", "description": "Which scope(s) to read: personal | shared | team:<slug> | all (default 'all' merges personal + shared + your teams, each row _scope-tagged)."}
             },
             "required": ["project"]
         }
@@ -294,7 +299,8 @@ TOOL_SCHEMAS = {
                 "language": {"type": "string", "description": "python|javascript|rust|etc"},
                 "topic": {"type": "string", "description": "Topic/category"},
                 "lesson_learned": {"type": "string", "description": "Lesson content"},
-                "tags": {"type": "array", "items": {"type": "string"}, "description": "Categorization tags"}
+                "tags": {"type": "array", "items": {"type": "string"}, "description": "Categorization tags"},
+                "scope": {"type": "string", "description": "Where to create it: personal (default) | shared | team:<slug>. Team writes are membership-gated (viewer role refused)."}
             },
             "required": ["language", "topic", "lesson_learned"]
         }
@@ -377,7 +383,8 @@ TOOL_SCHEMAS = {
                 "query": {"type": "string", "description": "Search text"},
                 "fields": {"type": "array", "description": "Fields to search (default: topic, lesson_learned, tags)"},
                 "limit": {"type": "number", "description": "Max results (default: 20)"},
-                "brief": {"type": "boolean", "description": "Force topic+tags only, no lesson_learned. Omit for auto: fat sets return a match-relevant snippet, small ones keep full text."}
+                "brief": {"type": "boolean", "description": "Force topic+tags only, no lesson_learned. Omit for auto: fat sets return a match-relevant snippet, small ones keep full text."},
+                "scope": {"type": "string", "description": "Which scope(s) to search: personal | shared | team:<slug> | all (default 'all' — spans personal + shared + your teams, each hit _scope-tagged)."}
             },
             "required": ["query"]
         }
@@ -389,7 +396,8 @@ TOOL_SCHEMAS = {
             "type": "object",
             "properties": {
                 "pattern": {"type": "string", "description": "Regex pattern"},
-                "limit": {"type": "number", "description": "Max results (default: 20)"}
+                "limit": {"type": "number", "description": "Max results (default: 20)"},
+                "scope": {"type": "string", "description": "Which scope(s) to search: personal | shared | team:<slug> | all (default 'all' — spans personal + shared + your teams, each hit _scope-tagged)."}
             },
             "required": ["pattern"]
         }
@@ -401,7 +409,8 @@ TOOL_SCHEMAS = {
             "type": "object",
             "properties": {
                 "limit": {"type": "number", "description": "Max results (default: 20)"},
-                "brief": {"type": "boolean", "description": "Force topic+tags only, no lesson_learned. Omit for auto: lesson_learned is snipped once the set gets fat, kept whole when small."}
+                "brief": {"type": "boolean", "description": "Force topic+tags only, no lesson_learned. Omit for auto: lesson_learned is snipped once the set gets fat, kept whole when small."},
+                "scope": {"type": "string", "description": "Which scope(s) to read: personal | shared | team:<slug> | all (default 'all' merges personal + shared + your teams, each row _scope-tagged)."}
             }
         }
     },

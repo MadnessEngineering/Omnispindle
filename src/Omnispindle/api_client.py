@@ -223,8 +223,9 @@ class MadnessAPIClient:
         """Get a specific todo by ID"""
         return await self._make_request("GET", f"/todos/{todo_id}")
 
-    async def create_todo(self, description: str, project: str, priority: str = "Medium", metadata: Optional[Dict[str, Any]] = None) -> APIResponse:
-        """Create a new todo"""
+    async def create_todo(self, description: str, project: str, priority: str = "Medium", metadata: Optional[Dict[str, Any]] = None, scope: str = None) -> APIResponse:
+        """Create a new todo. scope ('shared'|'team:<slug>') routes the write through
+        the backend's membership gate; omitted/'personal' lands in the caller's own DB."""
         payload = {
             "description": description,
             "project": project,
@@ -232,6 +233,8 @@ class MadnessAPIClient:
         }
         if metadata:
             payload["metadata"] = metadata
+        if scope:
+            payload["scope"] = scope
 
         logger.info(f"🐛 API client create_todo payload: {payload}")
 

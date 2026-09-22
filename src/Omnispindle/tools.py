@@ -911,7 +911,7 @@ async def config(loadout: Optional[str] = None, doc_level: Optional[str] = None,
         return create_response(False, message=str(e))
 
 
-async def add_todo(description: str, project: str, priority: str = "Medium", target_agent: str = "user", notes: str = "", ticket: str = "", metadata: Optional[Dict[str, Any]] = None, ctx: Optional[Context] = None, **extra) -> str:
+async def add_todo(description: str, project: str, priority: str = "Medium", target_agent: str = "user", notes: str = "", ticket: str = "", metadata: Optional[Dict[str, Any]] = None, scope: Optional[str] = None, ctx: Optional[Context] = None, **extra) -> str:
     """
     Creates a task in the specified project with the given priority and target agent.
 
@@ -930,6 +930,10 @@ async def add_todo(description: str, project: str, priority: str = "Medium", tar
               - effort: story points 1-10
             Example: {"files": ["src/components/Dashboard.js"], "tags": ["bug", "ui"],
                       "district": "ui", "coordinates": {"x": 2.1, "y": 0.5, "z": -1.3}, "effort": 3}
+        scope: Where to create it (default None/'personal' -> your own DB). 'shared'
+            writes the shared board; 'team:<slug>' writes a team board you belong to
+            (membership-gated, a viewer role is refused). This is per-todo sharing:
+            you choose which todos land in a team, the rest stay personal.
         ctx: Context with user information
 
     Returns a compact representation of the created todo with an ID for reference.
@@ -1010,8 +1014,13 @@ async def add_todo(description: str, project: str, priority: str = "Medium", tar
         "metadata": validated_metadata
     }
     try:
-        # Get user-scoped collections
-        collections = db_connection.get_collections(ctx.user if ctx else None)
+        # Resolve the write target. None/'personal' -> personal DB (byte-identical
+        # to before, since parse_scope_token(None) is personal); 'shared'/'team:<slug>'
+        # routes through the membership gate (write:true refuses a viewer role).
+        try:
+            collections = db_connection.resolve_scope_collections(ctx.user if ctx else None, scope, write=True)
+        except (PermissionError, ValueError) as se:
+            return create_response(False, message=str(se))
         todos_collection = collections['todos']
 
         # Retry safety. A proxy timeout (Cloudflare 524 at 120s) can hide a write that
@@ -1753,9 +1762,13 @@ async def list_todos_by_status(status: str, limit: int = 100, offset: int = 0, b
     # When querying by status, don't apply the default completed filter
     return await query_todos(filter={"status": status.lower()}, limit=limit, offset=offset, exclude_completed=False, brief=brief, scope=scope, ctx=ctx)
 
-async def add_lesson(language: str, topic: str, lesson_learned: str, tags: Optional[list] = None, ctx: Optional[Context] = None) -> str:
+async def add_lesson(language: str, topic: str, lesson_learned: str, tags: Optional[list] = None, scope: Optional[str] = None, ctx: Optional[Context] = None) -> str:
     """
     Add a new lesson to the knowledge base.
+
+    scope (default None/'personal' -> your own DB): 'shared' writes the shared
+    knowledge base; 'team:<slug>' writes a team board you belong to (membership-
+    gated, a viewer role is refused).
     """
     lesson = {
         "id": str(uuid.uuid4()),
@@ -1766,8 +1779,11 @@ async def add_lesson(language: str, topic: str, lesson_learned: str, tags: Optio
         "created_at": int(datetime.now(timezone.utc).timestamp())
     }
     try:
-        # Get user-scoped collections
-        collections = db_connection.get_collections(ctx.user if ctx else None)
+        # Resolve the write target — personal default is byte-identical (see add_todo).
+        try:
+            collections = db_connection.resolve_scope_collections(ctx.user if ctx else None, scope, write=True)
+        except (PermissionError, ValueError) as se:
+            return create_response(False, message=str(se))
         lessons_collection = collections['lessons']
 
         lessons_collection.insert_one(lesson)
