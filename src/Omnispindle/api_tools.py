@@ -342,7 +342,7 @@ async def list_todos_by_status(status: str, limit: int = 100, scope: Optional[st
     return await query_todos(filter={"status": status.lower()}, limit=limit, scope=scope, ctx=ctx)
 
 async def search_todos(query: str, fields: Optional[list] = None, limit: int = 20,
-                       brief: Optional[bool] = None, ctx: Optional[Context] = None) -> str:
+                       brief: Optional[bool] = None, scope: Optional[str] = None, ctx: Optional[Context] = None) -> str:
     """
     Search todos with text search capabilities.
 
@@ -350,6 +350,12 @@ async def search_todos(query: str, fields: Optional[list] = None, limit: int = 2
     filters client-side, mirroring the local implementation's two-pass shape:
     strict AND-match on meaningful tokens first, fuzzy OR ranked by token
     density only when strict comes back empty.
+
+    scope (default 'all'): forwarded to the backend so the candidate pool spans
+    personal + shared + your teams (each row _scope-tagged and preserved through
+    the client-side filter), matching the local search. Narrow with 'personal' /
+    'shared' / 'team:<slug>'. Without this the pool was personal-only, so a fuzzy
+    match never saw shared or team todos.
 
     brief=None (default) auto-sizes the response — see apply_response_diet.
     """
@@ -360,7 +366,7 @@ async def search_todos(query: str, fields: Optional[list] = None, limit: int = 2
         # Filtering happens client-side, so the fetch pool has to be much larger
         # than `limit` or the search only ever sees the newest `limit` todos.
         pool = min(max(limit * 10, 200), 500)
-        api_response = await client.get_todos(limit=pool)
+        api_response = await client.get_todos(limit=pool, scope=scope or "all")
 
         if not api_response.success:
             return create_response(False, message=api_response.error or "Failed to search todos")

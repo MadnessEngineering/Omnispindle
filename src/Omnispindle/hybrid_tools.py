@@ -283,13 +283,15 @@ async def list_todos_by_status(status: str, limit: int = 100, scope: Optional[st
     )
 
 async def search_todos(query: str, fields: Optional[list] = None, limit: int = 20,
-                       brief: Optional[bool] = None, ctx: Optional[Context] = None) -> str:
-    """Search todos using hybrid mode"""
+                       brief: Optional[bool] = None, scope: Optional[str] = None, ctx: Optional[Context] = None) -> str:
+    """Search todos using hybrid mode. scope (default 'all') forwards to the gated
+    backend/local so the search pool spans personal + shared + your teams."""
     return await _execute_with_fallback(
         "search_todos",
         api_tools.search_todos,
         local_tools.search_todos,
         query, fields, limit, brief,
+        scope=scope,
         ctx=ctx
     )
 
@@ -336,17 +338,17 @@ async def regenerate_embedding(lesson_id: str, ctx: Optional[Context] = None) ->
     """Regenerate embedding for a lesson - local only for now"""
     return await local_tools.regenerate_embedding(lesson_id, ctx=ctx)
 
-async def search_lessons(query: str, fields: Optional[list] = None, limit: int = 20, brief: Optional[bool] = None, ctx: Optional[Context] = None) -> str:
-    """Search lessons - local only for now"""
-    return await local_tools.search_lessons(query, fields, limit, brief, ctx=ctx)
+async def search_lessons(query: str, fields: Optional[list] = None, limit: int = 20, brief: Optional[bool] = None, scope: Optional[str] = None, ctx: Optional[Context] = None) -> str:
+    """Search lessons - local only. scope (default 'all') fans out across personal + shared + your teams."""
+    return await local_tools.search_lessons(query, fields, limit, brief, scope=scope, ctx=ctx)
 
-async def grep_lessons(pattern: str, limit: int = 20, ctx: Optional[Context] = None) -> str:
-    """Grep lessons - local only for now"""
-    return await local_tools.grep_lessons(pattern, limit, ctx=ctx)
+async def grep_lessons(pattern: str, limit: int = 20, scope: Optional[str] = None, ctx: Optional[Context] = None) -> str:
+    """Grep lessons - local only. scope (default 'all') fans out across personal + shared + your teams."""
+    return await local_tools.grep_lessons(pattern, limit, scope=scope, ctx=ctx)
 
-async def list_lessons(limit: int = 20, brief: Optional[bool] = None, ctx: Optional[Context] = None) -> str:
-    """List lessons - local only for now"""
-    return await local_tools.list_lessons(limit, brief, ctx=ctx)
+async def list_lessons(limit: int = 20, brief: Optional[bool] = None, scope: Optional[str] = None, ctx: Optional[Context] = None) -> str:
+    """List lessons - local only. scope (default 'all') fans out across personal + shared + your teams."""
+    return await local_tools.list_lessons(limit, brief, scope=scope, ctx=ctx)
 
 async def query_todo_logs(filter_type: str = 'all', project: str = 'all',
                        page: int = 1, page_size: int = 20, ctx: Optional[Context] = None) -> str:

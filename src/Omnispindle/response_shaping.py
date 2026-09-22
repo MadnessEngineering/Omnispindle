@@ -129,8 +129,10 @@ def compact_todo_list(docs: list, brief: bool = False, iso_dates: bool = False) 
     return [compact_todo(d, brief=brief, iso_dates=iso_dates) for d in docs if d]
 
 
-# Fields kept when a lesson is requested in brief form
-_BRIEF_LESSON_KEEP = ("id", "topic", "language", "tags")
+# Fields kept when a lesson is requested in brief form. _scope rides along so a
+# cross-scope list/search keeps its per-row origin tag through brief compaction
+# (compact_todo keeps it for free via its blocklist; the lesson allowlist must opt in).
+_BRIEF_LESSON_KEEP = ("id", "topic", "language", "tags", "_scope")
 
 
 def compact_lesson(doc: dict, brief: bool = False, iso_dates: bool = False) -> dict:

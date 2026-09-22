@@ -1890,7 +1890,7 @@ async def delete_lesson(lesson_id: str, ctx: Optional[Context] = None) -> str:
         logger.error(f"Failed to delete lesson: {str(e)}")
         return create_response(False, message=str(e))
 
-async def search_todos(query: str, fields: Optional[list] = None, limit: int = 20, brief: Optional[bool] = None, ctx: Optional[Context] = None) -> str:
+async def search_todos(query: str, fields: Optional[list] = None, limit: int = 20, brief: Optional[bool] = None, scope: Optional[str] = None, ctx: Optional[Context] = None) -> str:
     """
     Search todos with two-pass fuzzy matching.
 
@@ -1898,6 +1898,10 @@ async def search_todos(query: str, fields: Optional[list] = None, limit: int = 2
     Pass 2 (fuzzy):  any token matches (OR), results ranked by how many tokens
                      appear in description+project. Fires only when pass 1 returns
                      nothing — avoids flooding precise queries with noise.
+
+    scope (default 'all'): both passes route through query_todos, so the search
+    pool is personal + shared + your teams, each hit _scope-tagged; narrow with
+    'personal' / 'shared' / 'team:<slug>'.
 
     brief=None (default) auto-sizes the response: multi-hit sets with fat notes
     come back brief, a single hit keeps its notes (truncated if oversized). Pass
@@ -1911,7 +1915,7 @@ async def search_todos(query: str, fields: Optional[list] = None, limit: int = 2
     fetch_brief = False if auto else brief
 
     user_id = ctx.user.get('sub') if ctx and ctx.user else 'anonymous'
-    logger.info(f"search_todos: user={user_id} query='{query}' fields={fields} limit={limit} brief={brief}")
+    logger.info(f"search_todos: user={user_id} query='{query}' fields={fields} limit={limit} brief={brief} scope={scope}")
 
     def _finish(data: dict, mode: str) -> str:
         if auto:
@@ -1923,7 +1927,7 @@ async def search_todos(query: str, fields: Optional[list] = None, limit: int = 2
 
     # Pass 1 — strict AND
     strict_query = _build_tokenized_search_query(query, fields)
-    result = await query_todos(filter=strict_query, limit=limit, brief=fetch_brief, ctx=ctx)
+    result = await query_todos(filter=strict_query, limit=limit, brief=fetch_brief, scope=scope, ctx=ctx)
 
     try:
         data = json.loads(result)
@@ -1944,7 +1948,7 @@ async def search_todos(query: str, fields: Optional[list] = None, limit: int = 2
         for tok in escaped for field in fields
     ]}
 
-    fallback = await query_todos(filter=or_query, limit=min(limit * 4, 400), brief=fetch_brief, ctx=ctx)
+    fallback = await query_todos(filter=or_query, limit=min(limit * 4, 400), brief=fetch_brief, scope=scope, ctx=ctx)
 
     try:
         fb = json.loads(fallback)
@@ -2186,24 +2190,57 @@ async def get_metadata_stats(project: Optional[str] = None,
         logger.error(f"Failed to get metadata stats: {str(e)}")
         return create_response(False, message=str(e))
 
-async def grep_lessons(pattern: str, limit: int = 20, ctx: Optional[Context] = None) -> str:
+def _lesson_scope_pairs(user_context, scope):
+    """(scope_label, lessons_collection) for each scope in the token (default 'all').
+
+    The lesson-side mirror of query_todos' scope_pairs: resolve_scope_collection_list
+    already gates team membership and fails closed, so this just projects the
+    'lessons' collection out of each resolved scope. Raises PermissionError /
+    ValueError for a denied or malformed explicit team token.
+    """
+    pairs = db_connection.resolve_scope_collection_list(user_context, scope)
+    return [(label, cols['lessons']) for label, cols in pairs]
+
+
+def _fetch_lessons_merged(scope_pairs, query_filter, per_scope_limit):
+    """Query 'lessons' per scope, tag each row with _scope, merge, sort created_at
+    desc. Bounded fetch of per_scope_limit per scope so the merged head is correct
+    without pulling whole collections. Returns raw docs (caller compacts/ranks)."""
+    rows = []
+    for label, coll in scope_pairs:
+        cursor = coll.find(query_filter, _LESSON_NO_VECTOR).sort("created_at", -1)
+        if per_scope_limit:
+            cursor = cursor.limit(per_scope_limit)
+        for doc in cursor:
+            doc['_scope'] = label
+            rows.append(doc)
+    rows.sort(key=lambda d: d.get('created_at', 0) or 0, reverse=True)
+    return rows
+
+
+async def grep_lessons(pattern: str, limit: int = 20, scope: Optional[str] = None, ctx: Optional[Context] = None) -> str:
     """
     Search lessons with grep-style pattern matching across topic and content.
+
+    scope (default 'all'): personal + shared + your teams, each row _scope-tagged;
+    narrow with 'personal' / 'shared' / 'team:<slug>'. See query_todos.
     """
     try:
-        # Get user-scoped collections
-        collections = db_connection.get_collections(ctx.user if ctx else None)
-        lessons_collection = collections['lessons']
+        user_context = ctx.user if ctx else None
+        try:
+            scope_pairs = _lesson_scope_pairs(user_context, scope)
+        except (PermissionError, ValueError) as se:
+            return create_response(False, message=str(se))
 
-        user_id = ctx.user.get('sub') if ctx and ctx.user else 'anonymous'
-        db_name = lessons_collection.database.name
-        logger.info(f"grep_lessons called by {user_id}: pattern='{pattern}', limit={limit}, db={db_name}")
+        user_id = user_context.get('sub') if user_context else 'anonymous'
+        scope_labels = [label for label, _c in scope_pairs]
+        logger.info(f"grep_lessons called by {user_id}: pattern='{pattern}', limit={limit}, scopes={scope_labels}")
 
         search_query = _build_tokenized_search_query(pattern, ["topic", "lesson_learned"])
         logger.debug(f"MongoDB query: {search_query}")
 
-        cursor = lessons_collection.find(search_query, _LESSON_NO_VECTOR).limit(limit)
-        results = compact_lesson_list(list(cursor))
+        merged = _fetch_lessons_merged(scope_pairs, search_query, limit)[:limit]
+        results = compact_lesson_list(merged)
 
         logger.info(f"grep_lessons returned {len(results)} results for pattern '{pattern}'")
         return json.dumps({"items": results, "count": len(results)}, cls=MongoJSONEncoder)
@@ -2436,9 +2473,13 @@ async def explain_tool(topic: str, brief: bool = False, ctx: Optional[Context] =
     return await get_explanation(topic, ctx)
 
 
-async def list_lessons(limit: int = 20, brief: Optional[bool] = None, ctx: Optional[Context] = None) -> str:
+async def list_lessons(limit: int = 20, brief: Optional[bool] = None, scope: Optional[str] = None, ctx: Optional[Context] = None) -> str:
     """
     List all lessons, sorted by creation date.
+
+    scope (default 'all'): personal + shared + your teams, each row _scope-tagged
+    and globally sorted by created_at; narrow with 'personal' / 'shared' /
+    'team:<slug>'. See query_todos.
 
     brief=None (default) auto-sizes the response: lesson_learned is cut to a
     snippet once the combined text blows the budget, kept whole when the set is
@@ -2446,16 +2487,18 @@ async def list_lessons(limit: int = 20, brief: Optional[bool] = None, ctx: Optio
     ('full'|'brief'|'truncated').
     """
     try:
-        # Get user-scoped collections
-        collections = db_connection.get_collections(ctx.user if ctx else None)
-        lessons_collection = collections['lessons']
+        user_context = ctx.user if ctx else None
+        try:
+            scope_pairs = _lesson_scope_pairs(user_context, scope)
+        except (PermissionError, ValueError) as se:
+            return create_response(False, message=str(se))
 
-        user_id = ctx.user.get('sub') if ctx and ctx.user else 'anonymous'
-        db_name = lessons_collection.database.name
-        logger.info(f"list_lessons called by {user_id}: limit={limit}, brief={brief}, db={db_name}")
+        user_id = user_context.get('sub') if user_context else 'anonymous'
+        scope_labels = [label for label, _c in scope_pairs]
+        logger.info(f"list_lessons called by {user_id}: limit={limit}, brief={brief}, scopes={scope_labels}")
 
-        cursor = lessons_collection.find({}, _LESSON_NO_VECTOR).sort("created_at", -1).limit(limit)
-        results = compact_lesson_list(list(cursor), brief=bool(brief))
+        merged = _fetch_lessons_merged(scope_pairs, {}, limit)[:limit]
+        results = compact_lesson_list(merged, brief=bool(brief))
 
         if brief is None:
             results, diet = apply_lesson_diet(results)
@@ -2469,13 +2512,17 @@ async def list_lessons(limit: int = 20, brief: Optional[bool] = None, ctx: Optio
         logger.error(f"Failed to list lessons: {str(e)}")
         return create_response(False, message=str(e))
 
-async def search_lessons(query: str, fields: Optional[list] = None, limit: int = 20, brief: Optional[bool] = None, ctx: Optional[Context] = None) -> str:
+async def search_lessons(query: str, fields: Optional[list] = None, limit: int = 20, brief: Optional[bool] = None, scope: Optional[str] = None, ctx: Optional[Context] = None) -> str:
     """
     Search lessons with two-pass text search.
 
     Pass 1 (strict): all tokens must appear (AND). Fast, precise.
     Pass 2 (fuzzy):  any token matches (OR), ranked by how many tokens hit.
                      Fires only when strict returns nothing.
+
+    scope (default 'all'): personal + shared + your teams, each row _scope-tagged;
+    narrow with 'personal' / 'shared' / 'team:<slug>'. See query_todos. Both passes
+    fan out across scopes, then merge — strict by created_at, fuzzy by match density.
 
     brief=None (default) auto-sizes the response: a fat result set comes back
     with lesson_learned cut to a snippet around the query match, a small one
@@ -2500,22 +2547,25 @@ async def search_lessons(query: str, fields: Optional[list] = None, limit: int =
         )
 
     try:
-        collections = db_connection.get_collections(ctx.user if ctx else None)
-        lessons_collection = collections['lessons']
+        user_context = ctx.user if ctx else None
+        try:
+            scope_pairs = _lesson_scope_pairs(user_context, scope)
+        except (PermissionError, ValueError) as se:
+            return create_response(False, message=str(se))
 
-        user_id = ctx.user.get('sub') if ctx and ctx.user else 'anonymous'
-        db_name = lessons_collection.database.name
-        logger.info(f"search_lessons called by {user_id}: query='{query}', fields={fields}, limit={limit}, brief={brief}, db={db_name}")
+        user_id = user_context.get('sub') if user_context else 'anonymous'
+        scope_labels = [label for label, _c in scope_pairs]
+        logger.info(f"search_lessons called by {user_id}: query='{query}', fields={fields}, limit={limit}, brief={brief}, scopes={scope_labels}")
 
-        # Pass 1 — strict AND
+        # Pass 1 — strict AND, fanned out and merged by created_at desc
         strict_query = _build_tokenized_search_query(query, fields)
         logger.debug(f"search_lessons pass1 query: {strict_query}")
-        results = list(lessons_collection.find(strict_query, _LESSON_NO_VECTOR).limit(limit))
+        results = _fetch_lessons_merged(scope_pairs, strict_query, limit)[:limit]
         if results:
             logger.info(f"search_lessons strict returned {len(results)} results")
             return _shape(results, "strict")
 
-        # Pass 2 — OR fallback, ranked by token match density
+        # Pass 2 — OR fallback, ranked by token match density across all scopes
         raw_tokens = re.split(r'\W+', query)
         meaningful = [t for t in raw_tokens if t.lower() not in _STOP_WORDS and (len(t) > 2 or t.isdigit())]
         if not meaningful:
@@ -2528,7 +2578,7 @@ async def search_lessons(query: str, fields: Optional[list] = None, limit: int =
             for field in fields
         ]}
         logger.debug(f"search_lessons pass2 OR query: {or_query}")
-        candidates = list(lessons_collection.find(or_query, _LESSON_NO_VECTOR).limit(limit * 4))
+        candidates = _fetch_lessons_merged(scope_pairs, or_query, limit * 4)
 
         tok_lower = [t.lower() for t in meaningful]
 
