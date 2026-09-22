@@ -179,7 +179,8 @@ TOOL_SCHEMAS = {
             "type": "object",
             "properties": {
                 "todo_id": {"type": "string", "description": "Todo UUID"},
-                "updates": {"type": "object", "description": "{field: new_value} — metadata is MERGED not replaced"}
+                "updates": {"type": "object", "description": "{field: new_value} — metadata is MERGED not replaced"},
+                "scope": {"type": "string", "description": "Pass 'team:<slug>' (or 'shared') to update a todo in that scope — required to reach a team todo (a bare UUID never crosses into a team). Membership-gated; viewer refused. Read the todo's _scope tag to know which to pass."}
             },
             "required": ["todo_id", "updates"]
         }
@@ -190,7 +191,8 @@ TOOL_SCHEMAS = {
         "inputSchema": {
             "type": "object",
             "properties": {
-                "todo_id": {"type": "string", "description": "Todo UUID to delete"}
+                "todo_id": {"type": "string", "description": "Todo UUID to delete"},
+                "scope": {"type": "string", "description": "Pass 'team:<slug>' (or 'shared') to delete a todo in that scope — required to reach a team todo. Membership-gated; viewer refused."}
             },
             "required": ["todo_id"]
         }
@@ -201,7 +203,8 @@ TOOL_SCHEMAS = {
         "inputSchema": {
             "type": "object",
             "properties": {
-                "todo_id": {"type": "string", "description": "Todo UUID"}
+                "todo_id": {"type": "string", "description": "Todo UUID"},
+                "scope": {"type": "string", "description": "Pass 'team:<slug>' (or 'shared') to read a todo in that scope — required to reach a team todo. Membership-gated."}
             },
             "required": ["todo_id"]
         }
@@ -214,7 +217,8 @@ TOOL_SCHEMAS = {
             "properties": {
                 "todo_id": {"type": "string", "description": "Todo UUID"},
                 "comment": {"type": "string", "description": "What was accomplished — omitting loses completion context permanently"},
-                "files": {"type": "array", "items": {"type": "string"}, "description": "File paths changed during this work. Feeds SwarmDesk connected buildings. Example: [\"src/components/TodoTab.jsx\"]"}
+                "files": {"type": "array", "items": {"type": "string"}, "description": "File paths changed during this work. Feeds SwarmDesk connected buildings. Example: [\"src/components/TodoTab.jsx\"]"},
+                "scope": {"type": "string", "description": "Pass 'team:<slug>' (or 'shared') to complete a todo in that scope — required to reach a team todo. Membership-gated; viewer refused."}
             },
             "required": ["todo_id"]
         }

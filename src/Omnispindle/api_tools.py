@@ -234,9 +234,10 @@ async def _resolve_todo_id_api(todo_id: str, client: "MadnessAPIClient") -> Opti
     return str(todo_id) if todo_id is not None else None
 
 
-async def update_todo(todo_id: str, updates: dict, ctx: Optional[Context] = None) -> str:
+async def update_todo(todo_id: str, updates: dict, scope: Optional[str] = None, ctx: Optional[Context] = None) -> str:
     """
-    Update a todo with the provided changes.
+    Update a todo with the provided changes. scope ('team:<slug>'/'shared') targets
+    the todo in that membership-gated scope via the backend.
     """
     # Completion must go through complete_todo — not update_todo
     if updates.get("status", "").lower() == "completed":
@@ -259,7 +260,7 @@ async def update_todo(todo_id: str, updates: dict, ctx: Optional[Context] = None
 
         client = await get_cached_client(auth_token=auth_token, api_key=api_key)
         todo_id = await _resolve_todo_id_api(todo_id, client) or todo_id
-        api_response = await client.update_todo(todo_id, updates)
+        api_response = await client.update_todo(todo_id, updates, scope=scope)
         
         if not api_response.success:
             return create_response(False, message=api_response.error or f"Failed to update todo {todo_id}")
@@ -270,16 +271,17 @@ async def update_todo(todo_id: str, updates: dict, ctx: Optional[Context] = None
         logger.error(f"Failed to update todo via API: {str(e)}")
         return create_response(False, message=f"API error: {str(e)}")
 
-async def delete_todo(todo_id: str, ctx: Optional[Context] = None) -> str:
+async def delete_todo(todo_id: str, scope: Optional[str] = None, ctx: Optional[Context] = None) -> str:
     """
-    Delete a todo item by its ID.
+    Delete a todo item by its ID. scope ('team:<slug>'/'shared') targets the todo
+    in that membership-gated scope via the backend.
     """
     try:
         auth_token, api_key = _get_auth_from_context(ctx)
 
         client = await get_cached_client(auth_token=auth_token, api_key=api_key)
         todo_id = await _resolve_todo_id_api(todo_id, client) or todo_id
-        api_response = await client.delete_todo(todo_id)
+        api_response = await client.delete_todo(todo_id, scope=scope)
         
         if not api_response.success:
             return create_response(False, message=api_response.error or f"Failed to delete todo {todo_id}")
@@ -290,16 +292,17 @@ async def delete_todo(todo_id: str, ctx: Optional[Context] = None) -> str:
         logger.error(f"Failed to delete todo via API: {str(e)}")
         return create_response(False, message=f"API error: {str(e)}")
 
-async def get_todo(todo_id: str, ctx: Optional[Context] = None) -> str:
+async def get_todo(todo_id: str, scope: Optional[str] = None, ctx: Optional[Context] = None) -> str:
     """
-    Get a specific todo item by its ID.
+    Get a specific todo item by its ID. scope ('team:<slug>'/'shared') reads the
+    todo from that membership-gated scope via the backend.
     """
     try:
         auth_token, api_key = _get_auth_from_context(ctx)
 
         client = await get_cached_client(auth_token=auth_token, api_key=api_key)
         todo_id = await _resolve_todo_id_api(todo_id, client) or todo_id
-        api_response = await client.get_todo(todo_id)
+        api_response = await client.get_todo(todo_id, scope=scope)
         
         if not api_response.success:
             return create_response(False, message=api_response.error or f"Todo with ID {todo_id} not found.")
@@ -315,16 +318,17 @@ async def get_todo(todo_id: str, ctx: Optional[Context] = None) -> str:
         logger.error(f"Failed to get todo via API: {str(e)}")
         return create_response(False, message=f"API error: {str(e)}")
 
-async def complete_todo(todo_id: str, comment: Optional[str] = None, ctx: Optional[Context] = None) -> str:
+async def complete_todo(todo_id: str, comment: Optional[str] = None, scope: Optional[str] = None, ctx: Optional[Context] = None) -> str:
     """
-    Mark a todo as completed.
+    Mark a todo as completed. scope ('team:<slug>'/'shared') targets the todo in
+    that membership-gated scope via the backend.
     """
     try:
         auth_token, api_key = _get_auth_from_context(ctx)
 
         client = await get_cached_client(auth_token=auth_token, api_key=api_key)
         todo_id = await _resolve_todo_id_api(todo_id, client) or todo_id
-        api_response = await client.complete_todo(todo_id, comment)
+        api_response = await client.complete_todo(todo_id, comment, scope=scope)
         
         if not api_response.success:
             return create_response(False, message=api_response.error or f"Failed to complete todo {todo_id}")

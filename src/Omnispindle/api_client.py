@@ -219,9 +219,11 @@ class MadnessAPIClient:
 
         return await self._make_request("GET", "/todos", params=params)
 
-    async def get_todo(self, todo_id: str) -> APIResponse:
-        """Get a specific todo by ID"""
-        return await self._make_request("GET", f"/todos/{todo_id}")
+    async def get_todo(self, todo_id: str, scope: str = None) -> APIResponse:
+        """Get a specific todo by ID. scope ('team:<slug>'/'shared') routes the
+        by-id read through the backend's membership gate."""
+        params = {"scope": scope} if scope else None
+        return await self._make_request("GET", f"/todos/{todo_id}", params=params)
 
     async def create_todo(self, description: str, project: str, priority: str = "Medium", metadata: Optional[Dict[str, Any]] = None, scope: str = None) -> APIResponse:
         """Create a new todo. scope ('shared'|'team:<slug>') routes the write through
@@ -240,20 +242,26 @@ class MadnessAPIClient:
 
         return await self._make_request("POST", "/todos", json=payload)
 
-    async def update_todo(self, todo_id: str, updates: Dict[str, Any]) -> APIResponse:
-        """Update an existing todo"""
-        return await self._make_request("PUT", f"/todos/{todo_id}", json=updates)
+    async def update_todo(self, todo_id: str, updates: Dict[str, Any], scope: str = None) -> APIResponse:
+        """Update an existing todo. scope ('team:<slug>'/'shared') routes the write
+        through the backend's membership gate; sent in the body so it can't be
+        confused with a field update."""
+        body = {**updates, "scope": scope} if scope else updates
+        return await self._make_request("PUT", f"/todos/{todo_id}", json=body)
 
-    async def delete_todo(self, todo_id: str) -> APIResponse:
-        """Delete a todo"""
-        return await self._make_request("DELETE", f"/todos/{todo_id}")
+    async def delete_todo(self, todo_id: str, scope: str = None) -> APIResponse:
+        """Delete a todo. scope ('team:<slug>'/'shared') routes through the gate."""
+        params = {"scope": scope} if scope else None
+        return await self._make_request("DELETE", f"/todos/{todo_id}", params=params)
 
-    async def complete_todo(self, todo_id: str, comment: str = None) -> APIResponse:
-        """Mark a todo as complete"""
+    async def complete_todo(self, todo_id: str, comment: str = None, scope: str = None) -> APIResponse:
+        """Mark a todo as complete. scope ('team:<slug>'/'shared') routes through the gate."""
         payload = {}
         if comment:
             payload["comment"] = comment
-            
+        if scope:
+            payload["scope"] = scope
+
         return await self._make_request("POST", f"/todos/{todo_id}/complete", json=payload)
 
     async def get_todo_stats(self, project: str = None) -> APIResponse:

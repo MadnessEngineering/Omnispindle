@@ -1453,9 +1453,40 @@ def _find_todo_across_scopes(todo_id: str, user_context):
     return (None, None, None, searched)
 
 
-async def update_todo(todo_id: str, updates: dict, ctx: Optional[Context] = None) -> str:
+def _locate_todo_for_op(todo_id: str, user_context, scope, write: bool):
+    """Locate a todo + its scoped collections for a by-ID op (get/update/complete/
+    delete). Returns (todo, collections, source_label, searched, error_response):
+
+    - scope given ('shared' | 'team:<slug>' | 'personal'): resolve THAT scope,
+      membership-gated (resolve_scope_collections, write enforces viewer-can't-write),
+      and look for the todo there. This is how you reach a team todo by ID —
+      explicitly, since the ambient probe below never crosses into a team.
+    - scope absent: the personal → shared probe (_find_todo_across_scopes). Team
+      scope is deliberately NOT probed by bare UUID — the isolation guarantee.
+
+    error_response is a create_response(False, ...) string when an explicit scope is
+    denied/malformed (else None); the todo is None when simply not found.
+    """
+    if scope:
+        try:
+            collections = db_connection.resolve_scope_collections(user_context, scope, write=write)
+        except (PermissionError, ValueError) as se:
+            return (None, None, None, [], create_response(False, message=str(se)))
+        todo = collections['todos'].find_one({"id": todo_id})
+        return (todo, collections, scope, [f"scope '{scope}'"], None)
+
+    todo, collections, source, searched = _find_todo_across_scopes(todo_id, user_context)
+    return (todo, collections, source, searched, None)
+
+
+async def update_todo(todo_id: str, updates: dict, scope: Optional[str] = None, ctx: Optional[Context] = None) -> str:
     """
     Update a todo with the provided changes. Metadata updates are MERGED with existing metadata.
+
+    scope: pass 'team:<slug>' (or 'shared') to update a todo living in that scope —
+    required to reach a team todo, since a bare UUID never crosses into a team
+    (isolation). Omit for your personal → shared todos. Membership-gated; a viewer
+    role is refused. Read the todo's _scope tag from a query to know which to pass.
 
     IMPORTANT: All fields go inside the `updates` dict — not as flat args.
 
@@ -1510,9 +1541,11 @@ async def update_todo(todo_id: str, updates: dict, ctx: Optional[Context] = None
         if resolved is None:
             return create_response(False, message=f"Todo {todo_id} not found.")
         todo_id = resolved
-        # Locate across the caller's own scopes (personal → shared); one shared helper
-        existing_todo, _found_collections, database_source, searched_databases = \
-            _find_todo_across_scopes(todo_id, user_context)
+        # Locate: explicit scope (team/shared) or the personal → shared probe.
+        existing_todo, _found_collections, database_source, searched_databases, scope_err = \
+            _locate_todo_for_op(todo_id, user_context, scope, write=True)
+        if scope_err:
+            return scope_err
         if not existing_todo:
             searched_locations = " and ".join(searched_databases)
             return create_response(False, message=f"Todo {todo_id} not found. Searched in: {searched_locations}")
@@ -1597,9 +1630,13 @@ async def update_todo(todo_id: str, updates: dict, ctx: Optional[Context] = None
         logger.error(f"Failed to update todo: {str(e)}")
         return create_response(False, message=str(e))
 
-async def delete_todo(todo_id: str, ctx: Optional[Context] = None) -> str:
+async def delete_todo(todo_id: str, scope: Optional[str] = None, ctx: Optional[Context] = None) -> str:
     """
     Delete a todo item by its ID.
+
+    scope: pass 'team:<slug>' (or 'shared') to delete a todo in that scope — required
+    to reach a team todo (a bare UUID never crosses into a team). Membership-gated;
+    a viewer role is refused. Omit for your personal → shared todos.
     """
     # Check for read-only mode (unauthenticated demo users)
     if _is_read_only_user(ctx):
@@ -1612,11 +1649,12 @@ async def delete_todo(todo_id: str, ctx: Optional[Context] = None) -> str:
             return create_response(False, message=f"Todo {todo_id} not found.")
         todo_id = resolved
 
-        # Locate across the caller's own scopes (personal → shared). delete now
-        # matches get/complete/update — previously it probed the user DB only, so a
-        # shared todo an agent had just completed 404'd on delete (audit #13 asymmetry).
-        # The tombstone + delete then land in the SAME scope the todo lives in.
-        existing_todo, collections, _source, searched_databases = _find_todo_across_scopes(todo_id, user_context)
+        # Locate: explicit scope (team/shared) or the personal → shared probe. The
+        # tombstone + delete land in the SAME scope the todo lives in.
+        existing_todo, collections, _source, searched_databases, scope_err = \
+            _locate_todo_for_op(todo_id, user_context, scope, write=True)
+        if scope_err:
+            return scope_err
         if not existing_todo:
             searched_locations = " and ".join(searched_databases)
             return create_response(False, message=f"Todo {todo_id} not found. Searched in: {searched_locations}")
@@ -1641,10 +1679,14 @@ async def delete_todo(todo_id: str, ctx: Optional[Context] = None) -> str:
         logger.error(f"Failed to delete todo: {str(e)}")
         return create_response(False, message=str(e))
 
-async def get_todo(todo_id: str, ctx: Optional[Context] = None) -> str:
+async def get_todo(todo_id: str, scope: Optional[str] = None, ctx: Optional[Context] = None) -> str:
     """
     Get a specific todo item by its ID.
     Searches user database first, then falls back to shared database if not found.
+
+    scope: pass 'team:<slug>' (or 'shared') to read a todo in that scope — required
+    to reach a team todo (a bare UUID never crosses into a team). Membership-gated.
+    Omit for your personal → shared todos.
     """
     try:
         user_context = ctx.user if ctx else None
@@ -1654,8 +1696,11 @@ async def get_todo(todo_id: str, ctx: Optional[Context] = None) -> str:
             return create_response(False, message=f"Todo with ID {todo_id} not found. Searched in: {searched_locations}")
         todo_id = resolved
 
-        # One by-ID probe across the caller's own scopes (personal → shared).
-        todo, _found_collections, source, searched_databases = _find_todo_across_scopes(todo_id, user_context)
+        # Explicit scope (team/shared) or the personal → shared probe.
+        todo, _found_collections, source, searched_databases, scope_err = \
+            _locate_todo_for_op(todo_id, user_context, scope, write=False)
+        if scope_err:
+            return scope_err
         if todo:
             compacted = compact_todo(todo, iso_dates=True)
             compacted['source'] = source
@@ -1669,7 +1714,7 @@ async def get_todo(todo_id: str, ctx: Optional[Context] = None) -> str:
         logger.error(f"Failed to get todo: {str(e)}")
         return create_response(False, message=str(e))
 
-async def complete_todo(todo_id: str, comment: Optional[str] = None, files: Optional[List[str]] = None, ctx: Optional[Context] = None) -> str:
+async def complete_todo(todo_id: str, comment: Optional[str] = None, files: Optional[List[str]] = None, scope: Optional[str] = None, ctx: Optional[Context] = None) -> str:
     """
     Mark a todo as completed. Records git context, calculates duration, and writes an audit log entry.
 
@@ -1683,6 +1728,9 @@ async def complete_todo(todo_id: str, comment: Optional[str] = None, files: Opti
                  the completion context permanently.
         files: List of file paths changed during this work. Feeds SwarmDesk connected buildings.
                Example: ["src/components/TodoTab.jsx", "src/services/todoAPI.js"]
+        scope: pass 'team:<slug>' (or 'shared') to complete a todo in that scope — required
+               to reach a team todo (a bare UUID never crosses into a team). Membership-gated;
+               a viewer role is refused. Omit for your personal → shared todos.
     """
     # Check for read-only mode (unauthenticated demo users)
     if _is_read_only_user(ctx):
@@ -1694,9 +1742,11 @@ async def complete_todo(todo_id: str, comment: Optional[str] = None, files: Opti
         if resolved is None:
             return create_response(False, message=f"Todo {todo_id} not found.")
         todo_id = resolved
-        # Locate across the caller's own scopes (personal → shared); one shared helper
-        existing_todo, _found_collections, database_source, searched_databases = \
-            _find_todo_across_scopes(todo_id, user_context)
+        # Locate: explicit scope (team/shared) or the personal → shared probe.
+        existing_todo, _found_collections, database_source, searched_databases, scope_err = \
+            _locate_todo_for_op(todo_id, user_context, scope, write=True)
+        if scope_err:
+            return scope_err
         if not existing_todo:
             searched_locations = " and ".join(searched_databases)
             return create_response(False, message=f"Todo {todo_id} not found. Searched in: {searched_locations}")

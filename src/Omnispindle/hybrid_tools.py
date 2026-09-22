@@ -233,43 +233,48 @@ async def query_todos(filter: Optional[Dict[str, Any]] = None, projection: Optio
         ctx=ctx
     )
 
-async def update_todo(todo_id: str, updates: dict, ctx: Optional[Context] = None) -> str:
-    """Update todo using hybrid mode"""
+async def update_todo(todo_id: str, updates: dict, scope: Optional[str] = None, ctx: Optional[Context] = None) -> str:
+    """Update todo using hybrid mode. scope ('team:<slug>'/'shared') targets a todo
+    in that membership-gated scope; omit for personal → shared."""
     return await _execute_with_fallback(
         "update_todo",
         api_tools.update_todo,
         local_tools.update_todo,
         todo_id, updates,
+        scope=scope,
         ctx=ctx
     )
 
-async def delete_todo(todo_id: str, ctx: Optional[Context] = None) -> str:
-    """Delete todo using hybrid mode"""
+async def delete_todo(todo_id: str, scope: Optional[str] = None, ctx: Optional[Context] = None) -> str:
+    """Delete todo using hybrid mode. scope targets a team/shared todo by id."""
     return await _execute_with_fallback(
         "delete_todo",
         api_tools.delete_todo,
         local_tools.delete_todo,
         todo_id,
+        scope=scope,
         ctx=ctx
     )
 
-async def get_todo(todo_id: str, ctx: Optional[Context] = None) -> str:
-    """Get todo using hybrid mode"""
+async def get_todo(todo_id: str, scope: Optional[str] = None, ctx: Optional[Context] = None) -> str:
+    """Get todo using hybrid mode. scope reads a team/shared todo by id."""
     return await _execute_with_fallback(
         "get_todo",
         api_tools.get_todo,
         local_tools.get_todo,
         todo_id,
+        scope=scope,
         ctx=ctx
     )
 
-async def complete_todo(todo_id: str, comment: Optional[str] = None, ctx: Optional[Context] = None) -> str:
-    """Complete todo using hybrid mode"""
+async def complete_todo(todo_id: str, comment: Optional[str] = None, scope: Optional[str] = None, ctx: Optional[Context] = None) -> str:
+    """Complete todo using hybrid mode. scope targets a team/shared todo by id."""
     return await _execute_with_fallback(
         "complete_todo",
         api_tools.complete_todo,
         local_tools.complete_todo,
         todo_id, comment,
+        scope=scope,
         ctx=ctx
     )
 
