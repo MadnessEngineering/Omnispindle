@@ -930,6 +930,29 @@ async def add_todo(description: str, project: str, priority: str = "Medium", tar
               - effort: story points 1-10
             Example: {"files": ["src/components/Dashboard.js"], "tags": ["bug", "ui"],
                       "district": "ui", "coordinates": {"x": 2.1, "y": 0.5, "z": -1.3}, "effort": 3}
+
+            'choices' records a decision you could not make alone: a question plus the
+            candidate answers, carried on the todo instead of lost in a chat log. A human
+            answers it later in Inventorium's HTML export (radio buttons, writes back the
+            answer, answered_by and answered_at) or with update_todo.
+            Shape — one entry per question:
+              {"choices": [{
+                  "id": "q1",
+                  "q": "Change-control policy for model drift after acceptance?",
+                  "options": [
+                      {"id": "a", "label": "Re-run full FAT", "detail": "safest, ~2 days"},
+                      {"id": "b", "label": "Delta test only", "detail": "just the drifted routes"},
+                      {"id": "c", "label": "No gate, log it"}],
+                  "recommended": "b",
+                  "answer": null}]}
+            'options' also accepts bare strings; 'answer' holds an option id or free text.
+            Discipline, because asking is cheap for you and answering is not:
+              - Always set 'recommended'. If you cannot name a default you are not asking a
+                question, you are refusing to decide. With a default, silence is an answer:
+                proceed on it and the entry stands as the record of what you assumed.
+              - At most two questions per todo. Fold the rest into notes.
+              - Do not park the work on an unanswered question — the field is a record, not
+                a lock. Set status 'blocked' only if something actually blocks it.
         scope: Where to create it (default None/'personal' -> your own DB). 'shared'
             writes the shared board; 'team:<slug>' writes a team board you belong to
             (membership-gated, a viewer role is refused). This is per-todo sharing:
@@ -1493,6 +1516,13 @@ async def update_todo(todo_id: str, updates: dict, scope: Optional[str] = None, 
     Correct usage:
         update_todo(todo_id="abc-123", updates={"status": "in_progress", "priority": "High"})
         update_todo(todo_id="abc-123", updates={"notes": "blocked on auth", "metadata": {"pr": "42"}})
+
+    Answering a metadata.choices question (see add_todo for the shape) — metadata merges
+    per top-level key, so send the whole 'choices' array back with the answered entry filled
+    in, not a fragment:
+        update_todo(todo_id="abc-123", updates={"metadata": {"choices": [
+            {"id": "q1", "q": "...", "options": [...], "recommended": "b",
+             "answer": "b", "answered_by": "dan", "answered_at": "2026-09-23T19:00:00Z"}]}})
 
     Dependency linking via metadata.blockers (array of todo IDs that block this todo):
         update_todo(todo_id="abc-123", updates={"metadata": {"blockers": {"$push": "uuid-of-blocker"}}})
