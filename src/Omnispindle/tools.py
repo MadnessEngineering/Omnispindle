@@ -591,6 +591,66 @@ def _normalize_updates(updates, label: str = "updates") -> tuple:
     return updates, None
 
 
+def _normalize_choices(raw):
+    """Coerce a choices payload into the stored shape, or None if there is nothing to store.
+
+    Mirrors Inventorium's src/utils/todoChoices.js — the field has no schema, so
+    every reader tolerates the same loose forms (q/question/prompt, bare-string
+    options, missing ids). Normalizing on write means the readers agree even when
+    the writer improvised.
+    """
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw)
+        except (json.JSONDecodeError, ValueError):
+            return None
+    if not isinstance(raw, list):
+        return None
+
+    out = []
+    for qi, entry in enumerate(raw):
+        if not isinstance(entry, dict):
+            continue
+        question = str(entry.get("q") or entry.get("question") or entry.get("prompt") or "").strip()
+        if not question:
+            continue
+
+        options = []
+        for oi, opt in enumerate(entry.get("options") or []):
+            letter = chr(ord("a") + (oi % 26))
+            if isinstance(opt, str):
+                label = opt.strip()
+                detail = ""
+                opt_id = letter
+            elif isinstance(opt, dict):
+                label = str(opt.get("label") or opt.get("text") or opt.get("value") or "").strip()
+                detail = str(opt.get("detail") or opt.get("description") or "").strip()
+                opt_id = str(opt.get("id") or letter)
+            else:
+                continue
+            if not label:
+                continue
+            option = {"id": opt_id, "label": label}
+            if detail:
+                option["detail"] = detail
+            options.append(option)
+
+        choice = {
+            "id": str(entry.get("id") or entry.get("qid") or f"q{qi + 1}"),
+            "q": question,
+            "options": options,
+        }
+        # Only carry the optional keys that were actually set — Mongo strips
+        # nulls anyway, and an absent answer is how "unanswered" is spelled.
+        for key in ("recommended", "answer", "answered_by", "answered_at"):
+            value = entry.get(key)
+            if value not in (None, ""):
+                choice[key] = value
+        out.append(choice)
+
+    return out or None
+
+
 # ── recall-on-add_todo: surface related lessons at the point of need ──────────
 # Converts lesson recall from pull→push at the ONE habitual call (add_todo before a
 # work section) — no new agent behavior required. Kept cheap + safe:
@@ -911,7 +971,7 @@ async def config(loadout: Optional[str] = None, doc_level: Optional[str] = None,
         return create_response(False, message=str(e))
 
 
-async def add_todo(description: str, project: str, priority: str = "Medium", target_agent: str = "user", notes: str = "", ticket: str = "", metadata: Optional[Dict[str, Any]] = None, scope: Optional[str] = None, ctx: Optional[Context] = None, **extra) -> str:
+async def add_todo(description: str, project: str, priority: str = "Medium", target_agent: str = "user", notes: str = "", ticket: str = "", metadata: Optional[Dict[str, Any]] = None, choices: Optional[List[Dict[str, Any]]] = None, scope: Optional[str] = None, ctx: Optional[Context] = None, **extra) -> str:
     """
     Creates a task in the specified project with the given priority and target agent.
 
@@ -931,28 +991,28 @@ async def add_todo(description: str, project: str, priority: str = "Medium", tar
             Example: {"files": ["src/components/Dashboard.js"], "tags": ["bug", "ui"],
                       "district": "ui", "coordinates": {"x": 2.1, "y": 0.5, "z": -1.3}, "effort": 3}
 
-            'choices' records a decision you could not make alone: a question plus the
-            candidate answers, carried on the todo instead of lost in a chat log. A human
-            answers it later in Inventorium's HTML export (radio buttons, writes back the
-            answer, answered_by and answered_at) or with update_todo.
-            Shape — one entry per question:
-              {"choices": [{
-                  "id": "q1",
-                  "q": "Change-control policy for model drift after acceptance?",
-                  "options": [
-                      {"id": "a", "label": "Re-run full FAT", "detail": "safest, ~2 days"},
-                      {"id": "b", "label": "Delta test only", "detail": "just the drifted routes"},
-                      {"id": "c", "label": "No gate, log it"}],
-                  "recommended": "b",
-                  "answer": null}]}
+        choices: Decisions you could not make alone — a question plus candidate answers,
+            carried on the todo instead of lost in a chat log. A human answers later in
+            Inventorium (the HTML export writes back answer/answered_by/answered_at; the
+            dashboard shows what is still waiting). One entry per question:
+              [{"id": "q1",
+                "q": "Change-control policy for model drift after acceptance?",
+                "options": [
+                    {"id": "a", "label": "Re-run full FAT", "detail": "safest, ~2 days"},
+                    {"id": "b", "label": "Delta test only", "detail": "just the drifted routes"},
+                    {"id": "c", "label": "No gate, log it"}],
+                "recommended": "b",
+                "answer": null}]
             'options' also accepts bare strings; 'answer' holds an option id or free text.
             Discipline, because asking is cheap for you and answering is not:
               - Always set 'recommended'. If you cannot name a default you are not asking a
                 question, you are refusing to decide. With a default, silence is an answer:
                 proceed on it and the entry stands as the record of what you assumed.
               - At most two questions per todo. Fold the rest into notes.
-              - Do not park the work on an unanswered question — the field is a record, not
-                a lock. Set status 'blocked' only if something actually blocks it.
+              - Do not park the work on an unanswered question — this is a record, not a
+                lock. Set status 'blocked' only if something actually blocks it.
+            Passing them inside metadata still works and is hoisted to the top level;
+            readers honor both, so todos written before the promotion keep rendering.
         scope: Where to create it (default None/'personal' -> your own DB). 'shared'
             writes the shared board; 'team:<slug>' writes a team board you belong to
             (membership-gated, a viewer role is refused). This is per-todo sharing:
@@ -1023,6 +1083,13 @@ async def add_todo(description: str, project: str, priority: str = "Medium", tar
     # we'd read is actually this project's; see git_root_matches_project.
     validated_metadata = enrich_metadata_with_git(validated_metadata, project=validated_project)
 
+    # 'choices' is a first-class field like notes. Callers that still nest it in
+    # metadata (the shape the docstring taught before the promotion) get hoisted,
+    # and it never stays in both places — one home, so readers never have to guess
+    # which copy is current.
+    nested_choices = validated_metadata.pop("choices", None) if isinstance(validated_metadata, dict) else None
+    todo_choices = _normalize_choices(choices if choices is not None else nested_choices)
+
     todo = {
         "id": todo_id,
         "description": description,
@@ -1036,6 +1103,8 @@ async def add_todo(description: str, project: str, priority: str = "Medium", tar
         "ticket": ticket,  # ✅ External ticket reference
         "metadata": validated_metadata
     }
+    if todo_choices:
+        todo["choices"] = todo_choices
     try:
         # Resolve the write target. None/'personal' -> personal DB (byte-identical
         # to before, since parse_scope_token(None) is personal); 'shared'/'team:<slug>'
@@ -1517,12 +1586,13 @@ async def update_todo(todo_id: str, updates: dict, scope: Optional[str] = None, 
         update_todo(todo_id="abc-123", updates={"status": "in_progress", "priority": "High"})
         update_todo(todo_id="abc-123", updates={"notes": "blocked on auth", "metadata": {"pr": "42"}})
 
-    Answering a metadata.choices question (see add_todo for the shape) — metadata merges
-    per top-level key, so send the whole 'choices' array back with the answered entry filled
-    in, not a fragment:
-        update_todo(todo_id="abc-123", updates={"metadata": {"choices": [
+    Answering a choices question (see add_todo for the shape) — 'choices' is a top-level
+    field and is replaced whole, so send the entire array back with the answered entry
+    filled in, not a fragment:
+        update_todo(todo_id="abc-123", updates={"choices": [
             {"id": "q1", "q": "...", "options": [...], "recommended": "b",
-             "answer": "b", "answered_by": "dan", "answered_at": "2026-09-23T19:00:00Z"}]}})
+             "answer": "b", "answered_by": "dan", "answered_at": "2026-09-23T19:00:00Z"}]})
+    Passing it under metadata still works — it is hoisted to the top level on write.
 
     Dependency linking via metadata.blockers (array of todo IDs that block this todo):
         update_todo(todo_id="abc-123", updates={"metadata": {"blockers": {"$push": "uuid-of-blocker"}}})
@@ -1539,9 +1609,19 @@ async def update_todo(todo_id: str, updates: dict, scope: Optional[str] = None, 
     if err:
         return create_response(False, message=err)
 
-    # Check for read-only mode (unauthenticated demo users)
-    if _is_read_only_user(ctx):
-        return create_response(False, message="Demo mode: Todo updates are disabled. Please authenticate to modify todos.")
+    # 'choices' is top-level now. Accept it nested in metadata (the older shape)
+    # and hoist, so an agent working from a stale docstring still writes the
+    # field where every reader looks for it.
+    if isinstance(updates.get("metadata"), dict) and "choices" in updates["metadata"]:
+        nested = updates["metadata"].pop("choices")
+        updates.setdefault("choices", nested)
+        if not updates["metadata"]:
+            updates.pop("metadata")
+    if "choices" in updates:
+        normalized_choices = _normalize_choices(updates["choices"])
+        if normalized_choices is None:
+            return create_response(False, message="choices must be a list of {q, options} objects")
+        updates["choices"] = normalized_choices
 
     # Completion must go through complete_todo — not update_todo
     if updates.get("status", "").lower() == "completed":

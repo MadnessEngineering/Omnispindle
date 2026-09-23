@@ -433,11 +433,12 @@ class OmniSpindleStdioServer:
                                 target_agent: Annotated[str, Field(description="user|AI name")] = "user",
                                 notes: Annotated[str, Field(description="User-facing notes/context (optional)")] = "",
                                 ticket: Annotated[str, Field(description="External ticket reference (optional)")] = "",
-                                metadata: Annotated[Optional[Dict[str, Any]], Field(description="{key: value} pairs. Always include 'files': ['path/to/main/file'] so SwarmDesk can link this todo to its source node in the 3D view.")] = None
+                                metadata: Annotated[Optional[Dict[str, Any]], Field(description="{key: value} pairs. Always include 'files': ['path/to/main/file'] so SwarmDesk can link this todo to its source node in the 3D view.")] = None,
+                                choices: Annotated[Optional[List[Dict[str, Any]]], Field(description="Questions you cannot decide alone: [{id, q, options:[{id,label,detail}], recommended, answer}]. A human answers them in Inventorium. Always set 'recommended'; at most two per todo.")] = None
                             ) -> str:
                                 """Create task. Returns ID and project stats. Always include metadata={'files': ['path/to/relevant/file']} — SwarmDesk uses this to resolve which 3D node the todo belongs to."""
                                 ctx = _create_context()
-                                return await func(description, project, priority, target_agent, notes, ticket, metadata, ctx=ctx)
+                                return await func(description, project, priority, target_agent, notes, ticket, metadata, choices, ctx=ctx)
                             return add_todo
 
                         elif name == "query_todos":

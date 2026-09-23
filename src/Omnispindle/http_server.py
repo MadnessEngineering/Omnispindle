@@ -207,14 +207,17 @@ logger.info(f"Loading '{loadout_name}' loadout (remote mode, {len(selected_tools
 # Register specific tools manually for HTTP transport compatibility
 if "add_todo" in selected_tools:
     @mcp.tool()
-    async def add_todo(description: str, project: str, priority: str = "Medium", target_agent: str = "user", notes: str = "", ticket: str = "", metadata: Optional[Dict[str, Any]] = None, user_ctx: Optional[Dict[str, Any]] = None, ctx: MCPContext = None):
+    async def add_todo(description: str, project: str, priority: str = "Medium", target_agent: str = "user", notes: str = "", ticket: str = "", metadata: Optional[Dict[str, Any]] = None, choices: Optional[List[Dict[str, Any]]] = None, user_ctx: Optional[Dict[str, Any]] = None, ctx: MCPContext = None):
         """Create task with priority/agent. Returns created todo. Use for new work tracking.
+
+        choices: questions you cannot decide alone — [{id, q, options, recommended, answer}].
+        A human answers them in Inventorium. Always set 'recommended'; two per todo at most.
 
         metadata.tags rules: lowercase+hyphens only, min 3 tags per todo.
         Canonical tags: ai, api, agents, audit, auth, automation, backend, bug, bugfix, chat, chronomancy, cleanup, code-quality, data-quality, database, deployment, docs, eaws, enhancement, floating-panels, frontend, git, hooks, hotkeys, locales, mcp, mindmap, mobile, monitoring, omnispindle, performance, phase-1, phase-2, phase-3, phase-4, planning, refactor, security, swarmdesk, testing, theme, three.js, todos, tooling, translations, ui, uml, visualization, wip.
         Retired aliases (e.g. bug-fix, theming, mcp-tools) auto-normalize on write."""
         auth_ctx = await get_authenticated_context_from_mcp(ctx, user_ctx)
-        return await tools.add_todo(description, project, priority, target_agent, notes, ticket, metadata, ctx=auth_ctx)
+        return await tools.add_todo(description, project, priority, target_agent, notes, ticket, metadata, choices, ctx=auth_ctx)
 
 if "query_todos" in selected_tools:
     @mcp.tool()

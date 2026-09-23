@@ -205,7 +205,8 @@ async def _execute_with_fallback(operation_name: str, api_func, local_func, *arg
 
 async def add_todo(description: str, project: str, priority: str = "Medium",
                   target_agent: str = "user", notes: str = "", ticket: str = "",
-                  metadata: Optional[Dict[str, Any]] = None, scope: Optional[str] = None,
+                  metadata: Optional[Dict[str, Any]] = None,
+                  choices: Optional[List[Dict[str, Any]]] = None, scope: Optional[str] = None,
                   ctx: Optional[Context] = None) -> str:
     """Create a todo using hybrid mode. scope (default 'personal') routes the write
     through the gated backend (api) / local resolver — 'shared'/'team:<slug>'."""
@@ -213,7 +214,7 @@ async def add_todo(description: str, project: str, priority: str = "Medium",
         "add_todo",
         api_tools.add_todo,
         local_tools.add_todo,
-        description, project, priority, target_agent, notes, ticket, metadata,
+        description, project, priority, target_agent, notes, ticket, metadata, choices,
         scope=scope,
         ctx=ctx
     )
