@@ -391,3 +391,76 @@ def test_compact_stats_drops_empty_facets():
 
 def test_compact_stats_passthrough_non_dict():
     assert compact_stats_facets(None) is None
+
+
+# --- choices survive the trimmed paths as a count -------------------------
+# The failure this guards against: an agent writes questions onto a todo, reads
+# the list back, sees no sign of them and concludes the write never landed.
+
+def _todo_with_choices(answered=0, open_=2, **extra):
+    choices = []
+    for i in range(answered):
+        choices.append({
+            "id": f"a{i}", "q": f"Answered question {i}?",
+            "options": [{"id": "a", "label": "Yes"}, {"id": "b", "label": "No"}],
+            "recommended": "a", "answer": "a",
+        })
+    for i in range(open_):
+        choices.append({
+            "id": f"q{i}", "q": f"Open question {i}?",
+            "options": [{"id": "a", "label": "One", "detail": "a detail long enough to matter"},
+                        {"id": "b", "label": "Two", "detail": "another detail of similar weight"}],
+            "recommended": "b",
+        })
+    doc = dict(SAMPLE_TODO)
+    doc["choices"] = choices
+    doc.update(extra)
+    return doc
+
+
+def test_compact_full_keeps_the_whole_choices_array():
+    out = compact_todo(_todo_with_choices())
+    assert len(out["choices"]) == 2
+    assert "open_questions" not in out
+
+
+def test_compact_brief_swaps_choices_for_an_open_count():
+    out = compact_todo(_todo_with_choices(answered=1, open_=2), brief=True)
+    assert "choices" not in out
+    assert out["open_questions"] == 2
+
+
+def test_compact_brief_drops_fully_answered_questions_without_a_count():
+    # Nothing is waiting on anyone, so the row says nothing; the answers are
+    # still one get_todo away.
+    out = compact_todo(_todo_with_choices(answered=2, open_=0), brief=True)
+    assert "choices" not in out
+    assert "open_questions" not in out
+
+
+def test_list_diet_keeps_the_open_count_through_slimming():
+    items = [_todo_with_choices(open_=2) for _ in range(6)]
+    out, diet = apply_todo_list_diet(items)
+    assert diet == "brief"
+    assert all(i["open_questions"] == 2 for i in out)
+    assert all("choices" not in i for i in out)
+
+
+def test_question_heavy_list_triggers_the_diet_on_its_own():
+    # Thin notes, fat questions: before choices was counted as trimmable, a page
+    # of question-heavy todos sailed past the budget and shipped whole.
+    items = []
+    for _ in range(8):
+        doc = _todo_with_choices(open_=3)
+        doc["notes"] = ""
+        doc["metadata"] = {"tags": ["x"]}
+        items.append(doc)
+    out, diet = apply_todo_list_diet(items)
+    assert diet == "brief"
+    assert out[0]["open_questions"] == 3
+
+
+def test_list_diet_leaves_todos_without_questions_alone():
+    items = [dict(SAMPLE_TODO) for _ in range(6)]
+    out, _ = apply_todo_list_diet(items)
+    assert all("open_questions" not in i for i in out)

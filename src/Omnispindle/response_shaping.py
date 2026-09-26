@@ -74,6 +74,19 @@ def _iso_from_epoch(value) -> Optional[str]:
     return None
 
 
+def _open_question_count(doc: dict) -> int:
+    """How many of a todo's choices are still waiting on a human.
+
+    An unanswered question stores as a missing 'answer' key, not a null — Mongo
+    strips nulls on write — so absent and empty both count as open. Mirrors
+    Inventorium's src/utils/todoChoices.js.
+    """
+    choices = doc.get("choices")
+    if not isinstance(choices, list):
+        return 0
+    return sum(1 for c in choices if isinstance(c, dict) and not c.get("answer"))
+
+
 def compact_todo(doc: dict, brief: bool = False, iso_dates: bool = False) -> dict:
     """
     Reduce todo doc to MCP-friendly shape. Always: drop _id, drop per-doc source,
@@ -110,6 +123,16 @@ def compact_todo(doc: dict, brief: bool = False, iso_dates: bool = False) -> dic
     if brief:
         out.pop("notes", None)
         out.pop("updated_at", None)
+        # A choices array is question text, every option and every detail —
+        # far too fat for a brief row, and dropping it silently is worse: the
+        # agent that wrote the questions reads the list back and concludes they
+        # never landed. Carry the one fact that changes behaviour, and let
+        # get_todo serve the rest.
+        if "choices" in out:
+            open_count = _open_question_count(out)
+            out.pop("choices", None)
+            if open_count:
+                out["open_questions"] = open_count
 
     # Empty fields carry no information but cost tokens on every item (ticket: "",
     # notes: "", tags: []). Applied last so brief/metadata handling runs first.
@@ -372,6 +395,12 @@ def _trimmable_chars(item: dict) -> int:
     md = item.get("metadata")
     if isinstance(md, dict):
         total += sum(len(str(v)) for k, v in md.items() if k not in _LIST_METADATA_KEEP)
+    # Questions are top-level now, and a couple of them with options and details
+    # outweigh the notes this budget was written for. Counting them is what makes
+    # a question-heavy page trigger the diet it needs.
+    choices = item.get("choices")
+    if isinstance(choices, list):
+        total += sum(len(str(c)) for c in choices)
     return total
 
 
@@ -404,6 +433,11 @@ def apply_todo_list_diet(items: list) -> tuple:
             out.append(item)
             continue
         slim = {k: item[k] for k in _LIST_KEEP_FIELDS if k in item}
+        # Same reasoning as compact_todo's brief path: the count survives the
+        # diet so a todo waiting on a person still says so in a slim list.
+        open_count = _open_question_count(item)
+        if open_count:
+            slim["open_questions"] = open_count
         md = item.get("metadata")
         if isinstance(md, dict):
             kept = {k: md[k] for k in _LIST_METADATA_KEEP if md.get(k)}
