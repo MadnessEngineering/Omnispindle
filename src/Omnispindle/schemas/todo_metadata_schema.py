@@ -112,12 +112,11 @@ class TodoMetadata(BaseModel):
     completed_by: Optional[str] = Field(default=None, description="Email or agent ID of completer")
     completion_comment: Optional[str] = Field(default=None, description="Comments on completion")
     
-    @field_validator('files', 'components', 'deliverables', 'acceptance_criteria',
-                     'blockers', 'tags', mode='before')
+    @field_validator('files', 'components', 'blockers', 'tags', mode='before')
     @classmethod
-    def coerce_list_fields(cls, v):
+    def coerce_token_list_fields(cls, v):
         """
-        Accept a string where a list belongs, and split it.
+        Accept a string where a list of TOKENS belongs, and split it on commas.
 
         Agents send these as CSV or as JSON text often enough that rejecting the
         value costs more than coercing it. Rejection is not a safe failure here:
@@ -130,9 +129,25 @@ class TodoMetadata(BaseModel):
         and crashed Inventorium's review queue at `.map`, since a string answers
         `.length` and `.slice()` exactly like a list and only fails there.
 
+        Splitting on commas is safe HERE and only here: paths, tags, component
+        names and uuids do not contain commas. Prose fields get the separate
+        validator below, because a criterion routinely does.
+
+        A dict is the other shape in the wild — agents group paths by intent,
+        {'create': [...], 'modify': [...], 'reference': [...]} — so flatten its
+        values rather than discarding real paths.
+
         Runs in 'before' mode so it lands ahead of pydantic's list type check;
         validate_arrays below then cleans the result as usual.
         """
+        if isinstance(v, dict):
+            flat = []
+            for group in v.values():
+                if isinstance(group, list):
+                    flat.extend(group)
+                elif isinstance(group, str) and group.strip():
+                    flat.append(group.strip())
+            return flat
         if isinstance(v, str):
             text = v.strip()
             if not text:
@@ -146,6 +161,49 @@ class TodoMetadata(BaseModel):
                 except (ValueError, TypeError):
                     pass
             return [part.strip() for part in text.split(',') if part.strip()]
+        return v
+
+    @field_validator('deliverables', 'acceptance_criteria', mode='before')
+    @classmethod
+    def coerce_prose_list_fields(cls, v):
+        """
+        Same rescue as the token fields, with the opposite comma rule.
+
+        These hold sentences, and sentences contain commas. 12 live todos carry a
+        single criterion as a bare string:
+
+            'CLAUDE.md updated with architecture summary, commands section, …'
+
+        Splitting that on commas does not produce three criteria, it produces
+        three fragments — so a lone string becomes ONE item. A JSON array in text
+        form is still honoured, since that is unambiguous.
+
+        A dict of grouped prose flattens to its values, mirroring the token
+        validator above ({'file_consolidation_map': '90+ files mapped…'} is real).
+        """
+        if isinstance(v, dict):
+            flat = []
+            for group in v.values():
+                if isinstance(group, list):
+                    flat.extend(group)
+                elif isinstance(group, str) and group.strip():
+                    flat.append(group.strip())
+            return flat
+        if isinstance(v, str):
+            text = v.strip()
+            if not text:
+                return []
+            if text.startswith('['):
+                try:
+                    decoded = json.loads(text)
+                    if isinstance(decoded, list):
+                        return decoded
+                except (ValueError, TypeError):
+                    pass
+            # Newlines and bullets DO separate criteria; commas do not.
+            parts = [p.strip().lstrip('-•* ').strip() for p in text.splitlines()]
+            parts = [p for p in parts if p]
+            return parts if len(parts) > 1 else [text]
         return v
 
     @field_validator('effort', mode='before')

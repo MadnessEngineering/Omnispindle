@@ -553,9 +553,10 @@ class TestLooseShapeCoercion:
     def test_real_lists_are_untouched(self):
         assert TodoMetadata(files=['a.py', 'b.py']).files == ['a.py', 'b.py']
 
-    @pytest.mark.parametrize('field', ['components', 'deliverables',
-                                       'acceptance_criteria', 'blockers'])
-    def test_every_list_field_coerces(self, field):
+    @pytest.mark.parametrize('field', ['components', 'blockers'])
+    def test_every_token_list_field_coerces(self, field):
+        """files/tags covered above. deliverables and acceptance_criteria are PROSE
+        and deliberately do not split on commas — see TestProseFieldsKeepTheirCommas."""
         m = TodoMetadata(**{field: 'one, two'})
         assert getattr(m, field) == ['one', 'two']
 
@@ -579,6 +580,49 @@ class TestLooseShapeCoercion:
         """6 live todos used an int against a str field."""
         assert TodoMetadata(phase=3).phase == '3'
 
+    def test_files_grouped_by_intent_flattens(self):
+        """6 live todos group paths by what to do with them, rather than listing them."""
+        m = TodoMetadata(files={
+            'create': ['backend/routes/chatAudit.js'],
+            'modify': ['backend/routes/aiProxy.js'],
+            'reference': ['src/App.js'],
+        })
+        assert m.files == ['backend/routes/chatAudit.js',
+                           'backend/routes/aiProxy.js',
+                           'src/App.js']
+
+    def test_a_path_containing_a_glob_is_not_split(self):
+        assert TodoMetadata(files='src/locales/themes/*.json').files == ['src/locales/themes/*.json']
+
+
+class TestProseFieldsKeepTheirCommas:
+    """
+    acceptance_criteria and deliverables hold SENTENCES, and sentences contain
+    commas. 12 live todos carry a single criterion as a bare string; splitting it
+    on commas yields fragments, not criteria. These fields get the opposite comma
+    rule from files/tags/blockers/components.
+    """
+
+    def test_a_criterion_with_commas_stays_one_item(self):
+        text = 'CLAUDE.md updated with architecture summary, commands section, and notes'
+        assert TodoMetadata(acceptance_criteria=text).acceptance_criteria == [text]
+
+    def test_newlines_do_separate_criteria(self):
+        m = TodoMetadata(acceptance_criteria='- first thing\n- second thing')
+        assert m.acceptance_criteria == ['first thing', 'second thing']
+
+    def test_json_text_is_still_honoured(self):
+        assert TodoMetadata(acceptance_criteria='["a", "b"]').acceptance_criteria == ['a', 'b']
+
+    def test_grouped_deliverables_flatten(self):
+        m = TodoMetadata(deliverables={'file_consolidation_map': '90+ files mapped'})
+        assert m.deliverables == ['90+ files mapped']
+
+    def test_token_fields_still_split_on_commas(self):
+        """The contrast that matters — same input shape, deliberately different rule."""
+        assert TodoMetadata(files='a.py, b.py').files == ['a.py', 'b.py']
+        assert len(TodoMetadata(acceptance_criteria='a, b').acceptance_criteria) == 1
+
 
 class TestMetadataQuarantine:
     """
@@ -594,16 +638,18 @@ class TestMetadataQuarantine:
         return _validate_metadata_quarantining_bad_fields(meta, 'test-todo')
 
     def test_bad_field_never_reaches_the_stored_metadata(self):
-        out = self._quarantine({'files': {'not': 'a list'}, 'district': 'rag'})
+        # An int cannot mean a list of paths under any reading — the dict and string
+        # forms are both coerced now, so this is the genuinely unanticipated shape.
+        out = self._quarantine({'files': 42, 'district': 'rag'})
         assert 'files' not in out, "a rejected field must not be stored under its real name"
 
     def test_good_fields_survive_a_bad_neighbour(self):
-        out = self._quarantine({'files': {'not': 'a list'}, 'district': 'rag'})
+        out = self._quarantine({'files': 42, 'district': 'rag'})
         assert out['district'] == 'rag'
 
     def test_rejected_value_is_kept_for_diagnosis(self):
-        out = self._quarantine({'files': {'not': 'a list'}})
-        assert out['_rejected']['files'] == {'not': 'a list'}
+        out = self._quarantine({'files': 42})
+        assert out['_rejected']['files'] == 42
         assert '_validation_warning' in out
 
     def test_coercible_input_is_not_quarantined(self):
