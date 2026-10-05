@@ -3,6 +3,7 @@ Pydantic schemas for todo metadata validation following the standardized schema.
 Based on the Inventorium standardization requirements.
 """
 
+import json
 from typing import Optional, List, Dict, Any, Union
 from pydantic import BaseModel, Field, field_validator, ConfigDict
 from enum import Enum
@@ -103,6 +104,42 @@ class TodoMetadata(BaseModel):
     completed_by: Optional[str] = Field(default=None, description="Email or agent ID of completer")
     completion_comment: Optional[str] = Field(default=None, description="Comments on completion")
     
+    @field_validator('files', 'components', 'deliverables', 'acceptance_criteria',
+                     'blockers', 'tags', mode='before')
+    @classmethod
+    def coerce_list_fields(cls, v):
+        """
+        Accept a string where a list belongs, and split it.
+
+        Agents send these as CSV or as JSON text often enough that rejecting the
+        value costs more than coercing it. Rejection is not a safe failure here:
+        add_todo and update_todo catch a validation error and store the RAW
+        metadata anyway with a _validation_warning, so a refused string is written
+        through unchanged — which is how a todo ended up carrying
+
+            metadata.files: 'test_suites/regression_ed_serial.py, serial_replay.py, …'
+
+        and crashed Inventorium's review queue at `.map`, since a string answers
+        `.length` and `.slice()` exactly like a list and only fails there.
+
+        Runs in 'before' mode so it lands ahead of pydantic's list type check;
+        validate_arrays below then cleans the result as usual.
+        """
+        if isinstance(v, str):
+            text = v.strip()
+            if not text:
+                return []
+            # A JSON array arrives as text from some callers; fall back to CSV.
+            if text.startswith('['):
+                try:
+                    decoded = json.loads(text)
+                    if isinstance(decoded, list):
+                        return decoded
+                except (ValueError, TypeError):
+                    pass
+            return [part.strip() for part in text.split(',') if part.strip()]
+        return v
+
     @field_validator('files', 'components', 'deliverables', 'acceptance_criteria', 'blockers')
     @classmethod
     def validate_arrays(cls, v):
