@@ -591,6 +591,76 @@ def _normalize_updates(updates, label: str = "updates") -> tuple:
     return updates, None
 
 
+def _validate_metadata_quarantining_bad_fields(metadata, todo_id, label="todo"):
+    """
+    Validate metadata, and quarantine only the fields that fail.
+
+    The previous behaviour on a ValidationError was to store the ENTIRE raw blob
+    with a _validation_warning key — so a value pydantic had just refused was
+    written to the database anyway, under the real field name, with the wrong
+    type. Validation that fails open protects nothing: a todo reached production
+    carrying
+
+        metadata.files: 'a.py, b.py, c/'      (a str, where readers expect a list)
+
+    and took down Inventorium's whole review queue at `.map`, because a string
+    answers .length and .slice() exactly like a list and only fails there.
+
+    Now a rejected field is REMOVED from the live metadata and its raw value is
+    kept under `_rejected` so nothing is lost and it stays diagnosable. The rest
+    of the metadata revalidates normally, so one bad field no longer costs the
+    good ones their schema treatment either.
+
+    Coercion still comes first: todo_metadata_schema's before-validators absorb
+    the loose shapes we know about (CSV lists, t-shirt effort sizes, numeric
+    phases). This is the net under that — for the shape nobody anticipated.
+
+    @param metadata: raw metadata dict
+    @param todo_id: for log lines
+    @param label: calling tool, for log lines
+    @return: dict safe to store — every present field is schema-valid
+    """
+    if not metadata:
+        return {}
+
+    try:
+        return validate_todo_metadata(metadata).model_dump(exclude_none=True)
+    except Exception as e:
+        bad_fields = set()
+        errors = getattr(e, "errors", None)
+        if callable(errors):
+            for err in e.errors():
+                loc = err.get("loc") or ()
+                if loc:
+                    bad_fields.add(str(loc[0]))
+
+        if not bad_fields:
+            # Could not attribute the failure to a field — drop to a bare blob
+            # rather than storing something unvalidated under real field names.
+            logger.warning(f"{label}: unattributable metadata validation failure for {todo_id}: {e}")
+            return {"_rejected": {"_all": metadata},
+                    "_validation_warning": f"Schema validation failed: {str(e)}"}
+
+        kept = {k: v for k, v in metadata.items() if k not in bad_fields}
+        rejected = {k: metadata[k] for k in bad_fields if k in metadata}
+        logger.warning(
+            f"{label}: quarantined {sorted(bad_fields)} on {todo_id} "
+            f"(types: { {k: type(v).__name__ for k, v in rejected.items()} }) — {e}"
+        )
+
+        try:
+            cleaned = validate_todo_metadata(kept).model_dump(exclude_none=True)
+        except Exception as inner:
+            # A second failure means the remainder is untrustworthy too; keep the
+            # untyped keys only, which cannot carry a schema expectation.
+            logger.warning(f"{label}: metadata still invalid after quarantine on {todo_id}: {inner}")
+            cleaned = {k: v for k, v in kept.items() if k.startswith("_")}
+
+        cleaned["_rejected"] = rejected
+        cleaned["_validation_warning"] = f"Schema validation failed: {str(e)}"
+        return cleaned
+
+
 def _normalize_choices(raw):
     """Coerce a choices payload into the stored shape, or None if there is nothing to store.
 
@@ -1069,15 +1139,8 @@ async def add_todo(description: str, project: str, priority: str = "Medium", tar
     validated_metadata = {}
     logger.info(f"🐛 tools.add_todo before validation: metadata={metadata}")
     if metadata:
-        try:
-            validated_metadata_obj = validate_todo_metadata(metadata)
-            validated_metadata = validated_metadata_obj.model_dump(exclude_none=True)
-            logger.info(f"Metadata validated successfully for todo {todo_id}")
-        except Exception as e:
-            logger.warning(f"Metadata validation failed for todo {todo_id}: {str(e)}")
-            # For backward compatibility, store raw metadata with validation warning
-            validated_metadata = metadata.copy() if metadata else {}
-            validated_metadata["_validation_warning"] = f"Schema validation failed: {str(e)}"
+        validated_metadata = _validate_metadata_quarantining_bad_fields(
+            metadata, todo_id, label="tools.add_todo")
 
     # Enrich metadata with git context (branch, commit_hash) — only when the repo
     # we'd read is actually this project's; see git_root_matches_project.
@@ -1666,17 +1729,10 @@ async def update_todo(todo_id: str, updates: dict, scope: Optional[str] = None, 
             existing_metadata = existing_todo.get("metadata", {})
             merged_metadata = deep_merge_metadata(existing_metadata, updates["metadata"])
 
-            # Validate the merged metadata
-            try:
-                validated_metadata_obj = validate_todo_metadata(merged_metadata)
-                updates["metadata"] = validated_metadata_obj.model_dump(exclude_none=True)
-                logger.info(f"Metadata merged and validated for todo {todo_id}: {len(existing_metadata)} existing fields + {len(updates['metadata'])} updates")
-            except Exception as e:
-                logger.warning(f"Metadata validation failed for merged metadata in todo {todo_id}: {str(e)}")
-                # For backward compatibility, keep merged metadata with validation warning
-                if isinstance(merged_metadata, dict):
-                    merged_metadata["_validation_warning"] = f"Schema validation failed: {str(e)}"
-                updates["metadata"] = merged_metadata
+            # Validate the merged metadata, quarantining any field that fails rather
+            # than storing the whole merged blob unvalidated (see the helper).
+            updates["metadata"] = _validate_metadata_quarantining_bad_fields(
+                merged_metadata, todo_id, label="tools.update_todo")
 
         # Update the todo in the database where it was found
         result = todos_collection.update_one({"id": todo_id}, {"$set": updates})
