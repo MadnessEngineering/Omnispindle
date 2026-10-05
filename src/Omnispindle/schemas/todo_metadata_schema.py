@@ -58,6 +58,14 @@ class ComplexityLevel(str, Enum):
     COMPLEX = "Complex"
 
 
+# Story-point equivalents for the t-shirt sizes agents actually send. 32 live todos
+# carry 'xs'/'s'/'m'/'l' in a field typed as an int 1-10 — the sizes are the de-facto
+# vocabulary, so translate rather than refuse. Module scope, not class scope: pydantic
+# turns a leading-underscore class attribute into a ModelPrivateAttr.
+EFFORT_SIZES = {'xs': 1, 's': 2, 'sm': 2, 'm': 3, 'md': 3, 'l': 5, 'lg': 5,
+                'xl': 8, 'xxl': 13}
+
+
 class TodoMetadata(BaseModel):
     """
     Standardized metadata schema for todos.
@@ -138,6 +146,30 @@ class TodoMetadata(BaseModel):
                 except (ValueError, TypeError):
                     pass
             return [part.strip() for part in text.split(',') if part.strip()]
+        return v
+
+    @field_validator('effort', mode='before')
+    @classmethod
+    def coerce_effort(cls, v):
+        """Accept a t-shirt size or a numeric string where story points belong."""
+        if isinstance(v, str):
+            text = v.strip().lower()
+            if not text:
+                return None
+            if text in EFFORT_SIZES:
+                return EFFORT_SIZES[text]
+            try:
+                return int(float(text))
+            except (ValueError, TypeError):
+                return None   # unusable rather than written through raw
+        return v
+
+    @field_validator('phase', mode='before')
+    @classmethod
+    def coerce_phase(cls, v):
+        """A phase identifier is a label; agents send the number 3 as often as '3'."""
+        if isinstance(v, (int, float)) and not isinstance(v, bool):
+            return str(v)
         return v
 
     @field_validator('files', 'components', 'deliverables', 'acceptance_criteria', 'blockers')
