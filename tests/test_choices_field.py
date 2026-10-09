@@ -77,6 +77,30 @@ class TestNormalizeChoices(unittest.TestCase):
         self.assertEqual(out[0]["answered_by"], "dan@example.com")
         self.assertEqual(out[0]["answered_at"], "2026-09-23T21:07:00.732Z")
 
+    def test_notes_and_their_credits_survive(self):
+        # The whitelist above is also a delete list: the write is a whole-array
+        # $set, so a key this function forgets is a key stripped from every
+        # question the next time any agent echoes the array back.
+        out = _normalize_choices([{
+            "q": "A?",
+            "options": ["Yes"],
+            "note": "b, but only until the vendor replies",
+            "noted_by": "dan@example.com",
+            "noted_at": "2026-10-09T12:00:00.000Z",
+        }])
+        self.assertEqual(out[0]["note"], "b, but only until the vendor replies")
+        self.assertEqual(out[0]["noted_by"], "dan@example.com")
+        self.assertEqual(out[0]["noted_at"], "2026-10-09T12:00:00.000Z")
+
+    def test_a_note_does_not_answer_the_question(self):
+        out = _normalize_choices([{"q": "A?", "options": ["Yes"], "note": "still thinking"}])
+        self.assertNotIn("answer", out[0])
+
+    def test_comment_is_folded_into_note(self):
+        out = _normalize_choices([{"q": "A?", "comment": "the other spelling"}])
+        self.assertEqual(out[0]["note"], "the other spelling")
+        self.assertNotIn("comment", out[0])
+
     def test_option_ids_wrap_past_the_alphabet(self):
         out = _normalize_choices([{"q": "A?", "options": [f"opt{i}" for i in range(27)]}])
         self.assertEqual(out[0]["options"][26]["id"], "a")

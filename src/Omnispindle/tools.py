@@ -712,10 +712,21 @@ def _normalize_choices(raw):
         }
         # Only carry the optional keys that were actually set — Mongo strips
         # nulls anyway, and an absent answer is how "unanswered" is spelled.
-        for key in ("recommended", "answer", "answered_by", "answered_at"):
+        #
+        # This list is a WHITELIST and the write is a whole-array $set, so a key
+        # missing from here is a key deleted from every question on the todo the
+        # next time any agent echoes the array back. `note` is the reasoning a
+        # person wrote beside a question; losing it is losing the only part of
+        # the decision that wasn't already obvious from the options.
+        for key in ("recommended", "answer", "answered_by", "answered_at",
+                    "note", "noted_by", "noted_at"):
             value = entry.get(key)
             if value not in (None, ""):
                 choice[key] = value
+        # The dashboard reads `comment` as a tolerated spelling of `note`; fold
+        # it here too, so an agent round-trip settles on the one key.
+        if "note" not in choice and entry.get("comment") not in (None, ""):
+            choice["note"] = entry["comment"]
         out.append(choice)
 
     return out or None
@@ -1656,6 +1667,12 @@ async def update_todo(todo_id: str, updates: dict, scope: Optional[str] = None, 
             {"id": "q1", "q": "...", "options": [...], "recommended": "b",
              "answer": "b", "answered_by": "dan", "answered_at": "2026-09-23T19:00:00Z"}]})
     Passing it under metadata still works — it is hoisted to the top level on write.
+
+    A question can also carry a 'note' (with 'noted_by'/'noted_at') — the reasoning
+    beside the decision, usually written by a person in the dashboard: "b, but only
+    until the vendor replies". It is NOT the answer: a question with a note and no
+    answer is still open. Because this field is replaced whole, carry any note you
+    read straight back through untouched, and never clear one you did not write.
 
     Dependency linking via metadata.blockers (array of todo IDs that block this todo):
         update_todo(todo_id="abc-123", updates={"metadata": {"blockers": {"$push": "uuid-of-blocker"}}})
