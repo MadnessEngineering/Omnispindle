@@ -85,6 +85,17 @@ def test_same_file_rule():
     assert not tools._same_file("a.py", "b.py")
 
 
+def test_string_files_are_split_not_iterated():
+    # Some todos store metadata.files as one string; iterating it would match single characters.
+    assert tools._as_file_list("src/a.ts, src/b.ts\nc.py") == ["src/a.ts", "src/b.ts", "c.py"]
+    assert tools._as_file_list(None) == [] and tools._as_file_list({"x": 1}) == []
+    items = [{"id": "s", "status": "pending", "metadata": {"files": "src/app.tsx, lib/x.py"}}]
+    top, with_files, matched = tools._rank_work_todos(items, ["x/src/app.tsx", "a"], None, 3)
+    assert [t["id"] for t in top] == ["s"] and top[0]["score"] == 3
+    top, _, matched = tools._rank_work_todos(items, ["p", "y"], None, 3)
+    assert matched == 0
+
+
 @pytest.mark.asyncio
 async def test_ranking_scores_and_why():
     r = await run(project="proj", files=["src/app-store.ts", "app.tsx"], branch="feat/x", limit=10)

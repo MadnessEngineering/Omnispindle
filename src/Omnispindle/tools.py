@@ -3207,6 +3207,18 @@ def _same_file(a: str, b: str) -> bool:
     return a == b or a.endswith("/" + b) or b.endswith("/" + a)
 
 
+def _as_file_list(value) -> List[str]:
+    """metadata.files is usually a list, but some todos store one comma/newline-separated string.
+    Iterating that string would match single characters, so split it instead."""
+    if not value:
+        return []
+    if isinstance(value, str):
+        return [p.strip() for p in re.split(r"[,\n]", value) if p.strip()]
+    if isinstance(value, (list, tuple)):
+        return [str(p) for p in value if p]
+    return []
+
+
 def _rank_work_todos(items: List[dict], files: List[str], branch: Optional[str], limit: int):
     """Score open todos against touched files. Returns (top, with_files_count, matched_count)."""
     touched = list(dict.fromkeys(files))
@@ -3214,7 +3226,7 @@ def _rank_work_todos(items: List[dict], files: List[str], branch: Optional[str],
     with_files = 0
     for td in items:
         meta = td.get("metadata") or {}
-        tfiles = meta.get("files") or td.get("files") or []
+        tfiles = _as_file_list(meta.get("files") or td.get("files"))
         if tfiles:
             with_files += 1
         hits = [f for f in touched if any(_same_file(f, tf) for tf in tfiles)]
