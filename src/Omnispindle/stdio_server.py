@@ -804,11 +804,15 @@ class OmniSpindleStdioServer:
                                 project: Annotated[Optional[str], Field(description="Project name (optional)")] = None,
                                 keywords: Annotated[Optional[List[str]], Field(description="Keywords to search across todos and lessons")] = None,
                                 include_completed: Annotated[bool, Field(description="Include recent completed todos")] = False,
-                                since: Annotated[Optional[int], Field(description="Unix timestamp — adds changed_todos section with items modified after this time")] = None
+                                since: Annotated[Optional[int], Field(description="Unix timestamp — adds changed_todos section with items modified after this time")] = None,
+                                files: Annotated[Optional[List[str]], Field(description="Git-aware: paths being worked on; adds work_context with open todos ranked by metadata.files overlap")] = None,
+                                branch: Annotated[Optional[str], Field(description="Git-aware: current branch; +1 for todos whose metadata.branch matches")] = None,
+                                query: Annotated[Optional[str], Field(description="Git-aware: text to match lessons against (semantic, regex fallback)")] = None,
+                                limit: Annotated[int, Field(description="Git-aware: max todos and lessons in work_context (default 3)")] = 3
                             ) -> str:
-                                """Session startup bundle. Returns slim todo/lesson/session summaries in one call. Use at conversation start. Use 'since' for change detection."""
+                                """Session startup bundle. Returns slim todo/lesson/session summaries in one call. Use at conversation start. Use 'since' for change detection. Pass files/branch (+query, limit) for a git-aware work_context of relevant todos/lessons with reasons; it replaces project_todos."""
                                 ctx = _create_context()
-                                return await func(project=project, keywords=keywords, include_completed=include_completed, since=since, ctx=ctx)
+                                return await func(project=project, keywords=keywords, include_completed=include_completed, since=since, files=files, branch=branch, query=query, limit=limit, ctx=ctx)
                             return get_context_bundle
 
                         elif name == "find_relevant":

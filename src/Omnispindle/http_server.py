@@ -477,10 +477,10 @@ if "link_todos" in selected_tools:
 # RAG / Context tools
 if "get_context_bundle" in selected_tools:
     @mcp.tool()
-    async def get_context_bundle(project: Optional[str] = None, keywords: Optional[List[str]] = None, include_completed: bool = False, since: Optional[int] = None, user_ctx: Optional[Dict[str, Any]] = None, ctx: MCPContext = None):
-        """Bulk fetch recent tasks/lessons/sessions. Returns slim summaries. Use for session initialization."""
+    async def get_context_bundle(project: Optional[str] = None, keywords: Optional[List[str]] = None, include_completed: bool = False, since: Optional[int] = None, files: Optional[List[str]] = None, branch: Optional[str] = None, query: Optional[str] = None, limit: int = 3, user_ctx: Optional[Dict[str, Any]] = None, ctx: MCPContext = None):
+        """Bulk fetch recent tasks/lessons/sessions. Returns slim summaries. Use for session initialization. Pass files/branch (+query, limit) for a git-aware work_context of relevant todos/lessons with reasons; it replaces project_todos."""
         auth_ctx = await get_authenticated_context_from_mcp(ctx, user_ctx)
-        return await tools.get_context_bundle(project=project, keywords=keywords, include_completed=include_completed, since=since, ctx=auth_ctx)
+        return await tools.get_context_bundle(project=project, keywords=keywords, include_completed=include_completed, since=since, files=files, branch=branch, query=query, limit=limit, ctx=auth_ctx)
 
 if "find_relevant" in selected_tools:
     @mcp.tool()

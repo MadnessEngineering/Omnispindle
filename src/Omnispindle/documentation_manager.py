@@ -649,7 +649,12 @@ PARAMETER_HINTS = {
 - project (str, optional): Project name — enables project_todos, recent_completions, blocked_todos, last_session sections
 - keywords (list[str], optional): Search terms — enables related_lessons and keyword_todos sections
 - include_completed (bool, optional): Include recent completed todos (default: false)
-- since (int, optional): Unix timestamp — adds changed_todos section with items modified after this time. Use for session continuity."""
+- since (int, optional): Unix timestamp — adds changed_todos section with items modified after this time. Use for session continuity.
+- files (list[str], optional): Git-aware. Paths being worked on. With branch, adds work_context and omits project_todos
+- branch (str, optional): Git-aware. Current branch (+1 for todos whose metadata.branch matches)
+- query (str, optional): Git-aware. Adds work_context.lessons (semantic, regex fallback with a note)
+- limit (int, optional): Git-aware. Max todos and lessons in work_context (default: 3)
+work_context = {todos[{id,description,status,priority,score,why[]}], lessons[{id,topic,why}], method, note?, counts{scanned,with_files,matched}}. Score = 3 per matching file, +2 in_progress, +1 same branch."""
     },
 
     "preflight_rag": {

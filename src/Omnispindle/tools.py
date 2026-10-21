@@ -3195,11 +3195,102 @@ async def _execute_byo_tool(args):
 
 # --- Context Bundle (Tier 1 RAG) ---
 
+def _norm_path(p: str) -> str:
+    p = str(p).replace("\\", "/")
+    p = re.sub(r"^(\.\./)+", "", p)
+    return re.sub(r"^\./", "", p)
+
+
+def _same_file(a: str, b: str) -> bool:
+    """Port of preload-sampler sameFile: strip leading ../ and ./, then equal or suffix match on a '/' boundary."""
+    a, b = _norm_path(a), _norm_path(b)
+    return a == b or a.endswith("/" + b) or b.endswith("/" + a)
+
+
+def _rank_work_todos(items: List[dict], files: List[str], branch: Optional[str], limit: int):
+    """Score open todos against touched files. Returns (top, with_files_count, matched_count)."""
+    touched = list(dict.fromkeys(files))
+    ranked = []
+    with_files = 0
+    for td in items:
+        meta = td.get("metadata") or {}
+        tfiles = meta.get("files") or td.get("files") or []
+        if tfiles:
+            with_files += 1
+        hits = [f for f in touched if any(_same_file(f, tf) for tf in tfiles)]
+        score = len(hits) * 3
+        why = []
+        if hits:
+            names = ", ".join(h.replace("\\", "/").rsplit("/", 1)[-1] for h in hits[:2])
+            why.append(f"touches {names}" + (f" +{len(hits) - 2}" if len(hits) > 2 else ""))
+        if td.get("status") == "in_progress":
+            score += 2
+            why.append("in progress")
+        if branch and meta.get("branch") == branch:
+            score += 1
+            why.append("same branch")
+        if score > 0:
+            desc = td.get("description") or ""
+            ranked.append({
+                "id": td.get("id"),
+                "description": desc if len(desc) <= 120 else desc[:119] + "\u2026",
+                "status": td.get("status"),
+                "priority": td.get("priority"),
+                "score": score,
+                "why": why,
+            })
+    ranked.sort(key=lambda r: -r["score"])
+    return ranked[:limit], with_files, len(ranked)
+
+
+async def _build_work_context(todos_collection, lessons_collection, project, files, branch, query, limit) -> dict:
+    todo_query = {"status": {"$in": ["pending", "in_progress", "blocked"]}}
+    if project:
+        todo_query["project"] = {"$regex": f"^{re.escape(project)}$", "$options": "i"}
+    proj = {"_id": 0, "id": 1, "description": 1, "priority": 1, "status": 1, "metadata.files": 1, "metadata.branch": 1, "files": 1}
+    items = list(todos_collection.find(todo_query, proj).limit(500))
+    top, with_files, matched = _rank_work_todos(items, files, branch, limit)
+    wc = {"todos": top}
+
+    if query and lessons_collection is not None:
+        try:
+            use_semantic = embeddings.is_available() and lessons_collection.find_one({"embedding": {"$exists": True}})
+            if use_semantic:
+                found = await embeddings.find_similar(query, lessons_collection, "lesson", limit=limit)
+                lessons = [{"id": d.get("id"), "topic": d.get("topic"), "why": f"similarity {round(float(d.get('similarity_score', 0)), 2)}"} for d in found][:limit]
+                wc["lessons"] = lessons
+                wc["method"] = "semantic"
+            else:
+                words = [w for w in re.split(r"\W+", query) if len(w) > 2]
+                lessons = []
+                if words:
+                    pattern = "|".join(re.escape(w) for w in words)
+                    cursor = lessons_collection.find({"$or": [
+                        {"topic": {"$regex": pattern, "$options": "i"}},
+                        {"lesson_learned": {"$regex": pattern, "$options": "i"}},
+                        {"tags": {"$regex": pattern, "$options": "i"}},
+                    ]}, {"_id": 0, "id": 1, "topic": 1}).limit(limit)
+                    lessons = [{"id": d.get("id"), "topic": d.get("topic"), "why": "keyword match"} for d in cursor]
+                wc["lessons"] = lessons
+                wc["method"] = "regex"
+                wc["note"] = "embeddings unavailable; these lessons are keyword matches, not similarity"
+        except Exception as e:
+            logger.error(f"get_context_bundle work_context lessons error: {e}")
+            wc["lessons"] = []
+            wc["lessons_error"] = str(e)
+
+    wc["counts"] = {"scanned": len(items), "with_files": with_files, "matched": matched}
+    return wc
+
 async def get_context_bundle(
     project: Optional[str] = None,
     keywords: Optional[List[str]] = None,
     include_completed: bool = False,
     since: Optional[int] = None,
+    files: Optional[List[str]] = None,
+    branch: Optional[str] = None,
+    query: Optional[str] = None,
+    limit: int = 3,
     ctx: Optional[Context] = None
 ) -> str:
     """
@@ -3207,6 +3298,12 @@ async def get_context_bundle(
     Returns slim summaries (IDs + short fields) — use get_todo/get_lesson for full details.
     Each section degrades gracefully on failure.
     Pass 'since' (unix timestamp) to add a 'changed_todos' section with items modified after that time.
+
+    Git-aware mode: pass 'files' (paths being worked on) and/or 'branch' to add a 'work_context'
+    section: open todos (pending/in_progress/blocked) ranked by overlap between 'files' and the
+    todo's metadata.files (+ in_progress, + same metadata.branch), each with a 'why' list.
+    'query' adds lessons (semantic, regex fallback). 'limit' caps todos and lessons (default 3).
+    When work_context is present the recency-based 'project_todos' section is omitted.
     """
     bundle = {}
     sections_returned = []
@@ -3225,8 +3322,22 @@ async def get_context_bundle(
         logger.error(f"get_context_bundle: DB connection failed: {e}")
         return create_response(False, message=f"Database connection failed: {str(e)}")
 
+    git_aware = bool(files) or bool(branch)
+
+    # 0. Work context (git-aware): replaces the recency-based project_todos section
+    if git_aware:
+        try:
+            bundle["work_context"] = await _build_work_context(
+                todos_collection, lessons_collection, project, files or [], branch, query, limit
+            )
+            sections_returned.append("work_context")
+        except Exception as e:
+            logger.error(f"get_context_bundle work_context error: {e}")
+            bundle["work_context"] = {"error": str(e)}
+            sections_failed.append("work_context")
+
     # 1. Project todos (pending)
-    if project:
+    if project and not git_aware:
         try:
             cursor = todos_collection.find(
                 {"project": {"$regex": f"^{re.escape(project)}$", "$options": "i"}, "status": "pending"},
@@ -3380,6 +3491,12 @@ async def get_context_bundle(
         query_desc.append("include_completed=true")
     if since is not None:
         query_desc.append(f"since={since}")
+    if files:
+        query_desc.append(f"files={len(files)}")
+    if branch:
+        query_desc.append(f"branch={branch}")
+    if query:
+        query_desc.append(f"query={query}")
 
     response = {
         "bundle": bundle,

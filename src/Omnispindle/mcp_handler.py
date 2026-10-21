@@ -582,14 +582,18 @@ TOOL_SCHEMAS = {
     },
     "get_context_bundle": {
         "name": "get_context_bundle",
-        "description": "Session startup bundle. Returns slim todo/lesson/session summaries in one call. Use at conversation start. Use 'since' for change detection.",
+        "description": "Session startup bundle. Returns slim todo/lesson/session summaries in one call. Use at conversation start. Use 'since' for change detection. Pass files/branch (+query, limit) for a git-aware work_context of relevant todos/lessons with reasons; it replaces project_todos.",
         "inputSchema": {
             "type": "object",
             "properties": {
                 "project": {"type": "string", "description": "Project name (optional)"},
                 "keywords": {"type": "array", "items": {"type": "string"}, "description": "Keywords to search across todos and lessons (optional)"},
                 "include_completed": {"type": "boolean", "description": "Include recent completed todos (default: false)"},
-                "since": {"type": "number", "description": "Unix timestamp — adds changed_todos section with items modified after this time"}
+                "since": {"type": "number", "description": "Unix timestamp — adds changed_todos section with items modified after this time"},
+                "files": {"type": "array", "items": {"type": "string"}, "description": "Git-aware: paths being worked on. Adds work_context: open todos ranked by metadata.files overlap"},
+                "branch": {"type": "string", "description": "Git-aware: current branch; +1 for todos whose metadata.branch matches"},
+                "query": {"type": "string", "description": "Git-aware: text to match lessons against (semantic, regex fallback)"},
+                "limit": {"type": "number", "description": "Git-aware: max todos and lessons in work_context (default: 3)"}
             }
         }
     },
