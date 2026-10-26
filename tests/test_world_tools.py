@@ -238,6 +238,16 @@ def test_the_header_parser_takes_only_a_bearer_token():
     assert _credential_from_request(object()) is None, "a request without headers is not a crash"
 
 
+def test_an_api_key_forwarded_by_the_backend_proxy_is_read_from_its_own_header():
+    # backend/routes/mcp.js strips an omni_ key from Authorization and sends it here instead
+    assert _credential_from_request(_Req({"x-forwarded-credential": "omni_abc123"})) == "omni_abc123"
+    assert _credential_from_request(_Req({"x-forwarded-credential": "  omni_abc123 "})) == "omni_abc123"
+    assert _credential_from_request(_Req({"x-forwarded-credential": "   "})) is None
+    assert _credential_from_request(_Req({"authorization": "Bearer aaa.bbb.ccc", "x-forwarded-credential": "omni_other"})) == "aaa.bbb.ccc", \
+        "when a bearer is present it wins"
+    assert _credential_from_request(_Req({"authorization": "Basic dXNlcjpwYXNz", "x-forwarded-credential": "omni_abc"})) == "omni_abc"
+
+
 def test_a_world_tool_authenticates_from_the_context_credential(monkeypatch):
     # No monkeypatched _require_api_auth here: the real one, fed only by ctx.credential
     seen = {}

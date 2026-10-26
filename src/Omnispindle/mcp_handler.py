@@ -26,18 +26,26 @@ DEFAULT_REMOTE_LOADOUT = "basic"
 
 
 def _credential_from_request(request) -> Optional[str]:
-    """The caller's raw bearer credential from the Authorization header, or None.
+    """The caller's raw credential, or None.
 
     Tools built on api_tools call the Inventorium REST API AS the caller, so they need the
     credential itself, not just the verified user. It goes on Context.credential (never on
-    `user`, which loggers see)."""
+    `user`, which loggers see).
+
+    A JWT caller reaches this server with the Authorization bearer intact. An API-key caller comes
+    through the Inventorium backend proxy, which strips a key from Authorization (this server does not
+    take one there) and forwards it as X-Forwarded-Credential instead (backend/routes/mcp.js
+    forwardAuthHeaders). The bearer wins when both are present."""
     try:
         header = request.headers.get("authorization") or ""
+        forwarded = (request.headers.get("x-forwarded-credential") or "").strip()
     except Exception:
         return None
     scheme, _, token = header.partition(" ")
     token = token.strip()
-    return token if scheme.lower() == "bearer" and token else None
+    if scheme.lower() == "bearer" and token:
+        return token
+    return forwarded or None
 
 
 # Protocol versions this handler can serve. Newest first — PROTOCOL_VERSION is what
