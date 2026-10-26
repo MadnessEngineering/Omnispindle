@@ -9,7 +9,7 @@ import logging
 from typing import Union, List, Dict, Optional, Any
 from datetime import datetime, timezone
 
-from .api_client import MadnessAPIClient, APIResponse, get_default_client, get_cached_client
+from .api_client import MadnessAPIClient, APIResponse, get_default_client, get_cached_client, loopback_api_url
 from .context import Context
 from .utils import create_response
 from .response_shaping import (
@@ -565,7 +565,7 @@ async def _world_push(kind: str, payload: Dict[str, Any], ctx: Optional[Context]
     """Send one world event and say plainly whether anyone heard it."""
     try:
         auth_token, api_key = _require_api_auth(ctx)
-        client = await get_cached_client(auth_token=auth_token, api_key=api_key)
+        client = await get_cached_client(auth_token=auth_token, api_key=api_key, base_url=loopback_api_url())
         response = await client.world_push(kind, payload)
         if not response.success:
             return create_response(False, message=response.error or "Failed to push to SwarmDesk")

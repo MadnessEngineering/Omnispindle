@@ -352,19 +352,32 @@ async def get_default_client() -> MadnessAPIClient:
 # Per-token persistent client cache — reuses TCP/TLS connections across tool calls
 _client_cache: Dict[str, MadnessAPIClient] = {}
 
-async def get_cached_client(auth_token: Optional[str] = None, api_key: Optional[str] = None) -> MadnessAPIClient:
+async def get_cached_client(auth_token: Optional[str] = None, api_key: Optional[str] = None,
+                            base_url: Optional[str] = None) -> MadnessAPIClient:
     """Return a persistent MadnessAPIClient reusing the underlying aiohttp session.
 
-    Keyed by token so token refreshes get a fresh session; all calls within
+    Keyed by token (and base URL) so token refreshes get a fresh session; all calls within
     the same token share one connection pool, avoiding per-call TLS handshakes.
     """
-    cache_key = auth_token or api_key or "__default__"
+    cache_key = f"{base_url or ''}|{auth_token or api_key or '__default__'}"
     client = _client_cache.get(cache_key)
     if client is None:
-        client = MadnessAPIClient(auth_token=auth_token, api_key=api_key)
+        client = MadnessAPIClient(base_url=base_url, auth_token=auth_token, api_key=api_key)
         await client._ensure_session()
         _client_cache[cache_key] = client
     return client
+
+
+def loopback_api_url() -> Optional[str]:
+    """Where tools that must reach the Inventorium backend FROM the same host should call, or None.
+
+    On eaws the public MADNESS_API_URL goes out through Cloudflare, which answers a server-to-server
+    request from there with its 'Just a moment...' challenge (403) and, in hybrid mode, quietly sends
+    the todo tools to the database fallback. MADNESS_LOOPBACK_API_URL (e.g. http://localhost:9192/api)
+    lets ONLY the tools that ask for it (the world tools) skip the edge, without moving every other
+    tool from its fallback to the API. Unset (a laptop, stdio) means the normal URL.
+    """
+    return (os.getenv("MADNESS_LOOPBACK_API_URL") or "").strip() or None
 
 
 async def close_all_cached_clients() -> None:

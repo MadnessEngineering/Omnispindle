@@ -256,6 +256,47 @@ def test_a_world_tool_authenticates_from_the_context_credential(monkeypatch):
         return _FakeClient()
     monkeypatch.setattr(api_tools, "get_cached_client", _fake_get_client)
     out = _run(api_tools.arrange_nodes("group them", ctx=Context(user={"email": "d@x"}, credential="omni_abc123")))
-    assert out["success"] is True and seen == {"auth_token": None, "api_key": "omni_abc123"}
+    assert out["success"] is True and seen == {"auth_token": None, "api_key": "omni_abc123", "base_url": None}
     out = _run(api_tools.arrange_nodes("group them", ctx=Context(user={"email": "d@x"})))
     assert out["success"] is False and "Authentication required" in out["message"]
+
+
+# ── the loopback URL: skip Cloudflare from the same host, for the world tools only ───────────
+# From eaws the public API URL answers with Cloudflare's 'Just a moment...' (403). Found 2026-10-26.
+
+from Omnispindle import api_client as api_client_module
+
+
+def test_loopback_url_is_read_from_the_environment_and_blank_means_none(monkeypatch):
+    monkeypatch.delenv("MADNESS_LOOPBACK_API_URL", raising=False)
+    assert api_client_module.loopback_api_url() is None
+    monkeypatch.setenv("MADNESS_LOOPBACK_API_URL", "  http://localhost:9192/api ")
+    assert api_client_module.loopback_api_url() == "http://localhost:9192/api"
+    monkeypatch.setenv("MADNESS_LOOPBACK_API_URL", "   ")
+    assert api_client_module.loopback_api_url() is None
+
+
+def test_a_world_tool_asks_for_the_loopback_base_url(monkeypatch):
+    monkeypatch.setenv("MADNESS_LOOPBACK_API_URL", "http://localhost:9192/api")
+    seen = {}
+    async def _fake_get_client(**kw):
+        seen.update(kw)
+        return _FakeClient()
+    monkeypatch.setattr(api_tools, "get_cached_client", _fake_get_client)
+    monkeypatch.setattr(api_tools, "_require_api_auth", lambda ctx: (None, "omni_abc"))
+    _run(api_tools.show_in_world(highlights=["t1"]))
+    assert seen["base_url"] == "http://localhost:9192/api"
+
+
+def test_the_client_cache_keeps_a_loopback_client_apart_from_the_public_one():
+    async def go():
+        public = await api_client_module.get_cached_client(api_key="omni_cache_test")
+        loop = await api_client_module.get_cached_client(api_key="omni_cache_test", base_url="http://localhost:9192/api")
+        again = await api_client_module.get_cached_client(api_key="omni_cache_test", base_url="http://localhost:9192/api")
+        try:
+            return public, loop, again
+        finally:
+            await api_client_module.close_all_cached_clients()
+    public, loop, again = asyncio.run(go())
+    assert public is not loop and loop is again
+    assert loop.base_url == "http://localhost:9192/api" and public.base_url != loop.base_url

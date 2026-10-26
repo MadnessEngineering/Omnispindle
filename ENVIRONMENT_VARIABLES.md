@@ -106,6 +106,17 @@ export MCP_USER_EMAIL=user@example.com
 export MADNESS_API_URL=https://madnessinteractive.cc/api
 ```
 
+### MADNESS_LOOPBACK_API_URL
+**Purpose**: A same-host API URL for the few tools that must call the Inventorium backend as the caller (the world tools: `arrange_nodes`, `show_in_world`)  
+**Values**: Valid URL, or unset  
+**Default**: unset (they use `MADNESS_API_URL`)  
+**Description**: On the eaws server the public `MADNESS_API_URL` goes out through Cloudflare, which answers a server-to-server request from there with its "Just a moment..." challenge (HTTP 403). Setting this to the backend's own address skips the edge for the tools that read it. It is deliberately NOT the same variable as `MADNESS_API_URL`: in hybrid mode changing that one would move every todo tool from its database fallback to the API. Set it in the server's `.env` (the app loads it and it overrides nothing set elsewhere).
+
+**Example** (eaws):
+```bash
+MADNESS_LOOPBACK_API_URL=http://localhost:9192/api
+```
+
 ## Database Configuration (Local/Hybrid Modes)
 
 ### MONGODB_URI
