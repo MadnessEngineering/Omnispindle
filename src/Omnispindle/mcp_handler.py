@@ -24,6 +24,22 @@ logger = logging.getLogger(__name__)
 # a tool name can still call it — this shrinks discovery, not capability.
 DEFAULT_REMOTE_LOADOUT = "basic"
 
+
+def _credential_from_request(request) -> Optional[str]:
+    """The caller's raw bearer credential from the Authorization header, or None.
+
+    Tools built on api_tools call the Inventorium REST API AS the caller, so they need the
+    credential itself, not just the verified user. It goes on Context.credential (never on
+    `user`, which loggers see)."""
+    try:
+        header = request.headers.get("authorization") or ""
+    except Exception:
+        return None
+    scheme, _, token = header.partition(" ")
+    token = token.strip()
+    return token if scheme.lower() == "bearer" and token else None
+
+
 # Protocol versions this handler can serve. Newest first — PROTOCOL_VERSION is what
 # we announce when the client asks for something we don't speak (or asks for nothing).
 # We stay conservative here: claiming a version means claiming its semantics, and the
@@ -1059,7 +1075,7 @@ async def mcp_handler(request: Request, get_current_user: Callable[[], Coroutine
             from .context import Context
 
             # Create context for the user
-            ctx = Context(user=user)
+            ctx = Context(user=user, credential=_credential_from_request(request))
 
             tool_functions = get_tool_functions()
 

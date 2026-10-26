@@ -189,3 +189,63 @@ def test_the_remote_schema_names_the_required_argument():
     props = TOOL_SCHEMAS["show_in_world"]["inputSchema"]["properties"]
     assert set(props) == {"highlights", "links", "notes", "title", "focus"}
     assert "required" not in TOOL_SCHEMAS["show_in_world"]["inputSchema"]
+
+
+# ── the credential reaches api_tools over the remote route ──────────────────
+# Found 2026-10-26 by calling the tools over real MCP JSON-RPC with an API key: "Authentication
+# required". The handler built Context(user=<verified user>) and the user never carries the raw key,
+# so EVERY api_tools tool (sessions too) failed for a remote API-key connection.
+
+from Omnispindle.context import Context
+from Omnispindle.mcp_handler import _credential_from_request
+
+
+class _Req:
+    def __init__(self, headers):
+        self.headers = headers
+
+
+def test_an_api_key_on_the_context_becomes_the_api_key():
+    ctx = Context(user={"email": "d@x"}, credential="omni_abc123")
+    assert api_tools._get_auth_from_context(ctx) == (None, "omni_abc123")
+
+
+def test_a_jwt_on_the_context_becomes_the_access_token():
+    ctx = Context(user={"email": "d@x"}, credential="aaa.bbb.ccc")
+    assert api_tools._get_auth_from_context(ctx) == ("aaa.bbb.ccc", None)
+
+
+def test_credentials_already_on_the_user_win_and_stdio_is_unchanged():
+    assert api_tools._get_auth_from_context(Context(user={"api_key": "omni_user"}, credential="omni_other")) == (None, "omni_user")
+    assert api_tools._get_auth_from_context(Context(user={"access_token": "tok"})) == ("tok", None)
+    assert api_tools._get_auth_from_context(Context(user={"email": "d@x"})) == (None, None)
+    assert api_tools._get_auth_from_context(None) == (None, None)
+
+
+def test_the_credential_never_shows_in_a_printed_context_or_the_user():
+    user = {"email": "d@x", "auth_method": "api_key"}
+    ctx = Context(user=user, credential="omni_SECRETSECRET")
+    assert "SECRET" not in repr(ctx) and "SECRET" not in str(ctx)
+    assert "SECRET" not in json.dumps(ctx.user), "the raw key must not be put on the user dict (it is handed to loggers)"
+
+
+def test_the_header_parser_takes_only_a_bearer_token():
+    assert _credential_from_request(_Req({"authorization": "Bearer omni_abc"})) == "omni_abc"
+    assert _credential_from_request(_Req({"authorization": "bearer  aaa.bbb.ccc "})) == "aaa.bbb.ccc"
+    for bad in ["", "Bearer", "Bearer   ", "Basic dXNlcjpwYXNz", "omni_abc", None]:
+        headers = {} if bad is None else {"authorization": bad}
+        assert _credential_from_request(_Req(headers)) is None, bad
+    assert _credential_from_request(object()) is None, "a request without headers is not a crash"
+
+
+def test_a_world_tool_authenticates_from_the_context_credential(monkeypatch):
+    # No monkeypatched _require_api_auth here: the real one, fed only by ctx.credential
+    seen = {}
+    async def _fake_get_client(**kw):
+        seen.update(kw)
+        return _FakeClient()
+    monkeypatch.setattr(api_tools, "get_cached_client", _fake_get_client)
+    out = _run(api_tools.arrange_nodes("group them", ctx=Context(user={"email": "d@x"}, credential="omni_abc123")))
+    assert out["success"] is True and seen == {"auth_token": None, "api_key": "omni_abc123"}
+    out = _run(api_tools.arrange_nodes("group them", ctx=Context(user={"email": "d@x"})))
+    assert out["success"] is False and "Authentication required" in out["message"]

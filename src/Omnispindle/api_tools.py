@@ -42,7 +42,17 @@ def _get_auth_from_context(ctx: Optional[Context]) -> tuple[Optional[str], Optio
         auth_token = ctx.user.get("access_token")
         # Or API key if provided
         api_key = ctx.user.get("api_key")
-    
+
+    # The remote JSON-RPC route verifies the caller but keeps the raw credential off `user` (it is
+    # handed to loggers); it travels on ctx.credential. Without this every api_tools tool (sessions,
+    # world) failed "Authentication required" for an API-key connection.
+    credential = getattr(ctx, "credential", None) if ctx else None
+    if credential and not auth_token and not api_key:
+        if credential.startswith("omni_"):
+            api_key = credential
+        else:
+            auth_token = credential
+
     return auth_token, api_key
 
 def _require_api_auth(ctx: Optional[Context]) -> tuple[Optional[str], Optional[str]]:
