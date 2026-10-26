@@ -363,6 +363,20 @@ topic+tags only, brief=false to force full text."""
         "full": "Link an Omnispindle todo to a chat session. Parameters: todo_id, session_id. Adds todo to session.linked_todo_ids (no duplicates) and updates todo metadata with linked_session_ids for downstream tooling."
     },
 
+    "arrange_nodes": {
+        "minimal": "Arrange todos in SwarmDesk",
+        "basic": "Ask the user's open SwarmDesk to propose a todo arrangement. Parameters: request (plain words), presenter.",
+        "admin": "Push an arrange request to the user's open SwarmDesk tab. It plans on their own AI key and shows a keep/next/revert proposal. delivered 0 = no tab open.",
+        "full": "Ask the user's open SwarmDesk to propose how their todos are arranged. Parameters: request (required, up to 500 characters, plain words such as 'group by what blocks the release'), presenter (shown as who asked, default Claude). The page plans the grouping with the user's own AI provider and shows it as a keep / next / revert proposal: nothing moves or saves until the user presses Keep, and the model proposes groups of todos, never coordinates. Needs SwarmDesk open on /dashboard with the toolbar chip reading Linked; if no tab is open the result says delivered 0 and nothing is queued. Requests arrive at most one per 3 seconds, and each spends the user's model tokens."
+    },
+
+    "show_in_world": {
+        "minimal": "Point at things in SwarmDesk",
+        "basic": "Highlight todos or files in the user's open SwarmDesk, with links and notes.",
+        "admin": "Push a show event (highlights, links, notes) to the user's open SwarmDesk. Ephemeral; nothing saved. Overlay not built yet: the page only shows a notice. delivered 0 = no tab open.",
+        "full": "Point at things in the user's open SwarmDesk. Parameters: highlights (todo ids or file paths), links (objects {a, b, label}: a labelled line between two todos or files), notes (objects {target, text}), title, focus (one todo id or file path to fly to). At least one highlight, link or note is required. Ephemeral and never saved. NOTE: the overlay that draws this is not built yet, so today the page only shows a notice that the event arrived. delivered 0 in the result means no SwarmDesk tab is open and nothing was queued."
+    },
+
     "inventorium_sessions_fork": {
         "minimal": "Fork session",
         "basic": "Clone session (optional: copy history/todos)",

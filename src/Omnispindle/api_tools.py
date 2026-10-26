@@ -527,6 +527,90 @@ async def inventorium_sessions_create(project: str, title: Optional[str] = None,
         logger.error(f"Failed to create chat session: {str(e)}")
         return create_response(False, message=f"API error: {str(e)}")
 
+# --- World tools: reach the user's open SwarmDesk (quest bd3da24b) -----------------------------
+# The browser listens on GET /api/world/stream while SwarmDesk is the page the user is on. These tools
+# push to it with POST /api/world/push. INTENT only: the agent says what it wants arranged or shown, the
+# page validates it against the board and places it, and nothing is saved until the user presses Keep.
+
+WORLD_REQUEST_MAX = 500          # backend/services/worldEvents.js clips at this; refuse rather than cut
+WORLD_NOT_DELIVERED = (
+    "NOT delivered: no SwarmDesk tab is open for this user, and nothing was queued. "
+    "Ask them to open SwarmDesk (press 0 on /dashboard) and check the toolbar chip says 'Linked', then try again."
+)
+
+def _coerce_list(value: Any, name: str) -> list:
+    """Some MCP clients send a list as a JSON string; accept both, refuse anything else."""
+    if value is None or value == "":
+        return []
+    if isinstance(value, str):
+        try:
+            value = json.loads(value)
+        except json.JSONDecodeError:
+            raise ValueError(f"{name} must be a list (or a JSON list written as text)")
+    if not isinstance(value, list):
+        raise ValueError(f"{name} must be a list")
+    return value
+
+async def _world_push(kind: str, payload: Dict[str, Any], ctx: Optional[Context]) -> str:
+    """Send one world event and say plainly whether anyone heard it."""
+    try:
+        auth_token, api_key = _require_api_auth(ctx)
+        client = await get_cached_client(auth_token=auth_token, api_key=api_key)
+        response = await client.world_push(kind, payload)
+        if not response.success:
+            return create_response(False, message=response.error or "Failed to push to SwarmDesk")
+        data = response.data if isinstance(response.data, dict) else {}
+        delivered = 1 if data.get("delivered") else 0
+        result = {"delivered": delivered, "event_id": data.get("id"), "kind": kind}
+        if delivered:
+            return create_response(True, result, message="Delivered to the user's open SwarmDesk tab")
+        return create_response(True, result, message=WORLD_NOT_DELIVERED)
+    except Exception as e:
+        logger.error(f"Failed to push {kind} to the world stream: {str(e)}")
+        return create_response(False, message=f"API error: {str(e)}")
+
+async def arrange_nodes(request: str, presenter: Optional[str] = "Claude", ctx: Optional[Context] = None) -> str:
+    """Ask the user's open SwarmDesk to propose a todo arrangement from a request in plain words."""
+    text = (request or "").strip() if isinstance(request, str) else ""
+    if not text:
+        return create_response(False, message="request is required: say how the todos should be grouped")
+    if len(text) > WORLD_REQUEST_MAX:
+        return create_response(False, message=f"request is {len(text)} characters; the limit is {WORLD_REQUEST_MAX}. Shorten it.")
+    payload: Dict[str, Any] = {"request": text}
+    who = (presenter or "").strip() if isinstance(presenter, str) else ""
+    if who:
+        payload["presenter"] = who
+    return await _world_push("arrange-request", payload, ctx)
+
+async def show_in_world(highlights: Optional[list] = None, links: Optional[list] = None, notes: Optional[list] = None,
+                        title: Optional[str] = None, focus: Optional[str] = None, ctx: Optional[Context] = None) -> str:
+    """Point at todos or files in the user's open SwarmDesk, with labelled links and short notes."""
+    try:
+        highlights = _coerce_list(highlights, "highlights")
+        links = _coerce_list(links, "links")
+        notes = _coerce_list(notes, "notes")
+    except ValueError as e:
+        return create_response(False, message=str(e))
+
+    for i, h in enumerate(highlights):
+        if not isinstance(h, str) or not h.strip():
+            return create_response(False, message=f"highlights[{i}] must be a todo id or file path (text)")
+    for i, l in enumerate(links):
+        if not isinstance(l, dict) or not str(l.get("a") or "").strip() or not str(l.get("b") or "").strip():
+            return create_response(False, message=f"links[{i}] must be an object with 'a' and 'b' (todo ids or file paths) and an optional 'label'")
+    for i, n in enumerate(notes):
+        if not isinstance(n, dict) or not str(n.get("target") or "").strip() or not str(n.get("text") or "").strip():
+            return create_response(False, message=f"notes[{i}] must be an object with 'target' (todo id or file path) and 'text'")
+    if not (highlights or links or notes):
+        return create_response(False, message="show_in_world needs at least one highlight, link or note")
+
+    payload: Dict[str, Any] = {"highlights": highlights, "links": links, "notes": notes}
+    if isinstance(title, str) and title.strip():
+        payload["title"] = title.strip()
+    if isinstance(focus, str) and focus.strip():
+        payload["focus"] = focus.strip()
+    return await _world_push("show", payload, ctx)
+
 async def inventorium_sessions_spawn(parent_session_id: str, prompt: str, todo_id: Optional[str] = None,
                                      title: Optional[str] = None, ctx: Optional[Context] = None) -> str:
     """Spawn a child session (Phase 2 genealogy stub)."""

@@ -71,6 +71,8 @@ TOOL_FUNCTION_MAP = {
     "list_quests": tools_module.list_quests,
     "link_quest": tools_module.link_quest,
     "update_quest": tools_module.update_quest,
+    "arrange_nodes": tools_module.arrange_nodes,
+    "show_in_world": tools_module.show_in_world,
 }
 
 # Canonical set of valid todo statuses — update here when statuses change,

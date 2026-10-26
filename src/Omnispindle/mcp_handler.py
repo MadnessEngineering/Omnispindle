@@ -580,6 +580,32 @@ TOOL_SCHEMAS = {
             "required": ["todo_id", "session_id"]
         }
     },
+    "arrange_nodes": {
+        "name": "arrange_nodes",
+        "description": "Ask the user's open SwarmDesk to propose a todo arrangement from plain words. They keep, skip or revert it; nothing saves until Keep. Result delivered:0 means no SwarmDesk tab is open (nothing queued).",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "request": {"type": "string", "description": "How to arrange the todos, in plain words, up to 500 characters (e.g. 'group by what blocks the release')"},
+                "presenter": {"type": "string", "description": "Who is asking, shown to the user (default: Claude)"}
+            },
+            "required": ["request"]
+        }
+    },
+    "show_in_world": {
+        "name": "show_in_world",
+        "description": "Point at todos or files in the user's open SwarmDesk with labelled links and short notes. Ephemeral, never saved. The drawing overlay is not built yet, so today the page only shows a notice. Result delivered:0 means no tab is open.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "highlights": {"type": "array", "items": {"type": "string"}, "description": "Todo ids or file paths to highlight"},
+                "links": {"type": "array", "items": {"type": "object"}, "description": "Labelled lines between two things: objects {a, b, label}"},
+                "notes": {"type": "array", "items": {"type": "object"}, "description": "Short notes pinned to a thing: objects {target, text}"},
+                "title": {"type": "string", "description": "A short title for the view (optional)"},
+                "focus": {"type": "string", "description": "One todo id or file path to fly to (optional)"}
+            }
+        }
+    },
     "get_context_bundle": {
         "name": "get_context_bundle",
         "description": "Session startup bundle. Returns slim todo/lesson/session summaries in one call. Use at conversation start. Use 'since' for change detection. Pass files/branch (+query, limit) for a git-aware work_context of relevant todos/lessons with reasons; it replaces project_todos.",
@@ -881,6 +907,9 @@ def _build_tool_functions() -> Dict[str, Any]:
         "inventorium_sessions_genealogy": tools.inventorium_sessions_genealogy,
         "inventorium_sessions_tree": tools.inventorium_sessions_tree,
         "inventorium_todos_link_session": tools.inventorium_todos_link_session,
+        # World tools (reach the user's open SwarmDesk)
+        "arrange_nodes": tools.arrange_nodes,
+        "show_in_world": tools.show_in_world,
         # Context bundle (Tier 1 RAG)
         "get_context_bundle": tools.get_context_bundle,
         # Semantic search (Tier 2 RAG)

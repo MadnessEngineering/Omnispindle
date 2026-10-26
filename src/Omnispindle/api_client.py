@@ -292,6 +292,14 @@ class MadnessAPIClient:
         """Fetch a specific chat session by ID."""
         return await self._make_request("GET", f"/chat-sessions/{session_id}")
 
+    async def world_push(self, kind: str, payload: Dict[str, Any]) -> APIResponse:
+        """Push an event to the user's open SwarmDesk tab (POST /world/push).
+
+        The reply is {success, delivered: 0|1, id, message}; delivered 0 means no SwarmDesk tab
+        is connected and nothing was queued.
+        """
+        return await self._make_request("POST", "/world/push", json={"kind": kind, "payload": payload})
+
     async def create_chat_session(self, payload: Dict[str, Any]) -> APIResponse:
         """Create a chat session."""
         return await self._make_request("POST", "/chat-sessions", json=payload)

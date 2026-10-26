@@ -354,6 +354,14 @@ class OmniSpindleStdioServer:
                 "func": tools.inventorium_todos_link_session,
                 "doc": get_tool_doc("inventorium_todos_link_session")
             },
+            "arrange_nodes": {
+                "func": tools.arrange_nodes,
+                "doc": get_tool_doc("arrange_nodes")
+            },
+            "show_in_world": {
+                "func": tools.show_in_world,
+                "doc": get_tool_doc("show_in_world")
+            },
             "inventorium_sessions_fork": {
                 "func": tools.inventorium_sessions_fork,
                 "doc": get_tool_doc("inventorium_sessions_fork")
@@ -762,6 +770,31 @@ class OmniSpindleStdioServer:
                                 ctx = _create_context()
                                 return await func(todo_id, session_id, ctx=ctx)
                             return inventorium_todos_link_session
+
+                        elif name == "arrange_nodes":
+                            @self.server.tool(description=docstring)
+                            async def arrange_nodes(
+                                request: Annotated[str, Field(description="How to arrange the todos, in plain words (max 500 characters)")],
+                                presenter: Annotated[Optional[str], Field(description="Who is asking, shown to the user")] = "Claude"
+                            ) -> str:
+                                """Ask the open SwarmDesk to propose a todo arrangement. delivered 0 = no tab open."""
+                                ctx = _create_context()
+                                return await func(request, presenter, ctx=ctx)
+                            return arrange_nodes
+
+                        elif name == "show_in_world":
+                            @self.server.tool(description=docstring)
+                            async def show_in_world(
+                                highlights: Annotated[Optional[List[str]], Field(description="Todo ids or file paths to highlight")] = None,
+                                links: Annotated[Optional[List[Dict[str, Any]]], Field(description="Labelled lines: objects {a, b, label}")] = None,
+                                notes: Annotated[Optional[List[Dict[str, Any]]], Field(description="Notes pinned to a thing: objects {target, text}")] = None,
+                                title: Annotated[Optional[str], Field(description="Short title for the view")] = None,
+                                focus: Annotated[Optional[str], Field(description="One todo id or file path to fly to")] = None
+                            ) -> str:
+                                """Point at things in the open SwarmDesk. Ephemeral; overlay not built yet. delivered 0 = no tab open."""
+                                ctx = _create_context()
+                                return await func(highlights, links, notes, title, focus, ctx=ctx)
+                            return show_in_world
 
                         elif name == "inventorium_sessions_fork":
                             @self.server.tool(description=docstring)

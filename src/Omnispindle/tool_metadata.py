@@ -39,6 +39,7 @@ class ToolGroup(str, Enum):
     QUESTS = "quests"
     RAG = "rag"                  # context assembly + semantic retrieval
     SESSIONS = "sessions"        # Inventorium chat sessions
+    WORLD = "world"              # reach the user's open SwarmDesk (arrange, show)
     JOURNAL = "journal"          # cross-agent journal
     ADMIN = "admin"              # audit logs, projects, explanations, utilities
     CUSTOM_CODE = "custom_code"  # arbitrary execution — local only
@@ -92,6 +93,8 @@ TOOL_ACCESS_LEVELS: Dict[str, ToolAccessLevel] = {
     "inventorium_sessions_genealogy": ToolAccessLevel.REMOTE_SAFE,
     "inventorium_sessions_tree": ToolAccessLevel.REMOTE_SAFE,
     "inventorium_todos_link_session": ToolAccessLevel.REMOTE_SAFE,
+    "arrange_nodes": ToolAccessLevel.REMOTE_SAFE,
+    "show_in_world": ToolAccessLevel.REMOTE_SAFE,
     "get_context_bundle": ToolAccessLevel.REMOTE_SAFE,
     "find_relevant": ToolAccessLevel.REMOTE_SAFE,
     "preflight_rag": ToolAccessLevel.REMOTE_SAFE,
@@ -156,6 +159,10 @@ TOOL_GROUPS: Dict[str, ToolGroup] = {
     "inventorium_sessions_genealogy": ToolGroup.SESSIONS,
     "inventorium_sessions_tree": ToolGroup.SESSIONS,
     "inventorium_todos_link_session": ToolGroup.SESSIONS,
+
+    # World tools — push to the user's open SwarmDesk (a Pro feature)
+    "arrange_nodes": ToolGroup.WORLD,
+    "show_in_world": ToolGroup.WORLD,
 
     # Agent journal
     "write_agent_journal": ToolGroup.JOURNAL,
@@ -297,6 +304,9 @@ TOOL_TIERS: Dict[str, ToolTier] = {
     "inventorium_sessions_genealogy": ToolTier.PRO,
     "inventorium_sessions_tree": ToolTier.PRO,
     "inventorium_todos_link_session": ToolTier.PRO,
+    # World tools: SwarmDesk itself is Pro, so a tool whose only destination is SwarmDesk is too
+    "arrange_nodes": ToolTier.PRO,
+    "show_in_world": ToolTier.PRO,
     # Semantic search / RAG (pro only)
     "find_relevant": ToolTier.PRO,
     "preflight_rag": ToolTier.PRO,

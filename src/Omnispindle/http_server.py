@@ -423,6 +423,21 @@ if "inventorium_todos_link_session" in selected_tools:
         auth_ctx = await get_authenticated_context_from_mcp(ctx, user_ctx)
         return await tools.inventorium_todos_link_session(todo_id, session_id, ctx=auth_ctx)
 
+# World tools: reach the user's open SwarmDesk
+if "arrange_nodes" in selected_tools:
+    @mcp.tool()
+    async def arrange_nodes(request: str, presenter: Optional[str] = "Claude", user_ctx: Optional[Dict[str, Any]] = None, ctx: MCPContext = None):
+        """Ask the user's open SwarmDesk to propose a todo arrangement from plain words. They keep or revert it. delivered:0 = no tab open."""
+        auth_ctx = await get_authenticated_context_from_mcp(ctx, user_ctx)
+        return await tools.arrange_nodes(request, presenter, ctx=auth_ctx)
+
+if "show_in_world" in selected_tools:
+    @mcp.tool()
+    async def show_in_world(highlights: Optional[List[str]] = None, links: Optional[List[Dict[str, Any]]] = None, notes: Optional[List[Dict[str, Any]]] = None, title: Optional[str] = None, focus: Optional[str] = None, user_ctx: Optional[Dict[str, Any]] = None, ctx: MCPContext = None):
+        """Point at todos/files in the user's open SwarmDesk with links and notes. Ephemeral. Overlay not built yet (notice only). delivered:0 = no tab open."""
+        auth_ctx = await get_authenticated_context_from_mcp(ctx, user_ctx)
+        return await tools.show_in_world(highlights, links, notes, title, focus, ctx=auth_ctx)
+
 # Quest tools
 if "create_quest" in selected_tools:
     @mcp.tool()

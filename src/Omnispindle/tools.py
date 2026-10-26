@@ -3768,6 +3768,15 @@ async def inventorium_sessions_spawn(parent_session_id: str, prompt: str, todo_i
                                      title: Optional[str] = None, ctx: Optional[Context] = None) -> str:
     return await api_tools.inventorium_sessions_spawn(parent_session_id, prompt, todo_id, title, ctx=ctx)
 
+# --- World tools: reach the user's open SwarmDesk ---
+
+async def arrange_nodes(request: str, presenter: Optional[str] = "Claude", ctx: Optional[Context] = None) -> str:
+    return await api_tools.arrange_nodes(request, presenter, ctx=ctx)
+
+async def show_in_world(highlights: Optional[list] = None, links: Optional[list] = None, notes: Optional[list] = None,
+                        title: Optional[str] = None, focus: Optional[str] = None, ctx: Optional[Context] = None) -> str:
+    return await api_tools.show_in_world(highlights, links, notes, title, focus, ctx=ctx)
+
 async def inventorium_todos_link_session(todo_id: str, session_id: str, ctx: Optional[Context] = None) -> str:
     return await api_tools.inventorium_todos_link_session(todo_id, session_id, ctx=ctx)
 
