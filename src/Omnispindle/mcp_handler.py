@@ -618,15 +618,17 @@ TOOL_SCHEMAS = {
     },
     "show_in_world": {
         "name": "show_in_world",
-        "description": "Point at todos or files in the user's open SwarmDesk with labelled links and short notes. Ephemeral, never saved. The drawing overlay is not built yet, so today the page only shows a notice. Result delivered:0 means no tab is open.",
+        "description": "Draw on the user's open SwarmDesk: highlight todos or files, add temporary concept nodes (ideas, questions, groupings that are not todos), labelled links and short notes, and fly to one. Ephemeral, never saved; the user may promote a concept to a todo. Ids/paths not on their board are dropped and counted. Result delivered:0 means no tab is open.",
         "inputSchema": {
             "type": "object",
             "properties": {
-                "highlights": {"type": "array", "items": {"type": "string"}, "description": "Todo ids or file paths to highlight"},
-                "links": {"type": "array", "items": {"type": "object"}, "description": "Labelled lines between two things: objects {a, b, label}"},
+                "highlights": {"type": "array", "items": {"type": "string"}, "description": "Todo ids, file paths or concept ids to highlight"},
+                "links": {"type": "array", "items": {"type": "object"}, "description": "Labelled lines between two things: objects {a, b, label}; a and b are todo ids, file paths or concept ids"},
                 "notes": {"type": "array", "items": {"type": "object"}, "description": "Short notes pinned to a thing: objects {target, text}"},
+                "concepts": {"type": "array", "items": {"type": "object"}, "description": "Temporary nodes that are not todos: objects {id (1-40 of A-Z a-z 0-9 _ . : -), label, text?, near? (a todo id, file path or earlier concept id)}; max 20"},
                 "title": {"type": "string", "description": "A short title for the view (optional)"},
-                "focus": {"type": "string", "description": "One todo id or file path to fly to (optional)"}
+                "focus": {"type": "string", "description": "One todo id, file path or concept id to fly to (optional)"},
+                "presenter": {"type": "string", "description": "Who is showing, shown to the user (default: Claude)"}
             }
         }
     },

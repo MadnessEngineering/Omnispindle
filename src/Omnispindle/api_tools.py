@@ -592,15 +592,30 @@ async def arrange_nodes(request: str, presenter: Optional[str] = "Claude", ctx: 
         payload["presenter"] = who
     return await _world_push("arrange-request", payload, ctx)
 
+WORLD_CONCEPT_ID = re.compile(r"^[A-Za-z0-9_.:-]{1,40}$")   # the backend strips anything else, which would orphan the links naming it
+
 async def show_in_world(highlights: Optional[list] = None, links: Optional[list] = None, notes: Optional[list] = None,
-                        title: Optional[str] = None, focus: Optional[str] = None, ctx: Optional[Context] = None) -> str:
-    """Point at todos or files in the user's open SwarmDesk, with labelled links and short notes."""
+                        title: Optional[str] = None, focus: Optional[str] = None, concepts: Optional[list] = None,
+                        presenter: Optional[str] = "Claude", ctx: Optional[Context] = None) -> str:
+    """Point at todos, files and temporary concepts in the user's open SwarmDesk, with labelled links and short notes."""
     try:
         highlights = _coerce_list(highlights, "highlights")
         links = _coerce_list(links, "links")
         notes = _coerce_list(notes, "notes")
+        concepts = _coerce_list(concepts, "concepts")
     except ValueError as e:
         return create_response(False, message=str(e))
+
+    seen_concepts = set()
+    for i, c in enumerate(concepts):
+        if not isinstance(c, dict) or not str(c.get("label") or "").strip():
+            return create_response(False, message=f"concepts[{i}] must be an object with 'id' and 'label' (and optional 'text', 'near')")
+        cid = c.get("id")
+        if not isinstance(cid, str) or not WORLD_CONCEPT_ID.match(cid):
+            return create_response(False, message=f"concepts[{i}].id must be 1-40 letters, digits, _ . : or - (links, notes and focus name the concept by it)")
+        if cid in seen_concepts:
+            return create_response(False, message=f"concepts[{i}].id '{cid}' is used twice")
+        seen_concepts.add(cid)
 
     for i, h in enumerate(highlights):
         if not isinstance(h, str) or not h.strip():
@@ -611,14 +626,22 @@ async def show_in_world(highlights: Optional[list] = None, links: Optional[list]
     for i, n in enumerate(notes):
         if not isinstance(n, dict) or not str(n.get("target") or "").strip() or not str(n.get("text") or "").strip():
             return create_response(False, message=f"notes[{i}] must be an object with 'target' (todo id or file path) and 'text'")
-    if not (highlights or links or notes):
-        return create_response(False, message="show_in_world needs at least one highlight, link or note")
+    if not (highlights or links or notes or concepts):
+        return create_response(False, message="show_in_world needs at least one highlight, link, note or concept")
 
     payload: Dict[str, Any] = {"highlights": highlights, "links": links, "notes": notes}
+    if concepts:
+        payload["concepts"] = [
+            {k: (c[k].strip() if isinstance(c[k], str) else c[k]) for k in ("id", "label", "text", "near") if c.get(k)}
+            for c in concepts
+        ]
     if isinstance(title, str) and title.strip():
         payload["title"] = title.strip()
     if isinstance(focus, str) and focus.strip():
         payload["focus"] = focus.strip()
+    who = (presenter or "").strip() if isinstance(presenter, str) else ""
+    if who:
+        payload["presenter"] = who
     return await _world_push("show", payload, ctx)
 
 async def inventorium_sessions_spawn(parent_session_id: str, prompt: str, todo_id: Optional[str] = None,

@@ -372,9 +372,9 @@ topic+tags only, brief=false to force full text."""
 
     "show_in_world": {
         "minimal": "Point at things in SwarmDesk",
-        "basic": "Highlight todos or files in the user's open SwarmDesk, with links and notes.",
-        "admin": "Push a show event (highlights, links, notes) to the user's open SwarmDesk. Ephemeral; nothing saved. Overlay not built yet: the page only shows a notice. delivered 0 = no tab open.",
-        "full": "Point at things in the user's open SwarmDesk. Parameters: highlights (todo ids or file paths), links (objects {a, b, label}: a labelled line between two todos or files), notes (objects {target, text}), title, focus (one todo id or file path to fly to). At least one highlight, link or note is required. Ephemeral and never saved. NOTE: the overlay that draws this is not built yet, so today the page only shows a notice that the event arrived. delivered 0 in the result means no SwarmDesk tab is open and nothing was queued."
+        "basic": "Highlight todos or files in the user's open SwarmDesk, with temporary concepts, links and notes.",
+        "admin": "Push a show event (highlights, concepts, links, notes, focus) to the user's open SwarmDesk. Drawn as an overlay, never saved; Esc clears it. delivered 0 = no tab open.",
+        "full": "Draw on the user's open SwarmDesk. Parameters: highlights (todo ids, file paths or concept ids: a beacon over each), concepts (objects {id, label, text?, near?}: temporary violet nodes that are NOT todos, for an idea, a grouping or a question; id is 1-40 of letters, digits, _ . : -, and links, notes, focus and a later concept's near name it by that id; max 20), links (objects {a, b, label}: a labelled arc between any two of those), notes (objects {target, text}), title, focus (one of those to fly the camera to), presenter (shown as who is showing, default Claude). At least one highlight, link, note or concept is required. Ids and paths are checked against the user's board: ones not on it, or hidden by their filters, are dropped and counted on the page's card. Nothing is saved: Esc, the card's Clear or the next show removes it, and the user may promote a concept to a real todo from the card after confirming. delivered 0 in the result means no SwarmDesk tab is open and nothing was queued."
     },
 
     "inventorium_sessions_fork": {

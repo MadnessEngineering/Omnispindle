@@ -789,11 +789,13 @@ class OmniSpindleStdioServer:
                                 links: Annotated[Optional[List[Dict[str, Any]]], Field(description="Labelled lines: objects {a, b, label}")] = None,
                                 notes: Annotated[Optional[List[Dict[str, Any]]], Field(description="Notes pinned to a thing: objects {target, text}")] = None,
                                 title: Annotated[Optional[str], Field(description="Short title for the view")] = None,
-                                focus: Annotated[Optional[str], Field(description="One todo id or file path to fly to")] = None
+                                focus: Annotated[Optional[str], Field(description="One todo id, file path or concept id to fly to")] = None,
+                                concepts: Annotated[Optional[List[Dict[str, Any]]], Field(description="Temporary concept nodes: objects {id, label, text?, near?}; links/notes/focus may name them by id")] = None,
+                                presenter: Annotated[Optional[str], Field(description="Who is showing, shown to the user (default Claude)")] = "Claude"
                             ) -> str:
-                                """Point at things in the open SwarmDesk. Ephemeral; overlay not built yet. delivered 0 = no tab open."""
+                                """Draw on the open SwarmDesk: highlights, concepts, links, notes. Ephemeral, never saved. delivered 0 = no tab open."""
                                 ctx = _create_context()
-                                return await func(highlights, links, notes, title, focus, ctx=ctx)
+                                return await func(highlights, links, notes, title, focus, concepts, presenter, ctx=ctx)
                             return show_in_world
 
                         elif name == "inventorium_sessions_fork":

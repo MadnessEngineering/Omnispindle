@@ -110,8 +110,46 @@ def test_show_pushes_what_it_was_given_and_nothing_else(monkeypatch):
     kind, payload = fake.calls[0]
     assert kind == "show"
     assert payload == {"highlights": ["t1", "src/a.js"], "links": [{"a": "t1", "b": "t2", "label": "blocks"}],
-                       "notes": [{"target": "t1", "text": "start here"}], "title": "Blast radius", "focus": "t1"}
+                       "notes": [{"target": "t1", "text": "start here"}], "title": "Blast radius", "focus": "t1",
+                       "presenter": "Claude"}
     assert out["success"] is True and out["data"]["delivered"] == 1
+
+
+def test_show_concepts_are_pushed_cleaned_and_may_stand_alone(monkeypatch):
+    fake = _FakeClient(); _install(monkeypatch, fake)
+    out = _run(api_tools.show_in_world(concepts=[{"id": "retry", "label": " Retry budget ", "text": "cap at 3", "near": "t1", "color": "red"},
+                                                 {"id": "q:owner", "label": "Who owns it?", "text": ""}],
+                                       links=[{"a": "retry", "b": "q:owner", "label": "asks"}], presenter="Codex"))
+    assert out["success"] is True
+    payload = fake.calls[0][1]
+    assert payload["concepts"] == [{"id": "retry", "label": "Retry budget", "text": "cap at 3", "near": "t1"},
+                                   {"id": "q:owner", "label": "Who owns it?"}], "known fields only, blanks dropped"
+    assert payload["presenter"] == "Codex"
+    alone = _run(api_tools.show_in_world(concepts='[{"id": "a", "label": "An idea"}]'))
+    assert alone["success"] is True and fake.calls[1][1]["concepts"] == [{"id": "a", "label": "An idea"}]
+
+
+def test_show_concepts_absent_means_no_key_and_blank_presenter_means_none(monkeypatch):
+    fake = _FakeClient(); _install(monkeypatch, fake)
+    _run(api_tools.show_in_world(highlights=["t1"], presenter="  "))
+    assert "concepts" not in fake.calls[0][1] and "presenter" not in fake.calls[0][1]
+
+
+def test_show_refuses_concepts_the_page_could_not_name(monkeypatch):
+    fake = _FakeClient(); _install(monkeypatch, fake)
+    cases = [
+        (dict(concepts=[{"id": "a"}]), "concepts[0]"),
+        (dict(concepts=["a"]), "concepts[0]"),
+        (dict(concepts=[{"label": "no id"}]), "concepts[0].id"),
+        (dict(concepts=[{"id": "my idea", "label": "x"}]), "concepts[0].id"),   # the backend would strip the space and orphan its links
+        (dict(concepts=[{"id": "x" * 41, "label": "x"}]), "concepts[0].id"),
+        (dict(concepts=[{"id": "a", "label": "x"}, {"id": "a", "label": "y"}]), "used twice"),
+        (dict(concepts="nope"), "must be a list"),
+    ]
+    for kwargs, expect in cases:
+        out = _run(api_tools.show_in_world(**kwargs))
+        assert out["success"] is False and expect in out["message"], (kwargs, out)
+    assert fake.calls == [], "nothing was pushed for bad input"
 
 
 def test_show_title_and_focus_are_omitted_when_absent_or_blank(monkeypatch):
@@ -187,7 +225,7 @@ def test_only_the_full_loadout_carries_them():
 def test_the_remote_schema_names_the_required_argument():
     assert TOOL_SCHEMAS["arrange_nodes"]["inputSchema"]["required"] == ["request"]
     props = TOOL_SCHEMAS["show_in_world"]["inputSchema"]["properties"]
-    assert set(props) == {"highlights", "links", "notes", "title", "focus"}
+    assert set(props) == {"highlights", "links", "notes", "concepts", "title", "focus", "presenter"}
     assert "required" not in TOOL_SCHEMAS["show_in_world"]["inputSchema"]
 
 
