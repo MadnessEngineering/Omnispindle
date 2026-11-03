@@ -354,6 +354,10 @@ class OmniSpindleStdioServer:
                 "func": tools.inventorium_todos_link_session,
                 "doc": get_tool_doc("inventorium_todos_link_session")
             },
+            "world_status": {
+                "func": tools.world_status,
+                "doc": get_tool_doc("world_status")
+            },
             "arrange_nodes": {
                 "func": tools.arrange_nodes,
                 "doc": get_tool_doc("arrange_nodes")
@@ -770,6 +774,14 @@ class OmniSpindleStdioServer:
                                 ctx = _create_context()
                                 return await func(todo_id, session_id, ctx=ctx)
                             return inventorium_todos_link_session
+
+                        elif name == "world_status":
+                            @self.server.tool(description=docstring)
+                            async def world_status() -> str:
+                                """Is a SwarmDesk tab listening, and how many pushes wait in the user's world inbox?"""
+                                ctx = _create_context()
+                                return await func(ctx=ctx)
+                            return world_status
 
                         elif name == "arrange_nodes":
                             @self.server.tool(description=docstring)

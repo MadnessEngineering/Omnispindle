@@ -604,9 +604,14 @@ TOOL_SCHEMAS = {
             "required": ["todo_id", "session_id"]
         }
     },
+    "world_status": {
+        "name": "world_status",
+        "description": "Is a SwarmDesk tab listening right now (so arrange_nodes and show_in_world reach it), how many tabs are open, and how many earlier pushes wait in the user's world inbox. Free; no model call.",
+        "inputSchema": {"type": "object", "properties": {}}
+    },
     "arrange_nodes": {
         "name": "arrange_nodes",
-        "description": "Ask the user's open SwarmDesk to propose a todo arrangement from plain words. They keep, skip or revert it; nothing saves until Keep. Result delivered:0 means no SwarmDesk tab is open (nothing queued).",
+        "description": "Ask the user's open SwarmDesk to propose a todo arrangement from plain words. They keep, skip or revert it; nothing saves until Keep. Result delivered:0 with queued:true means no SwarmDesk tab was open: it waits in their world inbox and runs only when they press Run there.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -618,7 +623,7 @@ TOOL_SCHEMAS = {
     },
     "show_in_world": {
         "name": "show_in_world",
-        "description": "Draw on the user's open SwarmDesk: highlight todos or files, add temporary concept nodes (ideas, questions, groupings that are not todos), labelled links and short notes, and fly to one. Ephemeral, never saved; the user may promote a concept to a todo. Ids/paths not on their board are dropped and counted. Result delivered:0 means no tab is open.",
+        "description": "Draw on the user's open SwarmDesk: highlight todos or files, add temporary concept nodes (ideas, questions, groupings that are not todos), labelled links and short notes, and fly to one. Ephemeral, never saved; the user may promote a concept to a todo. Ids/paths not on their board are dropped and counted. Result delivered:0 with queued:true means no tab was open: it waits in their world inbox.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -934,6 +939,7 @@ def _build_tool_functions() -> Dict[str, Any]:
         "inventorium_sessions_tree": tools.inventorium_sessions_tree,
         "inventorium_todos_link_session": tools.inventorium_todos_link_session,
         # World tools (reach the user's open SwarmDesk)
+        "world_status": tools.world_status,
         "arrange_nodes": tools.arrange_nodes,
         "show_in_world": tools.show_in_world,
         # Context bundle (Tier 1 RAG)

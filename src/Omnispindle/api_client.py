@@ -301,6 +301,15 @@ class MadnessAPIClient:
         """
         return await self._make_request("POST", "/world/push", json={"kind": kind, "payload": payload})
 
+    async def world_status(self) -> APIResponse:
+        """Can a push reach the user's open SwarmDesk right now (GET /world/status)?
+
+        The reply is {success, connected, subscribers, missed}: connected false means no SwarmDesk
+        tab is listening (a push would wait in the world inbox); missed is how many already wait
+        there (null when the inbox's database is unreachable).
+        """
+        return await self._make_request("GET", "/world/status")
+
     async def create_chat_session(self, payload: Dict[str, Any]) -> APIResponse:
         """Create a chat session."""
         return await self._make_request("POST", "/chat-sessions", json=payload)

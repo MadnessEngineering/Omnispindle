@@ -363,6 +363,13 @@ topic+tags only, brief=false to force full text."""
         "full": "Link an Omnispindle todo to a chat session. Parameters: todo_id, session_id. Adds todo to session.linked_todo_ids (no duplicates) and updates todo metadata with linked_session_ids for downstream tooling."
     },
 
+    "world_status": {
+        "minimal": "Is SwarmDesk listening?",
+        "basic": "Is a SwarmDesk tab listening right now, and how many pushes wait in the user's world inbox.",
+        "admin": "Read GET /api/world/status: connected (a tab holds the world stream), tabs (only the newest gets pushes), missed (pushes waiting in the world inbox).",
+        "full": "Ask whether the user's SwarmDesk is listening before you push. No parameters, no model call. Returns connected (a SwarmDesk tab holds the world stream, so arrange_nodes and show_in_world reach it now), tabs (how many are open; only the newest gets pushes) and missed (earlier pushes waiting in the world inbox, null if it could not be read). When connected is false a push is not lost: it waits in the inbox, and an arrange request runs only when the user opens SwarmDesk and presses Run."
+    },
+
     "arrange_nodes": {
         "minimal": "Arrange todos in SwarmDesk",
         "basic": "Ask the user's open SwarmDesk to propose a todo arrangement. Parameters: request (plain words), presenter.",

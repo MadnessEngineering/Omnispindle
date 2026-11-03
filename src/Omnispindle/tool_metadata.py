@@ -93,6 +93,7 @@ TOOL_ACCESS_LEVELS: Dict[str, ToolAccessLevel] = {
     "inventorium_sessions_genealogy": ToolAccessLevel.REMOTE_SAFE,
     "inventorium_sessions_tree": ToolAccessLevel.REMOTE_SAFE,
     "inventorium_todos_link_session": ToolAccessLevel.REMOTE_SAFE,
+    "world_status": ToolAccessLevel.REMOTE_SAFE,
     "arrange_nodes": ToolAccessLevel.REMOTE_SAFE,
     "show_in_world": ToolAccessLevel.REMOTE_SAFE,
     "get_context_bundle": ToolAccessLevel.REMOTE_SAFE,
@@ -161,6 +162,7 @@ TOOL_GROUPS: Dict[str, ToolGroup] = {
     "inventorium_todos_link_session": ToolGroup.SESSIONS,
 
     # World tools — push to the user's open SwarmDesk (a Pro feature)
+    "world_status": ToolGroup.WORLD,
     "arrange_nodes": ToolGroup.WORLD,
     "show_in_world": ToolGroup.WORLD,
 
@@ -305,6 +307,7 @@ TOOL_TIERS: Dict[str, ToolTier] = {
     "inventorium_sessions_tree": ToolTier.PRO,
     "inventorium_todos_link_session": ToolTier.PRO,
     # World tools: SwarmDesk itself is Pro, so a tool whose only destination is SwarmDesk is too
+    "world_status": ToolTier.PRO,
     "arrange_nodes": ToolTier.PRO,
     "show_in_world": ToolTier.PRO,
     # Semantic search / RAG (pro only)

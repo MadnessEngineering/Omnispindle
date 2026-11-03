@@ -424,6 +424,13 @@ if "inventorium_todos_link_session" in selected_tools:
         return await tools.inventorium_todos_link_session(todo_id, session_id, ctx=auth_ctx)
 
 # World tools: reach the user's open SwarmDesk
+if "world_status" in selected_tools:
+    @mcp.tool()
+    async def world_status(user_ctx: Optional[Dict[str, Any]] = None, ctx: MCPContext = None):
+        """Is a SwarmDesk tab listening right now (so arrange_nodes / show_in_world reach it), and how many pushes already wait in the user's world inbox? Costs nothing; ask before a push you would rather not leave waiting."""
+        auth_ctx = await get_authenticated_context_from_mcp(ctx, user_ctx)
+        return await tools.world_status(ctx=auth_ctx)
+
 if "arrange_nodes" in selected_tools:
     @mcp.tool()
     async def arrange_nodes(request: str, presenter: Optional[str] = "Claude", user_ctx: Optional[Dict[str, Any]] = None, ctx: MCPContext = None):

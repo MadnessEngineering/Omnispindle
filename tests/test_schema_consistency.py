@@ -71,6 +71,7 @@ TOOL_FUNCTION_MAP = {
     "list_quests": tools_module.list_quests,
     "link_quest": tools_module.link_quest,
     "update_quest": tools_module.update_quest,
+    "world_status": tools_module.world_status,
     "arrange_nodes": tools_module.arrange_nodes,
     "show_in_world": tools_module.show_in_world,
 }

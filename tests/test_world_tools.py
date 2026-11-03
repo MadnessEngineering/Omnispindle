@@ -36,6 +36,10 @@ class _FakeClient:
         self.calls.append((kind, payload))
         return self.reply
 
+    async def world_status(self):
+        self.calls.append(("status", None))
+        return self.reply
+
 
 def _install(monkeypatch, fake):
     async def _fake_get_client(**_kw):
@@ -232,14 +236,14 @@ def test_client_posts_to_the_world_push_route(monkeypatch):
 # ── registration: Pro, full loadouts only, a schema that matches ────────────
 
 def test_world_tools_are_pro_remote_safe_and_in_their_own_group():
-    for name in ("arrange_nodes", "show_in_world"):
+    for name in ("world_status", "arrange_nodes", "show_in_world"):
         assert TOOL_GROUPS[name] == ToolGroup.WORLD
         assert TOOL_TIERS[name] == ToolTier.PRO, "SwarmDesk is a Pro feature, so are the tools that only reach it"
         assert TOOL_ACCESS_LEVELS[name] == ToolAccessLevel.REMOTE_SAFE
 
 
 def test_only_the_full_loadout_carries_them():
-    for name in ("arrange_nodes", "show_in_world"):
+    for name in ("world_status", "arrange_nodes", "show_in_world"):
         assert name in get_loadout("full", mode="remote"), f"{name} missing from the full loadout"
         for narrow in ("lightweight", "read_only", "write_only", "admin", "agent_preflight", "lessons"):
             assert name not in get_loadout(narrow, mode="remote"), f"{name} leaked into {narrow}"
@@ -250,6 +254,47 @@ def test_the_remote_schema_names_the_required_argument():
     props = TOOL_SCHEMAS["show_in_world"]["inputSchema"]["properties"]
     assert set(props) == {"highlights", "links", "notes", "concepts", "title", "focus", "presenter"}
     assert "required" not in TOOL_SCHEMAS["show_in_world"]["inputSchema"]
+    assert TOOL_SCHEMAS["world_status"]["inputSchema"]["properties"] == {}
+
+
+# ── world_status ────────────────────────────────────────────────────────────
+
+def test_status_listening_says_pushes_reach_it_and_counts_tabs(monkeypatch):
+    fake = _FakeClient(_Resp({"success": True, "connected": True, "subscribers": 2, "missed": 0})); _install(monkeypatch, fake)
+    out = _run(api_tools.world_status())
+    assert fake.calls == [("status", None)]
+    assert out["success"] is True and out["data"] == {"connected": True, "tabs": 2, "missed": 0}
+    assert "reach it now" in out["message"] and "only the newest gets pushes" in out["message"]
+    assert "inbox" not in out["message"], "nothing waiting, nothing said about it"
+
+
+def test_status_not_listening_says_a_push_would_wait_and_what_already_waits(monkeypatch):
+    fake = _FakeClient(_Resp({"success": True, "connected": False, "subscribers": 0, "missed": 3})); _install(monkeypatch, fake)
+    out = _run(api_tools.world_status())
+    assert out["data"] == {"connected": False, "tabs": 0, "missed": 3}
+    assert "No SwarmDesk tab is listening" in out["message"] and "press Run" in out["message"]
+    assert "3 earlier pushes already wait in the inbox" in out["message"]
+    fake.reply = _Resp({"success": True, "connected": False, "subscribers": 0, "missed": 1})
+    assert "1 earlier push already waits" in _run(api_tools.world_status())["message"]
+
+
+def test_status_with_no_inbox_count_and_a_failed_call(monkeypatch):
+    fake = _FakeClient(_Resp({"success": True, "connected": False, "subscribers": 0, "missed": None})); _install(monkeypatch, fake)
+    out = _run(api_tools.world_status())
+    assert out["data"]["missed"] is None and "earlier" not in out["message"]
+    fake.reply = _Resp(success=False, error="Client error (401): Unauthorized")
+    out = _run(api_tools.world_status())
+    assert out["success"] is False and "401" in out["message"]
+
+
+def test_status_asks_the_backend_over_get(monkeypatch):
+    seen = {}
+    async def fake_request(self, method, endpoint, **kw):
+        seen.update(method=method, endpoint=endpoint)
+        return APIResponse(success=True, data={"connected": False})
+    monkeypatch.setattr(MadnessAPIClient, "_make_request", fake_request)
+    resp = asyncio.run(MadnessAPIClient(auth_token="t").world_status())
+    assert resp.success and seen == {"method": "GET", "endpoint": "/world/status"}
 
 
 # ── the credential reaches api_tools over the remote route ──────────────────

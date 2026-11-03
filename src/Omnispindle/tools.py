@@ -3770,6 +3770,9 @@ async def inventorium_sessions_spawn(parent_session_id: str, prompt: str, todo_i
 
 # --- World tools: reach the user's open SwarmDesk ---
 
+async def world_status(ctx: Optional[Context] = None) -> str:
+    return await api_tools.world_status(ctx=ctx)
+
 async def arrange_nodes(request: str, presenter: Optional[str] = "Claude", ctx: Optional[Context] = None) -> str:
     return await api_tools.arrange_nodes(request, presenter, ctx=ctx)
 

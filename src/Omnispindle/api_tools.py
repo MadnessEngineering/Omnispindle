@@ -597,6 +597,33 @@ async def _world_push(kind: str, payload: Dict[str, Any], ctx: Optional[Context]
         logger.error(f"Failed to push {kind} to the world stream: {str(e)}")
         return create_response(False, message=f"API error: {str(e)}")
 
+async def world_status(ctx: Optional[Context] = None) -> str:
+    """Is the user's SwarmDesk listening right now, and how many pushes already wait in their world inbox?"""
+    try:
+        auth_token, api_key = _require_api_auth(ctx)
+        client = await get_cached_client(auth_token=auth_token, api_key=api_key, base_url=loopback_api_url())
+        response = await client.world_status()
+        if not response.success:
+            return create_response(False, message=response.error or "Failed to read the world link")
+        data = response.data if isinstance(response.data, dict) else {}
+        connected = bool(data.get("connected"))
+        tabs = int(data.get("subscribers") or 0)
+        missed = data.get("missed") if isinstance(data.get("missed"), int) else None
+        result = {"connected": connected, "tabs": tabs, "missed": missed}
+        if connected:
+            message = "A SwarmDesk tab is listening: arrange_nodes and show_in_world reach it now."
+            if tabs > 1:
+                message += f" {tabs} tabs are open; only the newest gets pushes."
+        else:
+            message = ("No SwarmDesk tab is listening. A push now waits in the user's world inbox: "
+                       "an arrange request runs only when they open SwarmDesk and press Run.")
+        if missed:
+            message += f" {missed} earlier push{'' if missed == 1 else 'es'} already wait{'s' if missed == 1 else ''} in the inbox."
+        return create_response(True, result, message=message)
+    except Exception as e:
+        logger.error(f"Failed to read the world link status: {str(e)}")
+        return create_response(False, message=f"API error: {str(e)}")
+
 async def arrange_nodes(request: str, presenter: Optional[str] = "Claude", ctx: Optional[Context] = None) -> str:
     """Ask the user's open SwarmDesk to propose a todo arrangement from a request in plain words."""
     text = (request or "").strip() if isinstance(request, str) else ""
