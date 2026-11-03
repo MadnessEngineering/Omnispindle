@@ -427,14 +427,14 @@ if "inventorium_todos_link_session" in selected_tools:
 if "arrange_nodes" in selected_tools:
     @mcp.tool()
     async def arrange_nodes(request: str, presenter: Optional[str] = "Claude", user_ctx: Optional[Dict[str, Any]] = None, ctx: MCPContext = None):
-        """Ask the user's open SwarmDesk to propose a todo arrangement from plain words. They keep or revert it. delivered:0 = no tab open."""
+        """Ask the user's open SwarmDesk to propose a todo arrangement from plain words. They keep or revert it. delivered:0 + queued = held in their world inbox until they press Run."""
         auth_ctx = await get_authenticated_context_from_mcp(ctx, user_ctx)
         return await tools.arrange_nodes(request, presenter, ctx=auth_ctx)
 
 if "show_in_world" in selected_tools:
     @mcp.tool()
     async def show_in_world(highlights: Optional[List[str]] = None, links: Optional[List[Dict[str, Any]]] = None, notes: Optional[List[Dict[str, Any]]] = None, title: Optional[str] = None, focus: Optional[str] = None, concepts: Optional[List[Dict[str, Any]]] = None, presenter: Optional[str] = "Claude", user_ctx: Optional[Dict[str, Any]] = None, ctx: MCPContext = None):
-        """Draw on the user's open SwarmDesk: highlight todos/files, add temporary concept nodes {id, label, text?, near?}, labelled links and notes, fly to a focus. Ephemeral, never saved. delivered:0 = no tab open."""
+        """Draw on the user's open SwarmDesk: highlight todos/files, add temporary concept nodes {id, label, text?, near?}, labelled links and notes, fly to a focus. Ephemeral, never saved. delivered:0 + queued = held in their world inbox."""
         auth_ctx = await get_authenticated_context_from_mcp(ctx, user_ctx)
         return await tools.show_in_world(highlights, links, notes, title, focus, concepts, presenter, ctx=auth_ctx)
 

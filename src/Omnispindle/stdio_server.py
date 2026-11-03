@@ -777,7 +777,7 @@ class OmniSpindleStdioServer:
                                 request: Annotated[str, Field(description="How to arrange the todos, in plain words (max 500 characters)")],
                                 presenter: Annotated[Optional[str], Field(description="Who is asking, shown to the user")] = "Claude"
                             ) -> str:
-                                """Ask the open SwarmDesk to propose a todo arrangement. delivered 0 = no tab open."""
+                                """Ask the open SwarmDesk to propose a todo arrangement. delivered 0 + queued = held in the user's inbox until they press Run."""
                                 ctx = _create_context()
                                 return await func(request, presenter, ctx=ctx)
                             return arrange_nodes
@@ -793,7 +793,7 @@ class OmniSpindleStdioServer:
                                 concepts: Annotated[Optional[List[Dict[str, Any]]], Field(description="Temporary concept nodes: objects {id, label, text?, near?}; links/notes/focus may name them by id")] = None,
                                 presenter: Annotated[Optional[str], Field(description="Who is showing, shown to the user (default Claude)")] = "Claude"
                             ) -> str:
-                                """Draw on the open SwarmDesk: highlights, concepts, links, notes. Ephemeral, never saved. delivered 0 = no tab open."""
+                                """Draw on the open SwarmDesk: highlights, concepts, links, notes. Ephemeral, never saved. delivered 0 + queued = held in the user's inbox."""
                                 ctx = _create_context()
                                 return await func(highlights, links, notes, title, focus, concepts, presenter, ctx=ctx)
                             return show_in_world

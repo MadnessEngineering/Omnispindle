@@ -543,8 +543,23 @@ async def inventorium_sessions_create(project: str, title: Optional[str] = None,
 # page validates it against the board and places it, and nothing is saved until the user presses Keep.
 
 WORLD_REQUEST_MAX = 500          # backend/services/worldEvents.js clips at this; refuse rather than cut
+# No tab heard it, but the backend kept it in the user's world inbox (todo 91b4d302). Pushing again
+# would only add a second copy for them to dismiss.
+WORLD_HELD = {
+    "arrange-request": (
+        "NOT delivered live: no SwarmDesk tab is open, so it was HELD in the user's world inbox (kept 7 days). "
+        "It does NOT run by itself: they see a 📥 count next time they open SwarmDesk and press Run there "
+        "(it spends their model tokens). Do not push it again; tell them it is waiting in the inbox."
+    ),
+    "show": (
+        "NOT delivered live: no SwarmDesk tab is open, so it was HELD in the user's world inbox (kept 7 days). "
+        "If they open SwarmDesk (press 0 on /dashboard) within 10 minutes it is drawn then; later it waits in "
+        "the inbox (📥) for them to press Show. Do not push it again."
+    ),
+}
+# No tab, and the inbox could not keep it either (its database was unreachable, or an older backend)
 WORLD_NOT_DELIVERED = (
-    "NOT delivered: no SwarmDesk tab is open for this user, and nothing was queued. "
+    "NOT delivered: no SwarmDesk tab is open for this user, and nothing was held. "
     "Ask them to open SwarmDesk (press 0 on /dashboard) and check the toolbar chip says 'Linked', then try again."
 )
 
@@ -571,9 +586,12 @@ async def _world_push(kind: str, payload: Dict[str, Any], ctx: Optional[Context]
             return create_response(False, message=response.error or "Failed to push to SwarmDesk")
         data = response.data if isinstance(response.data, dict) else {}
         delivered = 1 if data.get("delivered") else 0
-        result = {"delivered": delivered, "event_id": data.get("id"), "kind": kind}
+        queued = bool(data.get("queued")) and not delivered
+        result = {"delivered": delivered, "event_id": data.get("id"), "kind": kind, "queued": queued, "inbox_id": data.get("inbox_id")}
         if delivered:
             return create_response(True, result, message="Delivered to the user's open SwarmDesk tab")
+        if queued:
+            return create_response(True, result, message=WORLD_HELD.get(kind, WORLD_HELD["show"]))
         return create_response(True, result, message=WORLD_NOT_DELIVERED)
     except Exception as e:
         logger.error(f"Failed to push {kind} to the world stream: {str(e)}")

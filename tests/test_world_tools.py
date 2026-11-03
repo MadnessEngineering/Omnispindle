@@ -78,12 +78,35 @@ def test_arrange_refuses_empty_and_too_long_before_pushing(monkeypatch):
     assert _run(api_tools.arrange_nodes("x" * 500))["success"] is True, "exactly 500 is allowed"
 
 
-def test_nobody_listening_is_said_plainly_and_is_not_a_failure_to_retry_blindly(monkeypatch):
-    fake = _FakeClient(_Resp({"success": True, "delivered": 0, "id": None})); _install(monkeypatch, fake)
+def test_nobody_listening_and_nothing_held_is_said_plainly(monkeypatch):
+    # an older backend (no `queued`), or the inbox's database was unreachable (queued false)
+    for reply in [{"success": True, "delivered": 0, "id": None}, {"success": True, "delivered": 0, "id": None, "queued": False, "inbox_id": None}]:
+        fake = _FakeClient(_Resp(reply)); _install(monkeypatch, fake)
+        out = _run(api_tools.arrange_nodes("group them"))
+        assert out["success"] is True and out["data"]["delivered"] == 0 and out["data"]["queued"] is False
+        assert "NOT delivered" in out["message"] and "nothing was held" in out["message"]
+        assert "Linked" in out["message"], "it tells the agent what to ask the user to check"
+
+
+def test_a_held_arrange_request_says_it_waits_for_run_and_not_to_push_again(monkeypatch):
+    fake = _FakeClient(_Resp({"success": True, "delivered": 0, "id": None, "queued": True, "inbox_id": "abc-123"})); _install(monkeypatch, fake)
     out = _run(api_tools.arrange_nodes("group them"))
     assert out["success"] is True and out["data"]["delivered"] == 0
-    assert "NOT delivered" in out["message"] and "nothing was queued" in out["message"]
-    assert "Linked" in out["message"], "it tells the agent what to ask the user to check"
+    assert out["data"]["queued"] is True and out["data"]["inbox_id"] == "abc-123"
+    assert "HELD" in out["message"] and "does NOT run by itself" in out["message"] and "press Run" in out["message"]
+    assert "Do not push it again" in out["message"]
+
+
+def test_a_held_show_says_when_it_will_be_drawn(monkeypatch):
+    fake = _FakeClient(_Resp({"success": True, "delivered": 0, "id": None, "queued": True, "inbox_id": "s-1"})); _install(monkeypatch, fake)
+    out = _run(api_tools.show_in_world(highlights=["t1"]))
+    assert out["data"]["queued"] is True and "HELD" in out["message"] and "within 10 minutes" in out["message"]
+
+
+def test_a_delivered_push_is_never_reported_as_queued(monkeypatch):
+    fake = _FakeClient(_Resp({"success": True, "delivered": 1, "id": 9, "queued": True, "inbox_id": "x"})); _install(monkeypatch, fake)
+    out = _run(api_tools.arrange_nodes("x"))
+    assert out["data"]["delivered"] == 1 and out["data"]["queued"] is False and "Delivered" in out["message"]
 
 
 def test_a_failed_push_reports_the_backend_error(monkeypatch):

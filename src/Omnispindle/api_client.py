@@ -295,8 +295,9 @@ class MadnessAPIClient:
     async def world_push(self, kind: str, payload: Dict[str, Any]) -> APIResponse:
         """Push an event to the user's open SwarmDesk tab (POST /world/push).
 
-        The reply is {success, delivered: 0|1, id, message}; delivered 0 means no SwarmDesk tab
-        is connected and nothing was queued.
+        The reply is {success, delivered: 0|1, id, queued, inbox_id, message}; delivered 0 with
+        queued true means no SwarmDesk tab was connected and the event waits in the user's world
+        inbox (queued false: the inbox could not hold it either).
         """
         return await self._make_request("POST", "/world/push", json={"kind": kind, "payload": payload})
 
