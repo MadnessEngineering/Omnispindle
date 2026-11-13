@@ -1,0 +1,17 @@
+{
+  "name": "madness-interactive",
+  "owner": { "name": "Dan Edens", "email": "danedens31@gmail.com" },
+  "metadata": {
+    "description": "Madness Interactive workshop plugins: agent coordination tooling."
+  },
+  "plugins": [
+    {
+      "name": "omnispindle",
+      "source": "./",
+      "description": "Todos, lessons, and quests for AI agents. FastMCP server with Auth0 login, plus a todo-workflow skill.",
+      "version": "1.0.1",
+      "category": "productivity",
+      "keywords": ["mcp", "todo", "task-management", "ai-agents"]
+    }
+  ]
+}

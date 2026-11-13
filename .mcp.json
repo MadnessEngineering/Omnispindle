@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "omnispindle": {
+      "command": "uvx",
+      "args": ["--from", "omnispindle>=1.0.1", "omnispindle-stdio"],
+      "env": {
+        "OMNISPINDLE_MODE": "api",
+        "OMNISPINDLE_TOOL_LOADOUT": "basic"
+      }
+    }
+  }
+}

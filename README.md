@@ -23,6 +23,17 @@ It started as "let's do todos properly." It became the central nervous system fo
 
 ## Installation
 
+### Claude Code plugin
+
+```
+/plugin marketplace add MadnessEngineering/Omnispindle
+/plugin install omnispindle@madness-interactive
+```
+
+Installs the MCP server (via `uvx`, so [uv](https://docs.astral.sh/uv/) must be on your PATH) and a todo-workflow skill. First tool call opens Auth0 login in your browser.
+
+### pip
+
 ```bash
 pip install omnispindle
 ```

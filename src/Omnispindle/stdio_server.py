@@ -1011,5 +1011,10 @@ async def main():
     await server.run()
 
 
-if __name__ == "__main__":
+def run():
+    """Sync console-script entry point (omnispindle-stdio)."""
     asyncio.run(main())
+
+
+if __name__ == "__main__":
+    run()
