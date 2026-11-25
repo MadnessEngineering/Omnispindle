@@ -1,5 +1,7 @@
 # Omnispindle
 
+<!-- mcp-name: io.github.MadnessEngineering/omnispindle -->
+
 **A todo system that went wonderfully, intentionally wrong.**
 
 Omnispindle is the coordination spine of the Madness Interactive ecosystem — a Python FastMCP server with 38 tools that lets AI agents manage tasks, capture knowledge, coordinate sessions, track epic goals (quests), and navigate the whole workshop from a single, standardized interface. PyPI packaged. Auth0 integrated. Runs anywhere a MCP config lives.

@@ -1,0 +1,36 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.MadnessEngineering/omnispindle",
+  "title": "Omnispindle",
+  "description": "Todos, lessons, and quests for AI agents, shared across MCP clients. Auth0 login.",
+  "repository": {
+    "url": "https://github.com/MadnessEngineering/Omnispindle",
+    "source": "github",
+    "id": "937832035"
+  },
+  "version": "1.0.1",
+  "packages": [
+    {
+      "registryType": "pypi",
+      "identifier": "omnispindle",
+      "version": "1.0.1",
+      "runtimeHint": "uvx",
+      "transport": { "type": "stdio" },
+      "packageArguments": [
+        { "type": "positional", "value": "stdio" }
+      ],
+      "environmentVariables": [
+        {
+          "name": "OMNISPINDLE_MODE",
+          "description": "api (hosted, Auth0 login), hybrid (API with local MongoDB fallback), or local (MongoDB only)",
+          "default": "api"
+        },
+        {
+          "name": "OMNISPINDLE_TOOL_LOADOUT",
+          "description": "Which tools to expose: basic, full, minimal, lessons, admin, agent_preflight, refine",
+          "default": "basic"
+        }
+      ]
+    }
+  ]
+}

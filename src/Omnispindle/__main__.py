@@ -32,10 +32,18 @@ def main():
     
     # Server command (default behavior)
     server_parser = subparsers.add_parser("server", help="Run the web server (default)")
-    
+
+    # Stdio command: what MCP registries launch (`uvx omnispindle stdio`)
+    subparsers.add_parser("stdio", help="Run the MCP stdio server (same as omnispindle-stdio)")
+
     # Parse arguments
     args = parser.parse_args()
-    
+
+    if args.command == "stdio":
+        from .stdio_server import run as run_stdio
+        run_stdio()
+        return
+
     if args.command == "auth":
         if args.setup:
             asyncio.run(run_auth_setup(args))
