@@ -1,0 +1,10 @@
+{
+  "name": "omnispindle",
+  "version": "1.0.1",
+  "description": "Todos, lessons, and quests for AI agents. A FastMCP server (Auth0 device-flow login) plus a todo-workflow skill.",
+  "author": { "name": "Dan Edens", "email": "danedens31@gmail.com" },
+  "homepage": "https://github.com/MadnessEngineering/Omnispindle",
+  "repository": "https://github.com/MadnessEngineering/Omnispindle",
+  "license": "MIT",
+  "keywords": ["mcp", "todo", "task-management", "ai-agents", "fastmcp", "auth0", "madness-interactive"]
+}

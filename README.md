@@ -1,5 +1,7 @@
 # Omnispindle
 
+<!-- mcp-name: io.github.MadnessEngineering/omnispindle -->
+
 **A todo system that went wonderfully, intentionally wrong.**
 
 Omnispindle is the coordination spine of the Madness Interactive ecosystem — a Python FastMCP server with 38 tools that lets AI agents manage tasks, capture knowledge, coordinate sessions, track epic goals (quests), and navigate the whole workshop from a single, standardized interface. PyPI packaged. Auth0 integrated. Runs anywhere a MCP config lives.
@@ -22,6 +24,17 @@ It started as "let's do todos properly." It became the central nervous system fo
 ---
 
 ## Installation
+
+### Claude Code plugin
+
+```
+/plugin marketplace add MadnessEngineering/Omnispindle
+/plugin install omnispindle@madness-interactive
+```
+
+Installs the MCP server (via `uvx`, so [uv](https://docs.astral.sh/uv/) must be on your PATH) and a todo-workflow skill. First tool call opens Auth0 login in your browser.
+
+### pip
 
 ```bash
 pip install omnispindle

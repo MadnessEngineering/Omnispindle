@@ -15,8 +15,11 @@ from datetime import datetime, timedelta, UTC
 from typing import Dict, List, Any
 
 from pymongo import MongoClient
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.cluster import DBSCAN
+try:
+    from sklearn.feature_extraction.text import TfidfVectorizer
+    from sklearn.cluster import DBSCAN
+except ImportError:  # optional: pip install "omnispindle[ai]"
+    TfidfVectorizer = DBSCAN = None
 from collections import Counter
 
 # Configure logger

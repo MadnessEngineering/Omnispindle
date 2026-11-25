@@ -24,11 +24,11 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from dotenv import load_dotenv
 
-from src.Omnispindle.context import Context
-from src.Omnispindle.patches import apply_patches
-from src.Omnispindle.auth_utils import verify_auth0_token, AUTH_CONFIG
-from src.Omnispindle.auth_flow import ensure_authenticated, run_async_in_thread
-from src.Omnispindle import tools
+from .context import Context
+from .patches import apply_patches
+from .auth_utils import verify_auth0_token, AUTH_CONFIG
+from .auth_flow import ensure_authenticated, run_async_in_thread
+from . import tools
 
 # Initialize
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -37,7 +37,7 @@ apply_patches()
 load_dotenv()
 
 # Import shared loadout definitions
-from src.Omnispindle.tool_loadouts import get_loadout
+from .tool_loadouts import get_loadout
 
 # Global variable to store current request headers (not ideal but might work)
 _current_request_headers = {}
@@ -198,7 +198,7 @@ async def get_authenticated_context(request_headers: Optional[Dict[str, str]] = 
 # Defaults to 'basic' to match the /api/mcp JSON-RPC path — tools are registered at
 # import time here, so this transport has no per-request override; set
 # OMNISPINDLE_TOOL_LOADOUT to widen it.
-from src.Omnispindle.mcp_handler import DEFAULT_REMOTE_LOADOUT
+from .mcp_handler import DEFAULT_REMOTE_LOADOUT
 
 loadout_name = os.getenv("OMNISPINDLE_TOOL_LOADOUT", DEFAULT_REMOTE_LOADOUT)
 selected_tools = get_loadout(loadout_name, mode="remote")
@@ -542,6 +542,6 @@ if __name__ == "__main__":
     # Keep long-standing operator workflow working:
     # `python -m src.Omnispindle.http_server` should start the HTTP MCP endpoint
     # expected by Inventorium (`/api/mcp`), even as we retain FastMCP import mode.
-    from src.Omnispindle.__main__ import run_web_server
+    from .__main__ import run_web_server
 
     run_web_server()
